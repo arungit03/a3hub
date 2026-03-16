@@ -25,7 +25,7 @@ const getDefinedUploadPreset = () =>
 const getRuntimeConfig = () => {
   if (typeof window === "undefined") return {};
   const config =
-    window.__CKCET_CLOUDINARY_CONFIG__ || window.__CLOUDINARY_CONFIG__;
+    window.__A3HUB_CLOUDINARY_CONFIG__ || window.__CLOUDINARY_CONFIG__;
   if (!config || typeof config !== "object") return {};
   return config;
 };
@@ -71,7 +71,7 @@ const buildUploadError = (message, code = "cloudinary/upload-failed") => {
 
 export async function uploadFileToCloudinary({
   file,
-  folder = "ckcethub/assignments",
+  folder = "a3hub/assignments",
 }) {
   const config = ensureConfigured();
 

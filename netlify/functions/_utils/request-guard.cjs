@@ -1,3 +1,5 @@
+require("./load-env.cjs");
+
 const AUTH_LOOKUP_ENDPOINT =
   "https://identitytoolkit.googleapis.com/v1/accounts:lookup";
 const FIRESTORE_DOCUMENT_BASE_ENDPOINT =

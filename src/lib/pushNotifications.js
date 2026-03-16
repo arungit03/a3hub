@@ -9,8 +9,8 @@ const toBoolean = (value) =>
 
 const resolvePushClientConfig = () => {
   const runtimeConfig =
-    typeof window !== "undefined" && window.__CKCET_PUSH_CONFIG__
-      ? window.__CKCET_PUSH_CONFIG__
+    typeof window !== "undefined" && window.__A3HUB_PUSH_CONFIG__
+      ? window.__A3HUB_PUSH_CONFIG__
       : {};
 
   const enabledFromEnv = toBoolean(import.meta.env.VITE_PUSH_NOTIFY_ENABLED);
@@ -92,4 +92,3 @@ export async function registerPushTokenForUser(userId) {
     console.warn("Unable to register push token", error?.message || error);
   }
 }
-

@@ -387,7 +387,7 @@ const DAILY_PYTHON_CHALLENGE_COLLECTION = "dailyPythonChallenges";
 const DAILY_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 const DAILY_PYTHON_PROGRESS_COLLECTION = "dailyPythonProgress";
 const DAILY_PYTHON_CHALLENGE_COUNT = 5;
-const DAILY_PYTHON_LOCAL_CACHE_PREFIX = "ckcethub.dailyPythonChallenges";
+const DAILY_PYTHON_LOCAL_CACHE_PREFIX = "a3hub.dailyPythonChallenges";
 const DAILY_PYTHON_CHALLENGE_REQUIRED_FIELDS = [
   "id",
   "title",
@@ -944,7 +944,7 @@ const DAILY_PYTHON_CHALLENGE_TEMPLATES = [
 ];
 
 const generateDailyPythonChallenges = (dateKey) => {
-  const rng = createSeededRng(`ckcethub-${dateKey}`);
+  const rng = createSeededRng(`a3hub-${dateKey}`);
   const selectedTemplates = shuffleWithRng(
     DAILY_PYTHON_CHALLENGE_TEMPLATES,
     rng
@@ -1046,7 +1046,7 @@ const uploadNoticeFile = async ({ file, noticeId }) => {
   throw lastError || new Error("Upload failed.");
 };
 
-const INTERVIEW_QUIZ_AI_CACHE_KEY = "ckcethub:interview-quiz-contact:v1";
+const INTERVIEW_QUIZ_AI_CACHE_KEY = "a3hub:interview-quiz-contact:v1";
 
 const formatInterviewQuizDateLabel = (dateKey) => {
   if (!dateKey) return "";
@@ -2631,7 +2631,7 @@ export default function MenuGridPage({ forcedStaff }) {
       const assignmentRef = doc(collection(db, "assignments"));
       const uploaded = await uploadFileToCloudinary({
         file: assignmentFile,
-        folder: `ckcethub/assignments/${assignmentRef.id}/question`,
+        folder: `a3hub/assignments/${assignmentRef.id}/question`,
       });
 
       await setDoc(assignmentRef, {
@@ -2727,7 +2727,7 @@ export default function MenuGridPage({ forcedStaff }) {
     try {
       const uploaded = await uploadFileToCloudinary({
         file,
-        folder: `ckcethub/assignments/${assignmentId}/answers/${user.uid}`,
+        folder: `a3hub/assignments/${assignmentId}/answers/${user.uid}`,
       });
 
       const submissionRef = doc(
@@ -3868,7 +3868,7 @@ export default function MenuGridPage({ forcedStaff }) {
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/90">
-                CKCET Hub - Campus Services
+                A3 Hub - Campus Services
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
                 Welcome back, {headerDisplayName} 👋

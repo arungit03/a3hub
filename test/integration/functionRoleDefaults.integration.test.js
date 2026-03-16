@@ -15,10 +15,14 @@ const jsonResponse = (status, payload) => ({
   json: async () => payload,
 });
 
+let mockTokenCounter = 0;
+
 const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = {
+    iat: nowSeconds,
     exp: nowSeconds + expSecondsFromNow,
+    nonce: `roles-${mockTokenCounter += 1}`,
   };
   const encodedHeader = Buffer.from(
     JSON.stringify({ alg: "none", typ: "JWT" })
@@ -47,6 +51,10 @@ const installStudentAuthFetchMock = (token, onUnexpectedProviderCall) => {
           },
         ],
       });
+    }
+
+    if (resolvedUrl.includes("firestore.googleapis.com")) {
+      return jsonResponse(404, { error: "profile_not_found" });
     }
 
     onUnexpectedProviderCall(resolvedUrl);

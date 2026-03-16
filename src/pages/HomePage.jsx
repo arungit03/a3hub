@@ -835,7 +835,7 @@ export default function HomePage({ forcedRole }) {
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/90">
-                CKCET Hub Dashboard
+                A3 Hub Dashboard
               </p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
                 Welcome back, {dashboardName} 👋

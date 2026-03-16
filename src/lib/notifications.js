@@ -216,7 +216,7 @@ const buildWhatsAppText = ({ title, message = "", link = "" }) => {
   const safeLink = toSafeText(link);
 
   const parts = [];
-  if (safeTitle) parts.push(`CKCET Hub: ${safeTitle}`);
+  if (safeTitle) parts.push(`A3 Hub: ${safeTitle}`);
   if (safeMessage) parts.push(safeMessage);
   if (safeLink) parts.push(safeLink);
 
@@ -225,8 +225,8 @@ const buildWhatsAppText = ({ title, message = "", link = "" }) => {
 
 const resolveWhatsAppClientConfig = () => {
   const runtimeConfig =
-    typeof window !== "undefined" && window.__CKCET_WHATSAPP_CONFIG__
-      ? window.__CKCET_WHATSAPP_CONFIG__
+    typeof window !== "undefined" && window.__A3HUB_WHATSAPP_CONFIG__
+      ? window.__A3HUB_WHATSAPP_CONFIG__
       : {};
 
   const endpointFromBuild = toSafeText(
@@ -303,8 +303,8 @@ const resolveStudentMobileNumber = (profile = {}) =>
 
 const resolvePushClientConfig = () => {
   const runtimeConfig =
-    typeof window !== "undefined" && window.__CKCET_PUSH_CONFIG__
-      ? window.__CKCET_PUSH_CONFIG__
+    typeof window !== "undefined" && window.__A3HUB_PUSH_CONFIG__
+      ? window.__A3HUB_PUSH_CONFIG__
       : {};
 
   const endpointFromBuild = toSafeText(import.meta.env.VITE_PUSH_NOTIFY_ENDPOINT);
@@ -324,8 +324,8 @@ const resolvePushClientConfig = () => {
 
 const resolveEmailClientConfig = () => {
   const runtimeConfig =
-    typeof window !== "undefined" && window.__CKCET_EMAIL_CONFIG__
-      ? window.__CKCET_EMAIL_CONFIG__
+    typeof window !== "undefined" && window.__A3HUB_EMAIL_CONFIG__
+      ? window.__A3HUB_EMAIL_CONFIG__
       : {};
 
   const endpointFromBuild = toSafeText(import.meta.env.VITE_EMAIL_NOTIFY_ENDPOINT);
@@ -383,7 +383,7 @@ const buildEmailText = ({ title, message = "", link = "" }) => {
   const safeLink = toSafeText(link);
 
   const parts = [];
-  if (safeTitle) parts.push(`CKCET Hub: ${safeTitle}`);
+  if (safeTitle) parts.push(`A3 Hub: ${safeTitle}`);
   if (safeMessage) parts.push(safeMessage);
   if (safeLink) parts.push(`Open in app: ${safeLink}`);
   return parts.join("\n\n");
@@ -918,7 +918,7 @@ const sendEmailToRecipient = async ({
   if (!to) return { status: "skipped", reason: "missing_email_address" };
 
   const subject = (
-    toSafeText(payload?.title) || "CKCET Hub Notification"
+    toSafeText(payload?.title) || "A3 Hub Notification"
   ).slice(0, MAX_EMAIL_SUBJECT_LENGTH);
   const text = buildEmailText(payload);
   if (!text) return { status: "skipped", reason: "empty_message" };

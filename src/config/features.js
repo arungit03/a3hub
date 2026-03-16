@@ -86,7 +86,7 @@ const readRuntimeFeatureConfig = () => {
   if (typeof window === "undefined") {
     return {};
   }
-  const config = window.__CKCET_FEATURE_FLAGS__;
+  const config = window.__A3HUB_FEATURE_FLAGS__;
   if (!config || typeof config !== "object") {
     return {};
   }

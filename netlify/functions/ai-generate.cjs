@@ -413,7 +413,7 @@ const handleChatAction = async (payload) => {
   }
 
   const systemInstruction =
-    "You are CKCET Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
+    "You are A3 Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
 
   const result = await requestModelText({
     messages,

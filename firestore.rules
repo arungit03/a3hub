@@ -60,7 +60,7 @@ service cloud.firestore {
 
     function isAssignmentQuestionFolder(folder) {
       return folder is string
-        && folder.matches("^ckcethub/assignments/[^/]+/question$");
+        && folder.matches("^a3hub/assignments/[^/]+/question$");
     }
 
     function uploadedFileDoc(fileId) {

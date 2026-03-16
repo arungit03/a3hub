@@ -36,7 +36,7 @@ const ROLE_UPDATE_OPTIONS = ["student", "staff", "parent"];
 const toSafeText = (value) => String(value || "").trim();
 
 const createSecondaryStaffAuthAccount = async ({ email, password, name }) => {
-  const appName = `ckcethub-admin-provision-${Date.now()}-${Math.random()
+  const appName = `a3hub-admin-provision-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 7)}`;
   const secondaryApp = initializeApp(firebaseConfig, appName);

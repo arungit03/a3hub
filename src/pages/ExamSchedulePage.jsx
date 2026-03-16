@@ -74,7 +74,7 @@ export default function ExamSchedulePage({ forcedRole }) {
   const [creatingExam, setCreatingExam] = useState(false);
 
   const examDraftKey = useMemo(
-    () => (user?.uid ? `ckcethub:draft:exam-schedule:${user.uid}` : ""),
+    () => (user?.uid ? `a3hub:draft:exam-schedule:${user.uid}` : ""),
     [user?.uid]
   );
 

@@ -67,7 +67,7 @@ export default function Sidebar({
       >
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">CKCET Hub</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">A3 Hub</h1>
           </div>
           <button
             type="button"

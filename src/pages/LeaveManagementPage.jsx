@@ -64,7 +64,7 @@ const getTodayKey = () => {
 const trimValue = (value) => String(value || "").trim();
 
 const LEAVE_TTL_MS = 24 * 60 * 60 * 1000;
-const LEAVE_DRAFT_PREFIX = "ckcethub:draft:leave:";
+const LEAVE_DRAFT_PREFIX = "a3hub:draft:leave:";
 
 const STATUS_META = {
   pending: {

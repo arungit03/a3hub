@@ -43,8 +43,8 @@ Rules:
 
 Optional runtime override (without rebuild):
 
-- `window.__CKCET_FEATURE_FLAGS__ = { only: \"attendance\", disabled: \"\" }`
-- `window.__CKCET_FEATURE_FLAGS__ = { disabled: \"ai-chat,compilers\" }`
+- `window.__A3HUB_FEATURE_FLAGS__ = { only: \"attendance\", disabled: \"\" }`
+- `window.__A3HUB_FEATURE_FLAGS__ = { disabled: \"ai-chat,compilers\" }`
 
 ## Debugging Pattern
 

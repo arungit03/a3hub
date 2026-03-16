@@ -1,6 +1,6 @@
 // Optional runtime config for WhatsApp forwarding.
 // Use this when you do not want to set VITE_WHATSAPP_* build vars.
-window.__CKCET_WHATSAPP_CONFIG__ = {
+window.__A3HUB_WHATSAPP_CONFIG__ = {
   enabled: false,
   endpoint: "/.netlify/functions/whatsapp-send",
   defaultCountryCode: "91",

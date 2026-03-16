@@ -13,10 +13,14 @@ const jsonResponse = (status, payload) => ({
   json: async () => payload,
 });
 
+let mockTokenCounter = 0;
+
 const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = {
+    iat: nowSeconds,
     exp: nowSeconds + expSecondsFromNow,
+    nonce: `notification-${mockTokenCounter += 1}`,
   };
   const encodedHeader = Buffer.from(
     JSON.stringify({ alg: "none", typ: "JWT" })
@@ -37,7 +41,7 @@ test("email-send handler sends via provider for authenticated requests", async (
 
   process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
   process.env.RESEND_API_KEY = "test-resend-key";
-  process.env.EMAIL_FROM = "CKCET Hub <no-reply@example.com>";
+  process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "staff,admin";
 
   const token = createMockIdToken();
@@ -66,7 +70,7 @@ test("email-send handler sends via provider for authenticated requests", async (
       const parsedBody = JSON.parse(String(options.body || "{}"));
       assert.deepEqual(parsedBody.to, ["student@example.com"]);
       assert.equal(parsedBody.subject, "Attendance update");
-      assert.equal(parsedBody.from, "CKCET Hub <no-reply@example.com>");
+      assert.equal(parsedBody.from, "A3 Hub <no-reply@example.com>");
       return jsonResponse(200, {
         id: "re_test_123",
       });
@@ -117,7 +121,7 @@ test("email-send handler blocks unauthorized roles before provider call", async 
 
   process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
   process.env.RESEND_API_KEY = "test-resend-key";
-  process.env.EMAIL_FROM = "CKCET Hub <no-reply@example.com>";
+  process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "admin";
 
   const token = createMockIdToken();
@@ -192,7 +196,7 @@ test("email-send falls back to webhook when primary provider fails", async () =>
 
   process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
   process.env.RESEND_API_KEY = "test-resend-key";
-  process.env.EMAIL_FROM = "CKCET Hub <no-reply@example.com>";
+  process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "staff,admin";
   process.env.EMAIL_PROVIDER_ORDER = "resend,webhook";
   process.env.EMAIL_WEBHOOK_URL = "https://example.com/email-fallback";

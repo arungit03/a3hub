@@ -48,7 +48,7 @@ const toEmailArray = (value) => {
 };
 
 const buildHtmlFallback = ({ title, message = "", link = "" }) => {
-  const safeTitle = escapeHtml(title || "CKCET Hub Notification");
+  const safeTitle = escapeHtml(title || "A3 Hub Notification");
   const safeMessage = escapeHtml(message);
   const safeLink = toSafeText(link);
   const safeLinkHtml = safeLink ? escapeHtml(safeLink) : "";
@@ -142,7 +142,7 @@ exports.handler = async (event) => {
       }
 
   const subject = (
-    toSafeText(body.subject || body.title) || "CKCET Hub Notification"
+    toSafeText(body.subject || body.title) || "A3 Hub Notification"
   ).slice(0, MAX_SUBJECT_LENGTH);
   const text = toSafeText(body.text || body.message).slice(0, MAX_BODY_LENGTH);
   const html =
@@ -158,7 +158,7 @@ exports.handler = async (event) => {
     process.env.EMAIL_FROM ||
       process.env.RESEND_FROM_EMAIL ||
       process.env.RESEND_FROM ||
-      "CKCET Hub <onboarding@resend.dev>"
+      "A3 Hub <onboarding@resend.dev>"
   );
   const resendEndpoint =
     toSafeText(process.env.RESEND_API_ENDPOINT) || DEFAULT_RESEND_ENDPOINT;

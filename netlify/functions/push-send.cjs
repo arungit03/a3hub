@@ -1,6 +1,6 @@
 const FCM_LEGACY_ENDPOINT = "https://fcm.googleapis.com/fcm/send";
 const MAX_BATCH_SIZE = 500;
-const DEFAULT_TITLE = "CKCET Hub";
+const DEFAULT_TITLE = "A3 Hub";
 const {
   enforceFunctionGuard,
   resolveAllowedRoles,

@@ -10,7 +10,7 @@ import { useDirtyPrompt } from "../hooks/useDirtyPrompt";
 import FaceAttendanceModal from "../components/FaceAttendanceModal";
 
 const AUTH_BACKGROUND_IMAGE = "/auth-campus.png";
-const AUTH_DRAFT_KEY = "ckcethub:draft:auth";
+const AUTH_DRAFT_KEY = "a3hub:draft:auth";
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SECURITY_EMAIL_INBOX_HINT =
   "Check Primary inbox first. If Gmail sends it to Spam, mark Not spam to move future emails to Primary.";
@@ -841,7 +841,7 @@ export default function AuthPage() {
           </h1>
           <p className="mt-2 text-sm text-ink/80">
             {isLoginMode
-              ? "Login to continue to your CKCET dashboard"
+              ? "Login to continue to your A3 Hub dashboard"
               : `Create your ${roleLabel.toLowerCase()} account`}
           </p>
         </div>

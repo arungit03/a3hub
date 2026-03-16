@@ -20,7 +20,7 @@ import { useAuth } from "../state/auth";
 const MIN_QUESTIONS = 1;
 const MAX_QUESTIONS = 20;
 const MAX_BATCH_SIZE = 400;
-const PENDING_ATTEMPT_KEY_PREFIX = "ckcethub_pending_test_attempt_";
+const PENDING_ATTEMPT_KEY_PREFIX = "a3hub_pending_test_attempt_";
 const TAB_SWITCH_DEBOUNCE_MS = 1200;
 
 const createEmptyQuestion = () => ({

@@ -46,9 +46,9 @@ int main() {
 }
 `;
 
-const CPP_DRAFT_STORAGE_KEY = "ckcethub_code_draft_cpp_v1";
+const CPP_DRAFT_STORAGE_KEY = "a3hub_code_draft_cpp_v1";
 const CPP_CHALLENGE_PROGRESS_STORAGE_KEY =
-  "ckcethub_challenge_progress_cpp_v1";
+  "a3hub_challenge_progress_cpp_v1";
 
 const CPP_CORE_CONCEPTS = [
   {

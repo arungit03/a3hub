@@ -84,7 +84,7 @@ export default function AdminLayout() {
       <div className="flex min-h-screen">
         <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white px-4 py-5 lg:block">
           <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-            CKCET Hub
+            A3 Hub
           </p>
           <h1 className="mt-1 text-xl font-bold text-slate-900">Admin Control</h1>
           <p className="mt-1 text-xs text-slate-500">Manage users and modules</p>

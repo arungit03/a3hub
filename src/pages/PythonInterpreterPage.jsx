@@ -66,9 +66,9 @@ const KEYWORDS = [
   "print",
 ];
 
-const DEFAULT_CODE = `print("CKCETHUB")`;
+const DEFAULT_CODE = `print("A3HUB")`;
 
-const PYTHON_DRAFT_STORAGE_KEY = "ckcethub_code_draft_python_v1";
+const PYTHON_DRAFT_STORAGE_KEY = "a3hub_code_draft_python_v1";
 
 const PYTHON_CORE_CONCEPTS = [
   {

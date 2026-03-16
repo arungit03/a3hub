@@ -1,4 +1,4 @@
-# ckcethub
+# a3hub
 
 ## Feature Scope Isolation
 
@@ -51,6 +51,25 @@ Run commands:
 - `npm run test:e2e`
 - `npm run test:all`
 
+## Firebase Client Config
+
+Frontend Firebase values now load from `.env`, and the Firebase messaging service worker config is generated automatically before `npm run dev` and `npm run build`.
+
+Required local keys:
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_STORAGE_BUCKET`
+- `VITE_FIREBASE_MESSAGING_SENDER_ID`
+- `VITE_FIREBASE_APP_ID`
+
+Optional local keys:
+- `VITE_FIREBASE_MEASUREMENT_ID`
+- `VITE_FIREBASE_DATABASE_URL`
+- `VITE_PUSH_VAPID_KEY`
+
+Use `.env.example` as the template for local setup.
+
 ## Email Verification / Password Reset Inbox Placement
 
 For Gmail `Primary` vs `Spam` behavior and Firebase setup steps, see:
@@ -91,8 +110,8 @@ Assignments and student answer files now upload with automatic fallback:
 3. Restart dev server locally, or redeploy in Netlify after setting values.
 4. If you do not want env variables, set values directly in:
    - `public/cloudinary-config.js`
-   - `window.__CKCET_CLOUDINARY_CONFIG__.cloudName`
-   - `window.__CKCET_CLOUDINARY_CONFIG__.uploadPreset`
+   - `window.__A3HUB_CLOUDINARY_CONFIG__.cloudName`
+   - `window.__A3HUB_CLOUDINARY_CONFIG__.uploadPreset`
 
 If using Firebase Storage fallback, ensure Storage is enabled and rules allow signed-in users.
 
@@ -125,8 +144,8 @@ Configuration options:
 2. Deploy with server function:
    - `netlify/functions/ai-generate.cjs`
 3. Keep client runtime config in `public/gemini-config.js`:
-   - `window.__CKCET_GEMINI_CONFIG__.apiKey = ""`
-   - `window.__CKCET_GEMINI_CONFIG__.endpoint = "/.netlify/functions/ai-generate"`
+   - `window.__A3HUB_GEMINI_CONFIG__.apiKey = ""`
+   - `window.__A3HUB_GEMINI_CONFIG__.endpoint = "/.netlify/functions/ai-generate"`
 
 ## Student Mobile WhatsApp Notification (on in-app notification)
 
@@ -152,13 +171,13 @@ Set build env values:
 
 If you do not use `.env` / build env vars, set runtime config in:
 - `public/whatsapp-config.js`
-- `window.__CKCET_WHATSAPP_CONFIG__.enabled = true`
-- `window.__CKCET_WHATSAPP_CONFIG__.defaultCountryCode = "91"` (or your country code)
-- `window.__CKCET_WHATSAPP_CONFIG__.endpoint = "/.netlify/functions/whatsapp-send"`
-- `window.__CKCET_WHATSAPP_CONFIG__.mode = "auto"`
-- `window.__CKCET_WHATSAPP_CONFIG__.templateName = "hello_world"` (or your approved template)
-- `window.__CKCET_WHATSAPP_CONFIG__.templateLanguage = "en_US"`
-- `window.__CKCET_WHATSAPP_CONFIG__.allowTemplateFallback = true`
+- `window.__A3HUB_WHATSAPP_CONFIG__.enabled = true`
+- `window.__A3HUB_WHATSAPP_CONFIG__.defaultCountryCode = "91"` (or your country code)
+- `window.__A3HUB_WHATSAPP_CONFIG__.endpoint = "/.netlify/functions/whatsapp-send"`
+- `window.__A3HUB_WHATSAPP_CONFIG__.mode = "auto"`
+- `window.__A3HUB_WHATSAPP_CONFIG__.templateName = "hello_world"` (or your approved template)
+- `window.__A3HUB_WHATSAPP_CONFIG__.templateLanguage = "en_US"`
+- `window.__A3HUB_WHATSAPP_CONFIG__.allowTemplateFallback = true`
 
 ### 3) Deploy
 
@@ -185,7 +204,7 @@ This is already wired for:
 
 Set in Netlify Site Settings -> Environment variables:
 - `RESEND_API_KEY`
-- `EMAIL_FROM` (example: `CKCET Hub <no-reply@yourdomain.com>`)
+- `EMAIL_FROM` (example: `A3 Hub <no-reply@yourdomain.com>`)
 - `RESEND_API_ENDPOINT` (optional, default: `https://api.resend.com/emails`)
 
 ### 2) Enable client forwarding
@@ -196,8 +215,8 @@ Set build env values:
 
 If you do not use `.env` / build env vars, set runtime config in:
 - `public/email-config.js`
-- `window.__CKCET_EMAIL_CONFIG__.enabled = true`
-- `window.__CKCET_EMAIL_CONFIG__.endpoint = "/.netlify/functions/email-send"`
+- `window.__A3HUB_EMAIL_CONFIG__.enabled = true`
+- `window.__A3HUB_EMAIL_CONFIG__.endpoint = "/.netlify/functions/email-send"`
 
 ### 3) Deploy
 
@@ -225,12 +244,18 @@ In Firebase Console -> Project settings -> Cloud Messaging:
 Set in Netlify Environment Variables:
 - `FCM_SERVER_KEY`
 
-### 3) Client runtime config (no `.env` needed)
+### 3) Client build config
 
-Edit `public/push-config.js`:
+Set these values in local `.env` or your Netlify environment variables:
+- `VITE_PUSH_NOTIFY_ENABLED=true`
+- `VITE_PUSH_VAPID_KEY="<YOUR_FIREBASE_VAPID_PUBLIC_KEY>"`
+- `VITE_PUSH_NOTIFY_ENDPOINT=/.netlify/functions/push-send` (optional)
+- `VITE_PUSH_SW_URL=/firebase-messaging-sw.js` (optional)
+
+If you still prefer runtime config, edit `public/push-config.js`:
 - `enabled: true`
-- `vapidKey: "<YOUR_FIREBASE_VAPID_PUBLIC_KEY>"`
-- Keep endpoint as `/.netlify/functions/push-send`
+- `endpoint: "/.netlify/functions/push-send"`
+- `swUrl: "/firebase-messaging-sw.js"`
 
 ### 4) Deploy and test
 

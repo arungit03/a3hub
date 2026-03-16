@@ -1,4 +1,4 @@
-# **App Name**: CKCET Hub
+# **App Name**: A3 Hub
 
 ## Core Features:
 

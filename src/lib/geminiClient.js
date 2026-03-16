@@ -11,7 +11,7 @@ const OPENAI_MODEL_PREFERENCE = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"];
 const OPENAI_FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o"];
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_AI_PROXY_ENDPOINT = "/.netlify/functions/ai-generate";
-const SERVER_PROXY_API_KEY = "__CKCET_SERVER_AI_PROXY__";
+const SERVER_PROXY_API_KEY = "__A3HUB_SERVER_AI_PROXY__";
 const ENABLE_CLIENT_SIDE_AI_KEY =
   Boolean(import.meta.env.DEV) &&
   String(import.meta.env.VITE_ALLOW_CLIENT_AI_KEY || "")
@@ -31,9 +31,9 @@ const getBuildTimeApiKey = () => "";
 const getRuntimeApiKey = () => {
   if (typeof window === "undefined") return "";
   const runtimeConfig =
-    window.__CKCET_GEMINI_CONFIG__ ||
+    window.__A3HUB_GEMINI_CONFIG__ ||
     window.__GEMINI_CONFIG__ ||
-    window.__CKCET_OPENAI_CONFIG__ ||
+    window.__A3HUB_OPENAI_CONFIG__ ||
     window.__OPENAI_CONFIG__;
   if (!runtimeConfig || typeof runtimeConfig !== "object") return "";
   const key =
@@ -56,9 +56,9 @@ const resolveAiProxyEndpoint = () => {
   }
 
   const runtimeConfig =
-    window.__CKCET_GEMINI_CONFIG__ ||
+    window.__A3HUB_GEMINI_CONFIG__ ||
     window.__GEMINI_CONFIG__ ||
-    window.__CKCET_OPENAI_CONFIG__ ||
+    window.__A3HUB_OPENAI_CONFIG__ ||
     window.__OPENAI_CONFIG__ ||
     {};
   const endpointFromRuntime = String(
@@ -1115,7 +1115,7 @@ const requestOpenAiChat = async ({ apiKey, messages }) => {
   }
 
   const systemInstructionText =
-    "You are CKCET Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
+    "You are A3 Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
 
   const modelCandidates = [...OPENAI_MODEL_PREFERENCE, ...OPENAI_FALLBACK_MODELS].filter(
     (model, index, list) => list.indexOf(model) === index
@@ -1896,7 +1896,7 @@ export async function requestGeminiChat({ apiKey, messages }) {
   const modelCandidates = await discoverSupportedModels(trimmedKey);
   let lastRecoverableError = null;
   const systemInstructionText =
-    "You are CKCET Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
+    "You are A3 Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
 
   const requestChatChunk = async (endpoint, requestContents, temperature = 0.35) => {
     const response = await fetch(endpoint, {

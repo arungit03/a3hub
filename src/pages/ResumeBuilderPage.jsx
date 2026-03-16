@@ -124,7 +124,7 @@ const toRgba = (value, alpha) => {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 };
 const fullName = (p) => [p.firstName, p.lastName].map(toSafeText).filter(Boolean).join(" ");
-const makeStorageKey = (uid) => `ckcethub:resume-builder:${uid || "guest"}`;
+const makeStorageKey = (uid) => `a3hub:resume-builder:${uid || "guest"}`;
 const sanitizeFileName = (value) =>
   (String(value || "")
     .trim()
