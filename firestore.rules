@@ -1,0 +1,414 @@
+﻿
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userRole() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? userDoc().data.role
+        : null;
+    }
+
+    function isPrivilegedAccountActive() {
+      return userRole() != null
+        && userDoc().data.status != "blocked"
+        && userDoc().data.status != "pending"
+        && userDoc().data.status != "pending_approval";
+    }
+
+    function isStudent() {
+      return userRole() == "student";
+    }
+
+    function isStaff() {
+      return userRole() == "staff" && isPrivilegedAccountActive();
+    }
+
+    function isAdmin() {
+      return userRole() == "admin" && isPrivilegedAccountActive();
+    }
+
+    function authBootstrapExists() {
+      return exists(/databases/$(database)/documents/systemSettings/authBootstrap);
+    }
+
+    function authBootstrapDoc() {
+      return get(/databases/$(database)/documents/systemSettings/authBootstrap);
+    }
+
+    function hasActiveBootstrapAdmin() {
+      return authBootstrapExists()
+        && authBootstrapDoc().data.adminUid is string
+        && exists(/databases/$(database)/documents/users/$(authBootstrapDoc().data.adminUid))
+        && get(/databases/$(database)/documents/users/$(authBootstrapDoc().data.adminUid)).data.role == "admin";
+    }
+
+    function isFirstAdminBootstrapForUser(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == "admin"
+        && !hasActiveBootstrapAdmin();
+    }
+
+    function isAssignmentQuestionFolder(folder) {
+      return folder is string
+        && folder.matches("^ckcethub/assignments/[^/]+/question$");
+    }
+
+    function uploadedFileDoc(fileId) {
+      return get(/databases/$(database)/documents/uploadedFiles/$(fileId));
+    }
+
+    function uploadedFileExists(fileId) {
+      return exists(/databases/$(database)/documents/uploadedFiles/$(fileId));
+    }
+
+    function canReadUploadedFileData(fileData) {
+      return isStaff()
+        || isAdmin()
+        || fileData.createdBy == request.auth.uid
+        || (isStudent() && isAssignmentQuestionFolder(fileData.folder));
+    }
+
+    function canReadUploadedFileById(fileId) {
+      return uploadedFileExists(fileId)
+        && canReadUploadedFileData(uploadedFileDoc(fileId).data);
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (request.auth.uid == userId || isStaff() || isAdmin());
+      allow create: if (
+          isAdmin()
+          && request.resource.data.role in ["student", "staff", "parent", "admin"]
+        )
+        || (
+          isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role == "student"
+          && (
+            !("status" in request.resource.data)
+            || request.resource.data.status == "active"
+          )
+        )
+        || isFirstAdminBootstrapForUser(userId);
+      allow update: if isAdmin() || (
+          isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.status == resource.data.status
+        );
+      allow delete: if isAdmin();
+
+      match /notifications/{notificationId} {
+        allow read: if request.auth != null && (request.auth.uid == userId || isStaff() || isAdmin());
+        allow create: if request.auth != null
+          && (isStaff() || isAdmin() || request.auth.uid == userId)
+          && request.resource.data.recipientId == userId
+          && request.resource.data.type is string
+          && request.resource.data.title is string
+          && request.resource.data.expiresAt is timestamp;
+        allow update: if isStaff() || isAdmin() || (
+          request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.recipientId == resource.data.recipientId
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            "read",
+            "readAt"
+          ])
+        );
+        allow delete: if isStaff() || isAdmin() || (request.auth != null && request.auth.uid == userId);
+      }
+
+      match /todoItems/{todoId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow create: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly([
+            "text",
+            "createdAt",
+            "createdBy"
+          ])
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.createdAt is timestamp
+          && request.resource.data.createdBy == request.auth.uid;
+        allow update: if false;
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
+    }
+
+    match /systemSettings/{settingId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() || (
+        settingId == "authBootstrap"
+        && isSignedIn()
+        && !hasActiveBootstrapAdmin()
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        && request.resource.data.adminUid is string
+        && request.resource.data.adminUid == request.auth.uid
+      );
+      allow update: if isAdmin() || (
+        settingId == "authBootstrap"
+        && isSignedIn()
+        && !hasActiveBootstrapAdmin()
+        && existsAfter(/databases/$(database)/documents/users/$(request.auth.uid))
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
+        && request.resource.data.adminUid is string
+        && request.resource.data.adminUid == request.auth.uid
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /auditLogs/{logId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /departments/{departmentId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /subjects/{subjectId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /classes/{classId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /notices/{noticeId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /schedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /todaysSchedules/{scheduleId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /assignments/{assignmentId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /assignmentSubmissions/{submissionId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.assignmentId is string
+        && request.resource.data.assignmentId.size() > 0
+        && submissionId == request.resource.data.assignmentId + "_" + request.auth.uid
+        && request.resource.data.file is map
+        && request.resource.data.file.url is string
+        && request.resource.data.file.url.size() > 0;
+      allow update: if isSignedIn() && (
+        isStaff() || isAdmin() || (
+          resource.data.studentId == request.auth.uid
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.assignmentId == resource.data.assignmentId
+          && submissionId == resource.data.assignmentId + "_" + request.auth.uid
+          && request.resource.data.file is map
+          && request.resource.data.file.url is string
+          && request.resource.data.file.url.size() > 0
+        )
+      );
+      allow delete: if isStaff() || isAdmin();
+    }
+
+    match /uploadedFiles/{fileId} {
+      allow read: if isSignedIn()
+        && canReadUploadedFileData(resource.data);
+      allow create: if isSignedIn()
+        && request.resource.data.keys().hasOnly([
+          "name",
+          "mimeType",
+          "size",
+          "folder",
+          "provider",
+          "chunkCount",
+          "chunkSizeBytes",
+          "createdAt",
+          "createdBy"
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.mimeType is string
+        && request.resource.data.size is int
+        && request.resource.data.size > 0
+        && request.resource.data.folder is string
+        && request.resource.data.folder.size() > 0
+        && request.resource.data.provider == "firestore-chunks"
+        && request.resource.data.chunkCount is int
+        && request.resource.data.chunkCount > 0
+        && request.resource.data.chunkSizeBytes is int
+        && request.resource.data.chunkSizeBytes > 0
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isStaff()
+        || isAdmin()
+        || (isSignedIn() && resource.data.createdBy == request.auth.uid);
+
+      match /chunks/{chunkId} {
+        allow read: if isSignedIn() && canReadUploadedFileById(fileId);
+        allow create: if isSignedIn()
+          && uploadedFileExists(fileId)
+          && uploadedFileDoc(fileId).data.createdBy == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            "index",
+            "data"
+          ])
+          && request.resource.data.index is int
+          && request.resource.data.index >= 0
+          && request.resource.data.data is string
+          && request.resource.data.data.size() > 0
+          && request.resource.data.data.size() <= 320000
+          && chunkId.matches("^[0-9]{6}$");
+        allow update, delete: if false;
+      }
+    }
+
+    match /examSchedules/{examId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /tests/{testId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /testResults/{resultId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.testId is string
+        && request.resource.data.testId.size() > 0
+        && resultId == request.resource.data.testId + "_" + request.auth.uid
+        && !exists(/databases/$(database)/documents/testResults/$(resultId));
+      allow update: if isStaff() || isAdmin();
+      allow delete: if isStaff() || isAdmin();
+    }
+
+    match /leaveRequests/{requestId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn()
+        && userRole() != "staff"
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.requestDate is string
+        && request.resource.data.expiresAt is timestamp
+        && requestId == request.auth.uid + "_" + request.resource.data.requestDate
+        && !exists(/databases/$(database)/documents/leaveRequests/$(requestId));
+      allow update, delete: if isStaff() || isAdmin();
+    }
+
+    match /attendancePeriods/{periodId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /attendance/{attendanceId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /attendanceAbsenceReasons/{replyId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.date is string
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
+        && !exists(/databases/$(database)/documents/attendanceAbsenceReasons/$(replyId));
+      allow update: if isStaff() || isAdmin();
+      allow delete: if isStaff() || isAdmin();
+    }
+
+    match /modules/{moduleId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /books/{bookId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+
+      match /units/{unitId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isStaff() || isAdmin();
+      }
+    }
+
+    match /academicCalendarEntries/{entryId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /fees/{feeId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /internalMarks/{recordId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /dailyPythonChallenges/{challengeId} {
+      allow read: if isStudent() && request.auth.uid == challengeId;
+      allow create, update: if isStudent()
+        && request.auth.uid == challengeId
+        && request.resource.data.generatedAtKey is string
+        && request.resource.data.generatedBy == request.auth.uid
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.expiresAt is timestamp
+        && request.resource.data.expiresAt > request.resource.data.createdAt
+        && request.resource.data.challenges is list
+        && request.resource.data.challenges.size() == 5;
+      allow delete: if isStudent() && request.auth.uid == challengeId;
+    }
+
+    match /dailyPythonProgress/{studentId} {
+      allow read: if isStudent() && request.auth.uid == studentId;
+      allow create, update: if isStudent()
+        && request.auth.uid == studentId
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.currentDayKey is string
+        && request.resource.data.solvedChallengeIds is list
+        && request.resource.data.solvedCount is int
+        && request.resource.data.totalSolvedChallenges is int
+        && request.resource.data.daysParticipated is int
+        && request.resource.data.dailyStreak is int
+        && request.resource.data.bestStreak is int
+        && request.resource.data.lastSolvedDayKey is string
+        && request.resource.data.lastSolvedAt is timestamp
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

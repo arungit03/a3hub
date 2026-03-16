@@ -1,0 +1,869 @@
+import { Camera, ScanFace, Shield, UserRound, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const FACE_MODEL_BASE_URI =
+  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
+const AUTO_SCAN_INTERVAL_MS = 900;
+const MIN_FACE_VECTOR_LENGTH = 64;
+const FACE_DETECTION_INPUT_SIZE = 608; // Increased to detect smaller/distant faces
+const FACE_DETECTION_SCORE_THRESHOLD = 0.3;
+const FACE_CAPTURE_MIN_SCORE = 0.78;
+const FACE_CAPTURE_MIN_WIDTH_RATIO = 0.16;
+const FACE_CAPTURE_MIN_HEIGHT_RATIO = 0.2;
+const FACE_CAPTURE_MIN_AREA_RATIO = 0.04;
+const FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO = 0.34;
+const MANUAL_CAPTURE_MAX_ATTEMPTS = 4;
+const MANUAL_CAPTURE_RETRY_DELAY_MS = 220;
+
+let loadedFaceApiPromise = null;
+
+const stopStreamTracks = (stream) => {
+  if (!stream) return;
+  stream.getTracks().forEach((track) => track.stop());
+};
+
+const buildCameraErrorMessage = (error) => {
+  const code = String(error?.name || "");
+  if (code === "NotAllowedError") {
+    return "Camera permission denied. Allow access and try again.";
+  }
+  if (code === "NotFoundError") {
+    return "No camera found on this device.";
+  }
+  if (code === "NotReadableError") {
+    return "Camera is being used by another app.";
+  }
+  return "Unable to start camera for face attendance.";
+};
+
+const normalizeDescriptorVector = (descriptor) => {
+  if (!descriptor) return [];
+  const sourceArray = Array.from(descriptor)
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value));
+  if (sourceArray.length < MIN_FACE_VECTOR_LENGTH) return [];
+
+  let squaredNorm = 0;
+  sourceArray.forEach((value) => {
+    squaredNorm += value * value;
+  });
+  if (squaredNorm <= 0) return [];
+
+  const norm = Math.sqrt(squaredNorm);
+  return sourceArray.map((value) => Number((value / norm).toFixed(7)));
+};
+
+const toPercentLabel = (value) => `${Math.round(Math.max(0, Number(value) || 0) * 100)}%`;
+
+const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => {
+  if (!videoElement || !box) {
+    return {
+      ok: false,
+      reason: "missing_box",
+    };
+  }
+
+  const videoWidth = Number(videoElement.videoWidth) || 0;
+  const videoHeight = Number(videoElement.videoHeight) || 0;
+  if (videoWidth <= 0 || videoHeight <= 0) {
+    return {
+      ok: false,
+      reason: "camera_not_ready",
+    };
+  }
+
+  const widthRatio = box.width / videoWidth;
+  const heightRatio = box.height / videoHeight;
+  const areaRatio = (box.width * box.height) / (videoWidth * videoHeight);
+  const centerXRatio = (box.x + box.width / 2) / videoWidth;
+  const centerYRatio = (box.y + box.height / 2) / videoHeight;
+  const centerXOffset = Math.abs(centerXRatio - 0.5);
+  const centerYOffset = Math.abs(centerYRatio - 0.5);
+
+  if (Number(detectionScore) < FACE_CAPTURE_MIN_SCORE) {
+    return {
+      ok: false,
+      reason: "low_detection_score",
+      detectionScore: Number(detectionScore) || 0,
+    };
+  }
+
+  if (
+    widthRatio < FACE_CAPTURE_MIN_WIDTH_RATIO ||
+    heightRatio < FACE_CAPTURE_MIN_HEIGHT_RATIO ||
+    areaRatio < FACE_CAPTURE_MIN_AREA_RATIO
+  ) {
+    return {
+      ok: false,
+      reason: "face_too_small",
+      widthRatio,
+      heightRatio,
+      areaRatio,
+    };
+  }
+
+  if (
+    centerXOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO ||
+    centerYOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO
+  ) {
+    return {
+      ok: false,
+      reason: "face_off_center",
+      centerXOffset,
+      centerYOffset,
+    };
+  }
+
+  return {
+    ok: true,
+    detectionScore: Number(detectionScore) || 0,
+    widthRatio,
+    heightRatio,
+    areaRatio,
+    centerXOffset,
+    centerYOffset,
+  };
+};
+
+const buildLowQualityMessage = (quality = {}) => {
+  if (quality.reason === "low_detection_score") {
+    return `Face confidence is low (${toPercentLabel(quality.detectionScore)}). Improve light and face the camera.`;
+  }
+  if (quality.reason === "face_too_small") {
+    return "Face appears too small. Move closer to the camera.";
+  }
+  if (quality.reason === "face_off_center") {
+    return "Center your face inside the guide for a stable capture.";
+  }
+  if (quality.reason === "camera_not_ready") {
+    return "Camera is warming up. Try again.";
+  }
+  return "Face quality is low. Adjust position and lighting, then retry.";
+};
+
+const wait = (ms) =>
+  new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+
+const ensureFaceApiLoaded = async () => {
+  if (loadedFaceApiPromise) {
+    return loadedFaceApiPromise;
+  }
+
+  loadedFaceApiPromise = (async () => {
+    const importedModule = await import("@vladmandic/face-api");
+    const faceapi = importedModule?.default || importedModule;
+
+    if (!faceapi?.nets) {
+      throw new Error("Face API module could not be initialized.");
+    }
+
+    if (faceapi?.tf?.ready) {
+      await faceapi.tf.ready();
+      try {
+        if (typeof faceapi.tf.findBackend === "function" && faceapi.tf.findBackend("webgl")) {
+          await faceapi.tf.setBackend("webgl");
+        }
+      } catch {
+        // Keep default backend when switching fails.
+      }
+    }
+
+    await Promise.all([
+      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_BASE_URI),
+      faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_BASE_URI),
+      faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_BASE_URI),
+    ]);
+
+    return faceapi;
+  })();
+
+  return loadedFaceApiPromise;
+};
+
+const detectSingleFaceDescriptor = async (faceapi, videoElement) => {
+  if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth <= 0) {
+    return { status: "camera_not_ready" };
+  }
+
+  const detections = await faceapi
+    .detectAllFaces(
+      videoElement,
+      new faceapi.TinyFaceDetectorOptions({
+        inputSize: FACE_DETECTION_INPUT_SIZE,
+        scoreThreshold: FACE_DETECTION_SCORE_THRESHOLD,
+      })
+    )
+    .withFaceLandmarks(true)
+    .withFaceDescriptors();
+
+  if (!Array.isArray(detections) || detections.length === 0) {
+    return { status: "no_face" };
+  }
+
+  if (detections.length > 1) {
+    return {
+      status: "multiple_faces",
+      count: detections.length,
+    };
+  }
+
+  const first = detections[0];
+  const vector = normalizeDescriptorVector(first?.descriptor);
+  const box = first?.detection?.box;
+  const detectionScore = Number(first?.detection?.score || 0);
+
+  if (vector.length < MIN_FACE_VECTOR_LENGTH) {
+    return { status: "invalid_vector", box };
+  }
+
+  const quality = evaluateFaceFrameQuality({
+    detectionScore,
+    box,
+    videoElement,
+  });
+  if (!quality.ok) {
+    return {
+      status: "low_quality",
+      quality,
+      box,
+      detectionScore,
+    };
+  }
+
+  return {
+    status: "ok",
+    vector,
+    vectorLength: vector.length,
+    detectionScore,
+    quality,
+    box,
+  };
+};
+
+const detectSingleFaceDescriptorWithRetry = async (
+  faceapi,
+  videoElement,
+  attempts = 1
+) => {
+  const maxAttempts = Math.max(1, Number(attempts) || 1);
+  let lastResult = { status: "no_face" };
+
+  for (let index = 0; index < maxAttempts; index += 1) {
+    const result = await detectSingleFaceDescriptor(faceapi, videoElement);
+
+    if (
+      result.status === "ok" ||
+      result.status === "multiple_faces" ||
+      result.status === "invalid_vector"
+    ) {
+      return result;
+    }
+
+    lastResult = result;
+    if (index < maxAttempts - 1) {
+      await wait(MANUAL_CAPTURE_RETRY_DELAY_MS);
+    }
+  }
+
+  return lastResult;
+};
+
+const registerToneClassMap = {
+  success: "border-emerald-400/40 bg-emerald-500/12 text-emerald-200",
+  error: "border-rose-400/45 bg-rose-500/12 text-rose-200",
+  info: "border-sky-400/35 bg-sky-500/10 text-sky-100",
+};
+
+export default function FaceAttendanceModal({
+  open,
+  mode = "scan",
+  title = "Face Attendance",
+  description = "",
+  thresholdPercent = 70,
+  onClose,
+  onDescriptor,
+  disabled = false,
+}) {
+  const videoRef = useRef(null);
+  const streamRef = useRef(null);
+  const faceApiRef = useRef(null);
+  const scanTimerRef = useRef(null);
+  const onDescriptorRef = useRef(onDescriptor);
+  const inFlightRef = useRef(false);
+  const mountedRef = useRef(false);
+
+  const [cameraOn, setCameraOn] = useState(false);
+  const [loadingModels, setLoadingModels] = useState(false);
+  const [modelError, setModelError] = useState("");
+  const [cameraError, setCameraError] = useState("");
+  const [statusText, setStatusText] = useState("");
+  const [statusTone, setStatusTone] = useState("info");
+  const [manualBusy, setManualBusy] = useState(false);
+  const [zoomStyle, setZoomStyle] = useState({});
+
+  const isRegistrationMode = mode === "register";
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    onDescriptorRef.current = onDescriptor;
+  }, [onDescriptor]);
+
+  useEffect(() => {
+    if (!open) {
+      setCameraOn(false);
+      setCameraError("");
+      setStatusText("");
+      setModelError("");
+      setManualBusy(false);
+      setZoomStyle({});
+      return;
+    }
+
+    if (!disabled) {
+      setCameraOn(!isRegistrationMode);
+    }
+  }, [disabled, isRegistrationMode, open]);
+
+  const cleanupStream = useCallback(() => {
+    if (scanTimerRef.current) {
+      window.clearInterval(scanTimerRef.current);
+      scanTimerRef.current = null;
+    }
+
+    stopStreamTracks(streamRef.current);
+    streamRef.current = null;
+
+    const videoElement = videoRef.current;
+    if (videoElement) {
+      videoElement.pause();
+      videoElement.srcObject = null;
+    }
+  }, []);
+
+  const handleDescriptorCapture = useCallback(
+    async ({ isManual = false } = {}) => {
+      const faceapi = faceApiRef.current;
+      const videoElement = videoRef.current;
+      if (!faceapi || !videoElement || inFlightRef.current) {
+        return;
+      }
+
+      inFlightRef.current = true;
+      if (isManual) {
+        setManualBusy(true);
+      }
+
+      try {
+        const detected = await detectSingleFaceDescriptorWithRetry(
+          faceapi,
+          videoElement,
+          isManual ? MANUAL_CAPTURE_MAX_ATTEMPTS : 1
+        );
+        if (detected.box) {
+          const videoW = videoElement.videoWidth;
+          const videoH = videoElement.videoHeight;
+          if (videoW > 0 && videoH > 0) {
+            const targetRatio = 0.5; // Auto-zoom to fill ~50% of the view height
+            const scale = Math.max(1, Math.min(2.5, (videoH * targetRatio) / detected.box.height));
+            const faceCenterX = ((detected.box.x + detected.box.width / 2) / videoW) * 100;
+            const faceCenterY = ((detected.box.y + detected.box.height / 2) / videoH) * 100;
+            
+            setZoomStyle({
+              transformOrigin: `${faceCenterX}% ${faceCenterY}%`,
+              transform: `scale(${scale})`,
+            });
+          }
+        } else {
+          setZoomStyle({ transformOrigin: "50% 50%", transform: "scale(1)" });
+        }
+
+        if (detected.status === "camera_not_ready") {
+          if (isManual) {
+            setStatusTone("info");
+            setStatusText("Camera is warming up. Try again.");
+          }
+          return;
+        }
+
+        if (detected.status === "no_face") {
+          if (isManual) {
+            setStatusTone("error");
+            setStatusText(
+              "No face detected. Move closer, keep good light, and keep face inside frame."
+            );
+          }
+          return;
+        }
+
+        if (detected.status === "multiple_faces") {
+          setStatusTone("error");
+          setStatusText("Multiple faces detected. Keep one face in camera.");
+          return;
+        }
+
+        if (detected.status === "invalid_vector") {
+          setStatusTone("error");
+          setStatusText("Face vector could not be generated. Try again.");
+          return;
+        }
+
+        if (detected.status === "low_quality") {
+          if (isManual || isRegistrationMode) {
+            setStatusTone("info");
+            setStatusText(buildLowQualityMessage(detected.quality));
+          }
+          return;
+        }
+
+        const callbackPayload = {
+          vector: detected.vector,
+          vectorLength: detected.vectorLength,
+          detectionScore: detected.detectionScore,
+          quality: detected.quality || null,
+          detectedAt: Date.now(),
+        };
+
+        const callbackResult = await onDescriptorRef.current?.(callbackPayload);
+        if (callbackResult?.message) {
+          setStatusText(callbackResult.message);
+          setStatusTone(callbackResult.tone === "success" || callbackResult.tone === "error"
+            ? callbackResult.tone
+            : "info");
+        } else if (isRegistrationMode) {
+          setStatusTone("success");
+          setStatusText("Face captured. Vector is ready to save.");
+        }
+      } catch {
+        setStatusTone("error");
+        setStatusText("Face detection failed. Please try again.");
+      } finally {
+        inFlightRef.current = false;
+        if (isManual && mountedRef.current) {
+          setManualBusy(false);
+        }
+      }
+    },
+    [isRegistrationMode]
+  );
+
+  useEffect(() => {
+    if (!open || disabled || !cameraOn) {
+      cleanupStream();
+      return undefined;
+    }
+
+    if (typeof window === "undefined") return undefined;
+    if (!navigator?.mediaDevices?.getUserMedia) {
+      setCameraError("Camera is not supported in this browser.");
+      setCameraOn(false);
+      return undefined;
+    }
+
+    let isCancelled = false;
+
+    const start = async () => {
+      setLoadingModels(true);
+      setModelError("");
+      setCameraError("");
+
+      try {
+        const faceapi = await ensureFaceApiLoaded();
+        if (isCancelled) return;
+        faceApiRef.current = faceapi;
+      } catch {
+        if (!isCancelled) {
+          setModelError(
+            "Unable to load face recognition models. Check internet and try again."
+          );
+          setCameraOn(false);
+        }
+        return;
+      } finally {
+        if (!isCancelled) {
+          setLoadingModels(false);
+        }
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "user" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (isCancelled) {
+          stopStreamTracks(stream);
+          return;
+        }
+
+        const videoElement = videoRef.current;
+        if (!videoElement) {
+          stopStreamTracks(stream);
+          return;
+        }
+
+        streamRef.current = stream;
+        videoElement.srcObject = stream;
+        videoElement.playsInline = true;
+        videoElement.muted = true;
+
+        try {
+          await videoElement.play();
+        } catch {
+          setCameraError("Tap camera on to start face attendance.");
+          setCameraOn(false);
+          cleanupStream();
+          return;
+        }
+
+        if (!isRegistrationMode) {
+          scanTimerRef.current = window.setInterval(() => {
+            void handleDescriptorCapture();
+          }, AUTO_SCAN_INTERVAL_MS);
+        }
+      } catch (error) {
+        setCameraError(buildCameraErrorMessage(error));
+        setCameraOn(false);
+      }
+    };
+
+    void start();
+
+    return () => {
+      isCancelled = true;
+      cleanupStream();
+    };
+  }, [
+    cameraOn,
+    cleanupStream,
+    disabled,
+    handleDescriptorCapture,
+    isRegistrationMode,
+    open,
+  ]);
+
+  if (!open) return null;
+
+  if (isRegistrationMode) {
+    return (
+      <div className="ui-modal ui-modal--compact" role="dialog" aria-modal="true">
+        <button
+          type="button"
+          aria-label="Close face attendance modal"
+          className="ui-modal__scrim"
+          tabIndex={-1}
+          onClick={onClose}
+        />
+
+        <div tabIndex={-1} className="ui-modal__panel w-full max-w-lg p-2 sm:p-3">
+          <div className="relative overflow-hidden rounded-[20px] border border-[#1d2b44] bg-[#030b1a] text-[#d6e8ff] shadow-[0_28px_65px_-36px_rgba(2,132,199,0.9)]">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 opacity-25"
+              style={{
+                backgroundImage:
+                  "linear-gradient(rgba(60,96,142,0.55) 1px, transparent 1px), linear-gradient(90deg, rgba(60,96,142,0.55) 1px, transparent 1px)",
+                backgroundPosition: "-1px -1px",
+                backgroundSize: "52px 52px",
+              }}
+            />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(14,165,233,0.22),transparent_46%),radial-gradient(circle_at_80%_100%,rgba(14,165,233,0.12),transparent_55%)]" />
+
+            <div className="relative border-b border-[#1b2941] px-4 py-3 sm:px-5">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="grid h-9 w-9 place-items-center rounded-xl border border-[#18406d] bg-[#081c33] shadow-[inset_0_1px_0_rgba(125,211,252,0.18)]">
+                    <Shield className="h-4 w-4 text-sky-300" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-white leading-tight">{title}</h3>
+                    <p className="mt-0.5 text-xs text-[#8ea8cb]">Student Attendance System</p>
+                    {description ? (
+                      <p className="text-xs text-[#7590b4]">{description}</p>
+                    ) : null}
+                  </div>
+                </div>
+                <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-[#93aac8]">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      cameraOn
+                        ? "bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.16)]"
+                        : "bg-slate-400/70"
+                    }`}
+                  />
+                  {cameraOn ? "Camera On" : "Standby"}
+                </div>
+              </div>
+            </div>
+
+            <div className="relative space-y-3 px-4 py-3 sm:px-5 sm:py-4">
+              <div className="rounded-[16px] border border-[#1d2d46] bg-[#0f1828]/95 p-1.5 sm:p-2">
+                <div className="relative mx-auto aspect-video w-full max-w-md max-h-[220px] overflow-hidden rounded-[12px] border border-[#1f304a] bg-[#081223]">
+                  {cameraOn ? (
+                    <video
+                      ref={videoRef}
+                      className="h-full w-full object-cover"
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{
+                        ...zoomStyle,
+                        transition: "all 0.8s cubic-bezier(0.22, 1, 0.36, 1)",
+                      }}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-[#0a1324]" />
+                  )}
+
+                  <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                    <div className="relative flex h-[70%] w-[42%] min-h-[120px] min-w-[90px] max-h-[180px] max-w-[130px] items-center justify-center rounded-[999px] border-[2px] border-dashed border-[#0fbaff] shadow-[0_0_0_1px_rgba(8,47,73,0.65),0_0_24px_rgba(14,165,233,0.3)]">
+                      <div className="grid h-10 w-10 place-items-center rounded-full border border-[#334c6e] bg-[#142338]/86 text-[#7ea5d1] shadow-[inset_0_1px_0_rgba(186,230,253,0.12)]">
+                        <UserRound className="h-5 w-5" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-[10px] border border-[#1f2e48] bg-[#0c1525]/95 px-3 py-2 text-xs text-[#8fa8c8] shadow-[inset_0_1px_0_rgba(125,211,252,0.09)]">
+                <div className="flex items-start gap-2.5">
+                  <ScanFace className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
+                  <p className="leading-snug">
+                    Position your face within the oval guide, then capture 3 samples with slight angle changes for better accuracy.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setCameraOn(true)}
+                  disabled={disabled || cameraOn || loadingModels}
+                  className="inline-flex items-center justify-center gap-2 rounded-[10px] border border-sky-400/40 bg-[linear-gradient(135deg,#1698ff_0%,#1477ee_100%)] px-3 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_-16px_rgba(14,116,233,0.95)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+                >
+                  <Camera className="h-4 w-4" />
+                  {loadingModels ? "Loading..." : cameraOn ? "Camera Active" : "Start Camera"}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleDescriptorCapture({ isManual: true });
+                  }}
+                  disabled={disabled || !cameraOn || loadingModels || manualBusy}
+                  className="inline-flex items-center justify-center gap-2 rounded-[10px] border border-[#273853] bg-[#071120] px-3 py-2 text-sm font-semibold text-[#b8c8df] shadow-[inset_0_1px_0_rgba(148,197,255,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/35 hover:text-white active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ScanFace className="h-4 w-4" />
+                  {manualBusy ? "Capturing..." : "Capture Face"}
+                </button>
+              </div>
+
+              <div className="grid gap-2">
+                {loadingModels ? (
+                  <p className="rounded-xl border border-sky-400/35 bg-sky-500/8 px-3 py-2 text-xs font-semibold text-sky-100">
+                    Loading face models...
+                  </p>
+                ) : null}
+                {modelError ? (
+                  <p className="rounded-xl border border-rose-400/40 bg-rose-500/12 px-3 py-2 text-xs font-semibold text-rose-200">
+                    {modelError}
+                  </p>
+                ) : null}
+                {cameraError ? (
+                  <p className="rounded-xl border border-rose-400/40 bg-rose-500/12 px-3 py-2 text-xs font-semibold text-rose-200">
+                    {cameraError}
+                  </p>
+                ) : null}
+                {statusText ? (
+                  <p
+                    className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                      registerToneClassMap[statusTone] || registerToneClassMap.info
+                    }`}
+                  >
+                    {statusText}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+
+            <div className="relative flex flex-wrap items-center justify-between gap-3 border-t border-[#1b2941] px-4 py-2.5 text-xs text-[#8ea7c7] sm:px-5">
+              <p>Secured with 128-d face embeddings</p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex items-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[#a8bdd8] transition-colors hover:bg-[#13223a] hover:text-white"
+              >
+                <X className="h-3.5 w-3.5" />
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="ui-modal ui-modal--compact" role="dialog" aria-modal="true">
+      <button
+        type="button"
+        aria-label="Close face attendance modal"
+        className="ui-modal__scrim"
+        tabIndex={-1}
+        onClick={onClose}
+      />
+
+      <div tabIndex={-1} className="ui-modal__panel w-full max-w-lg p-2 sm:p-3">
+        <div className="relative overflow-hidden rounded-[20px] border border-[#1d2b44] bg-[#030b1a] text-[#d6e8ff] shadow-[0_28px_65px_-36px_rgba(2,132,199,0.9)]">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 opacity-25"
+            style={{
+              backgroundImage:
+                "linear-gradient(rgba(60,96,142,0.55) 1px, transparent 1px), linear-gradient(90deg, rgba(60,96,142,0.55) 1px, transparent 1px)",
+              backgroundPosition: "-1px -1px",
+              backgroundSize: "52px 52px",
+            }}
+          />
+          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(14,165,233,0.22),transparent_46%),radial-gradient(circle_at_80%_100%,rgba(14,165,233,0.12),transparent_55%)]" />
+
+          <div className="relative border-b border-[#1b2941] px-4 py-3 sm:px-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="grid h-9 w-9 place-items-center rounded-xl border border-[#18406d] bg-[#081c33] shadow-[inset_0_1px_0_rgba(125,211,252,0.18)]">
+                  <ScanFace className="h-4 w-4 text-sky-300" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-white leading-tight">{title}</h3>
+                  <p className="mt-0.5 text-xs text-[#8ea8cb]">Live Face Attendance</p>
+                  {description ? (
+                    <p className="text-xs text-[#7590b4]">{description}</p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-[#93aac8]">
+                <span
+                  className={`h-2 w-2 rounded-full ${
+                    cameraOn
+                      ? "bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.16)]"
+                      : "bg-slate-400/70"
+                  }`}
+                />
+                {cameraOn ? <span className="text-emerald-300">Scanning</span> : "Standby"}
+              </div>
+            </div>
+          </div>
+
+          <div className="relative space-y-3 px-4 py-3 sm:px-5 sm:py-4">
+            <div className="rounded-[16px] border border-[#1d2d46] bg-[#0f1828]/95 p-1.5 sm:p-2">
+              <div className="relative mx-auto aspect-video w-full max-w-md max-h-[220px] overflow-hidden rounded-[12px] border border-[#1f304a] bg-[#081223]">
+                {cameraOn ? (
+                  <video
+                    ref={videoRef}
+                    className="h-full w-full object-cover"
+                    autoPlay
+                    muted
+                    playsInline
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center bg-[#0a1324]" />
+                )}
+
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(14,165,233,0.12),transparent_58%)]" />
+
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="relative flex h-[70%] w-[42%] min-h-[120px] min-w-[90px] max-h-[180px] max-w-[130px] items-center justify-center rounded-[999px] border-[2px] border-dashed border-[#0fbaff] shadow-[0_0_0_1px_rgba(8,47,73,0.65),0_0_24px_rgba(14,165,233,0.3)]">
+                    <div className="grid h-10 w-10 place-items-center rounded-full border border-[#334c6e] bg-[#142338]/86 text-[#7ea5d1] shadow-[inset_0_1px_0_rgba(186,230,253,0.12)]">
+                      <ScanFace className="h-5 w-5" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-[10px] border border-[#1f2e48] bg-[#0c1525]/95 px-3 py-2 text-xs text-[#8fa8c8] shadow-[inset_0_1px_0_rgba(125,211,252,0.09)]">
+              <div className="flex items-start gap-2.5">
+                <ScanFace className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
+                <p className="leading-snug">
+                  Keep your face inside the frame with good light. Matching above {thresholdPercent}% threshold records attendance automatically.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setCameraOn(true)}
+                disabled={disabled || cameraOn || loadingModels}
+                className="inline-flex items-center justify-center gap-2 rounded-[10px] border border-emerald-400/40 bg-[linear-gradient(135deg,#10b981_0%,#059669_100%)] px-3 py-2 text-sm font-semibold text-white shadow-[0_12px_24px_-16px_rgba(16,185,129,0.95)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-110 active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <Camera className="h-4 w-4" />
+                {loadingModels ? "Loading..." : "Camera On"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCameraOn(false)}
+                disabled={disabled || !cameraOn}
+                className="inline-flex items-center justify-center gap-2 rounded-[10px] border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-sm font-semibold text-rose-200 shadow-[inset_0_1px_0_rgba(244,63,94,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-500/20 active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <X className="h-4 w-4" />
+                Camera Off
+              </button>
+            </div>
+
+            <div className="grid gap-2">
+              {loadingModels ? (
+                <p className="rounded-xl border border-sky-400/35 bg-sky-500/8 px-3 py-2 text-xs font-semibold text-sky-100">
+                  Loading face models...
+                </p>
+              ) : null}
+              {modelError ? (
+                <p className="rounded-xl border border-rose-400/40 bg-rose-500/12 px-3 py-2 text-xs font-semibold text-rose-200">
+                  {modelError}
+                </p>
+              ) : null}
+              {cameraError ? (
+                <p className="rounded-xl border border-rose-400/40 bg-rose-500/12 px-3 py-2 text-xs font-semibold text-rose-200">
+                  {cameraError}
+                </p>
+              ) : null}
+              {statusText ? (
+                <p
+                  className={`rounded-xl px-3 py-2 text-xs font-semibold ${
+                    registerToneClassMap[statusTone] || registerToneClassMap.info
+                  }`}
+                >
+                  {statusText}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="relative flex flex-wrap items-center justify-between gap-3 border-t border-[#1b2941] px-4 py-2.5 text-xs text-[#8ea7c7] sm:px-5">
+            <p>Scanning at {Math.round(1000 / AUTO_SCAN_INTERVAL_MS)} scans/sec</p>
+            <button
+              type="button"
+              onClick={onClose}
+              className="inline-flex items-center gap-1.5 rounded-[8px] px-2 py-1.5 text-[#a8bdd8] transition-colors hover:bg-[#13223a] hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

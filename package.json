@@ -1,0 +1,52 @@
+{
+  "name": "firebase_chat",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "docs:structure": "node scripts/project-structure.mjs --write",
+    "docs:structure:check": "node scripts/project-structure.mjs --check",
+    "typecheck": "tsc -p tsconfig.typecheck.json --noEmit",
+    "test": "node --test",
+    "test:unit": "node --test test/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js",
+    "test:e2e": "node --test test/e2e/*.test.js",
+    "test:all": "npm run test:unit && npm run test:integration && npm run test:e2e",
+    "loadtest:1500": "k6 run scripts/loadtest/k6-1500-smoke.js",
+    "loadtest:1500:ai": "k6 run -e ENABLE_FUNCTIONS=true scripts/loadtest/k6-1500-smoke.js"
+  },
+  "dependencies": {
+    "@vladmandic/face-api": "^1.7.15",
+    "firebase": "^12.8.0",
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.2.0",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^0.575.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-markdown": "^10.1.0",
+    "react-router-dom": "^7.13.0",
+    "remark-gfm": "^4.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@types/react": "^19.2.5",
+    "@types/react-dom": "^19.2.3",
+    "@types/node": "^24.5.2",
+    "@vitejs/plugin-react": "^5.1.1",
+    "autoprefixer": "^10.4.24",
+    "eslint": "^9.39.1",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "eslint-plugin-react-refresh": "^0.4.24",
+    "globals": "^16.5.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.2",
+    "vite": "^7.2.4"
+  }
+}

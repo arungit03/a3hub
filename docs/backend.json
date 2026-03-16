@@ -1,0 +1,96 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Represents a user's profile in the system.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "The user's unique ID from Firebase Auth."
+        },
+        "name": {
+          "type": "string",
+          "description": "The user's full name."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "The user's email address."
+        },
+        "role": {
+          "type": "string",
+          "description": "The user's role.",
+          "enum": ["student", "staff"]
+        }
+      },
+      "required": ["uid", "name", "email", "role"]
+    },
+    "NotificationItem": {
+      "title": "Notification Item",
+      "description": "User-level notification document for in-app, email, and push delivery.",
+      "type": "object",
+      "properties": {
+        "recipientId": {
+          "type": "string",
+          "description": "Recipient user uid."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["leave_decision", "new_notice", "exam_update", "fee_due", "general"]
+        },
+        "topic": {
+          "type": "string",
+          "description": "Notification topic/category."
+        },
+        "title": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "link": {
+          "type": "string",
+          "description": "Deep link path in the frontend app."
+        },
+        "channels": {
+          "type": "object",
+          "properties": {
+            "inApp": { "type": "boolean" },
+            "email": { "type": "boolean" },
+            "push": { "type": "boolean" }
+          }
+        },
+        "delivery": {
+          "type": "object",
+          "properties": {
+            "inApp": { "type": "string", "enum": ["sent", "disabled"] },
+            "email": { "type": "string", "enum": ["pending", "disabled"] },
+            "push": { "type": "string", "enum": ["pending", "disabled"] }
+          }
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "readAt": {
+          "description": "Server timestamp when opened.",
+          "type": ["string", "null"]
+        }
+      },
+      "required": ["recipientId", "type", "title", "channels", "delivery", "read"]
+    }
+  },
+  "auth": {
+    "providers": ["email"]
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Stores user profile information."
+    },
+    "/users/{userId}/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/NotificationItem" },
+      "description": "Stores recipient-scoped notification events."
+    }
+  }
+}
