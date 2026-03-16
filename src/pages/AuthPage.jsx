@@ -18,9 +18,6 @@ const TOO_MANY_REQUESTS_MESSAGE =
   "Too many requests right now. Please wait 15 minutes and try again.";
 const FACE_MATCH_THRESHOLD = 0.74;
 const FACE_MIN_VECTOR_LENGTH = 64;
-const FACE_REGISTRATION_SAMPLE_TARGET = 3;
-const FACE_REGISTRATION_SAMPLE_LIMIT = 6;
-const FACE_REGISTRATION_MIN_CONSISTENCY = 0.82;
 
 const normalizeFaceVector = (value) => {
   if (!Array.isArray(value)) return [];
@@ -37,109 +34,6 @@ const normalizeFaceVector = (value) => {
 
   const norm = Math.sqrt(squaredNorm);
   return vector.map((item) => Number((item / norm).toFixed(7)));
-};
-
-const cosineSimilarity = (vectorA, vectorB) => {
-  if (!Array.isArray(vectorA) || !Array.isArray(vectorB)) return 0;
-  if (vectorA.length === 0 || vectorB.length === 0) return 0;
-
-  const dimensions = Math.min(vectorA.length, vectorB.length);
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let index = 0; index < dimensions; index += 1) {
-    const a = Number(vectorA[index]) || 0;
-    const b = Number(vectorB[index]) || 0;
-    dot += a * b;
-    normA += a * a;
-    normB += b * b;
-  }
-
-  if (normA <= 0 || normB <= 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-};
-
-const dedupeFaceVectors = (vectors, duplicateSimilarity = 0.998) => {
-  const next = [];
-  const safeVectors = Array.isArray(vectors) ? vectors : [];
-  safeVectors.forEach((vector) => {
-    const normalizedVector = normalizeFaceVector(vector);
-    if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) return;
-    const duplicate = next.some(
-      (existing) => cosineSimilarity(existing, normalizedVector) >= duplicateSimilarity
-    );
-    if (!duplicate) {
-      next.push(normalizedVector);
-    }
-  });
-  return next;
-};
-
-const averageFaceVector = (vectors) => {
-  if (!Array.isArray(vectors) || vectors.length === 0) return [];
-  const dimensions = vectors.reduce(
-    (max, vector) => Math.max(max, Array.isArray(vector) ? vector.length : 0),
-    0
-  );
-  if (dimensions < FACE_MIN_VECTOR_LENGTH) return [];
-
-  const sums = new Array(dimensions).fill(0);
-  const counts = new Array(dimensions).fill(0);
-  vectors.forEach((vector) => {
-    if (!Array.isArray(vector)) return;
-    for (let index = 0; index < dimensions; index += 1) {
-      const value = Number(vector[index]);
-      if (!Number.isFinite(value)) continue;
-      sums[index] += value;
-      counts[index] += 1;
-    }
-  });
-
-  const averaged = sums.map((sum, index) => {
-    const count = counts[index];
-    if (!count) return 0;
-    return sum / count;
-  });
-  return normalizeFaceVector(averaged);
-};
-
-const computeFaceSampleConsistency = (vectors) => {
-  const safeVectors = dedupeFaceVectors(vectors);
-  if (safeVectors.length <= 1) {
-    return {
-      averageSimilarity: 1,
-      minSimilarity: 1,
-      centroidVector: safeVectors[0] || [],
-    };
-  }
-
-  const centroidVector = averageFaceVector(safeVectors);
-  if (centroidVector.length < FACE_MIN_VECTOR_LENGTH) {
-    return {
-      averageSimilarity: 0,
-      minSimilarity: 0,
-      centroidVector: [],
-    };
-  }
-
-  const similarities = safeVectors
-    .map((vector) => cosineSimilarity(vector, centroidVector))
-    .filter((value) => Number.isFinite(value));
-  if (similarities.length === 0) {
-    return {
-      averageSimilarity: 0,
-      minSimilarity: 0,
-      centroidVector,
-    };
-  }
-
-  const sum = similarities.reduce((total, value) => total + value, 0);
-  return {
-    averageSimilarity: sum / similarities.length,
-    minSimilarity: Math.min(...similarities),
-    centroidVector,
-  };
 };
 
 const resolveAuthErrorMessage = (err, fallback) => {
@@ -261,7 +155,7 @@ export default function AuthPage() {
   const handleRegisterFaceDescriptor = useCallback(({ vector, vectorLength }) => {
     const normalizedVector = normalizeFaceVector(vector);
     if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) {
-      const message = "Unable to capture valid face vector. Try again.";
+      const message = "Unable to capture a valid front-facing face. Try again.";
       setFaceRegisterStatus("");
       setFaceRegisterError(message);
       return {
@@ -270,50 +164,24 @@ export default function AuthPage() {
       };
     }
 
-    const mergedSamples = dedupeFaceVectors([
-      ...registeredFaceSamples,
-      normalizedVector,
-    ]).slice(-FACE_REGISTRATION_SAMPLE_LIMIT);
-    const consistency = computeFaceSampleConsistency(mergedSamples);
-    const stableVector =
-      consistency.centroidVector.length >= FACE_MIN_VECTOR_LENGTH
-        ? consistency.centroidVector
-        : normalizedVector;
     const resolvedLength = Number.isFinite(vectorLength)
       ? Number(vectorLength)
-      : stableVector.length;
-    const remaining = Math.max(
-      0,
-      FACE_REGISTRATION_SAMPLE_TARGET - mergedSamples.length
-    );
+      : normalizedVector.length;
+    const message =
+      `Face profile ready (${resolvedLength}D). Front-facing auto capture completed.`;
 
-    let message = "";
-    let tone = "success";
-    if (remaining > 0) {
-      tone = "info";
-      message = `Face sample ${mergedSamples.length}/${FACE_REGISTRATION_SAMPLE_TARGET} captured. Capture ${remaining} more for better accuracy.`;
-    } else if (
-      (consistency.minSimilarity || 0) < FACE_REGISTRATION_MIN_CONSISTENCY
-    ) {
-      tone = "info";
-      message =
-        "Samples captured, but consistency is low. Re-capture in stable light for better recognition.";
-    } else {
-      message = `Face profile ready with ${mergedSamples.length} samples (${resolvedLength}D).`;
-    }
-
-    setRegisteredFaceSamples(mergedSamples);
-    setRegisteredFaceVector(stableVector);
+    setRegisteredFaceSamples([normalizedVector]);
+    setRegisteredFaceVector(normalizedVector);
     setRegisteredFaceVectorLength(resolvedLength);
     setFaceRegisterError("");
     setFaceRegisterStatus(message);
     clearFieldError("faceScan");
 
     return {
-      tone,
+      tone: "success",
       message,
     };
-  }, [clearFieldError, registeredFaceSamples]);
+  }, [clearFieldError]);
 
   useEffect(() => {
     if (mode === "signup" && selectedRole === "student") {
@@ -475,6 +343,7 @@ export default function AuthPage() {
       : "Student";
   const isLoginMode = mode === "login";
   const isParentRole = selectedRole === "parent";
+  const hasRegisteredFace = registeredFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
   const isDirty = useMemo(() => {
     const hasFieldContent = Object.values(form).some((value) =>
       String(value || "").trim()
@@ -524,10 +393,9 @@ export default function AuthPage() {
           nextErrors.rollNo = "Roll number is required.";
         }
 
-        if (registeredFaceSamples.length < FACE_REGISTRATION_SAMPLE_TARGET) {
-          nextErrors.faceScan = `Capture ${FACE_REGISTRATION_SAMPLE_TARGET} face samples for accurate attendance recognition.`;
-        } else if (registeredFaceVector.length < FACE_MIN_VECTOR_LENGTH) {
-          nextErrors.faceScan = "Face scan is required for student signup.";
+        if (registeredFaceVector.length < FACE_MIN_VECTOR_LENGTH) {
+          nextErrors.faceScan =
+            "Capture one clear front-facing face for student attendance recognition.";
         }
       } else if (selectedRole === "staff" && !form.designation.trim()) {
         nextErrors.designation = "Designation is required.";
@@ -535,7 +403,7 @@ export default function AuthPage() {
     }
 
     return nextErrors;
-  }, [form, isLoginMode, registeredFaceSamples.length, registeredFaceVector.length, selectedRole]);
+  }, [form, isLoginMode, registeredFaceVector.length, selectedRole]);
 
   const renderFieldError = (fieldName) =>
     fieldErrors[fieldName] ? (
@@ -944,7 +812,7 @@ export default function AuthPage() {
                     </label>
                     <div className="rounded-2xl border border-ocean/25 bg-[linear-gradient(145deg,rgb(var(--cream)_/_0.92)_0%,rgb(var(--sand)_/_0.8)_58%,rgb(var(--mist)_/_0.72)_100%)] px-3.5 py-3 text-xs text-ink/76 shadow-[inset_0_1px_0_rgb(var(--cream)_/_0.9),0_12px_22px_-18px_rgb(var(--ocean)_/_0.38)]">
                       <p className="font-medium text-ink/82">
-                        Capture 3 face samples now to build a reliable attendance profile.
+                        Look straight at the camera. Face capture happens automatically when your face is centered and front-facing.
                       </p>
                       <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
                         <button
@@ -955,20 +823,16 @@ export default function AuthPage() {
                           }}
                           className="inline-flex min-h-[34px] items-center rounded-full border border-ocean/65 bg-[linear-gradient(140deg,rgb(var(--ocean))_0%,rgb(var(--aurora))_58%,rgb(var(--cocoa))_100%)] px-4 py-1.5 text-[11px] font-semibold text-white shadow-[0_14px_24px_-16px_rgb(var(--cocoa)_/_0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0 active:scale-[0.985]"
                         >
-                          {registeredFaceSamples.length >= FACE_REGISTRATION_SAMPLE_TARGET
-                            ? "Re-Capture Face"
-                            : "Capture Face"}
+                          {hasRegisteredFace ? "Re-Capture Face" : "Open Face Capture"}
                         </button>
                         <span
                           className={`inline-flex min-h-[34px] items-center rounded-full px-3 py-1.5 text-[11px] font-semibold tracking-[0.01em] shadow-[inset_0_1px_0_rgb(var(--cream)_/_0.9)] ${
-                            registeredFaceSamples.length >= FACE_REGISTRATION_SAMPLE_TARGET
+                            hasRegisteredFace
                               ? "border border-emerald-300/85 bg-[linear-gradient(135deg,rgb(211_248_227)_0%,rgb(187_242_211)_100%)] text-emerald-900"
                               : "border border-amber-300/85 bg-[linear-gradient(135deg,rgb(255_240_204)_0%,rgb(255_228_173)_100%)] text-amber-900"
                           }`}
                         >
-                          {registeredFaceSamples.length >= FACE_REGISTRATION_SAMPLE_TARGET
-                            ? `${registeredFaceSamples.length} Samples Ready`
-                            : `${registeredFaceSamples.length}/${FACE_REGISTRATION_SAMPLE_TARGET} Samples`}
+                          {hasRegisteredFace ? "Face Ready" : "Front Face Required"}
                         </span>
                       </div>
                     </div>
@@ -1098,7 +962,7 @@ export default function AuthPage() {
           open={isFaceRegisterModalOpen}
           mode="register"
           title="Student Face Registration"
-          description="Capture at least 3 face samples now. A stable vector profile will be stored with your student account."
+          description="Look straight at the camera. A single front-facing face profile will be captured automatically for your student account."
           thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
           onClose={() => setIsFaceRegisterModalOpen(false)}
           onDescriptor={handleRegisterFaceDescriptor}

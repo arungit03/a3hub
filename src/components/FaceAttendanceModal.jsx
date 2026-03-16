@@ -1,5 +1,6 @@
 import { Camera, ScanFace, Shield, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { loadFaceApi } from "../lib/faceApiLoader";
 
 const FACE_MODEL_BASE_URI =
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
@@ -12,8 +13,14 @@ const FACE_CAPTURE_MIN_WIDTH_RATIO = 0.16;
 const FACE_CAPTURE_MIN_HEIGHT_RATIO = 0.2;
 const FACE_CAPTURE_MIN_AREA_RATIO = 0.04;
 const FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO = 0.34;
-const MANUAL_CAPTURE_MAX_ATTEMPTS = 4;
-const MANUAL_CAPTURE_RETRY_DELAY_MS = 220;
+const AUTO_REGISTER_CAPTURE_INTERVAL_MS = 720;
+const AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT = 95;
+const AUTO_REGISTER_FRONT_FACE_CAPTURE_SCORE =
+  AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT / 100;
+const FRONT_FACE_MAX_EYE_LEVEL_DELTA_RATIO = 0.12;
+const FRONT_FACE_MAX_NOSE_OFFSET_RATIO = 0.18;
+const FRONT_FACE_MAX_EYE_DISTANCE_DELTA_RATIO = 0.18;
+const FRONT_FACE_MAX_MOUTH_OFFSET_RATIO = 0.2;
 
 let loadedFaceApiPromise = null;
 
@@ -55,7 +62,141 @@ const normalizeDescriptorVector = (descriptor) => {
 
 const toPercentLabel = (value) => `${Math.round(Math.max(0, Number(value) || 0) * 100)}%`;
 
-const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => {
+const clampNumber = (value, min, max) =>
+  Math.min(max, Math.max(min, Number(value) || 0));
+
+const buildPercentValue = (score) => Math.round(clampNumber(score, 0, 1) * 100);
+
+const scorePoseMetric = (ratio, maxRatio) => {
+  const safeRatio = Math.abs(Number(ratio) || 0);
+  const safeMaxRatio = Math.max(Number(maxRatio) || 0, Number.EPSILON);
+  const normalizedRatio = safeRatio / safeMaxRatio;
+
+  // Keep the score informative across a wider range, while reserving 95%+
+  // for very straight, centered faces.
+  return clampNumber(1 - Math.min(normalizedRatio, 2) / 2, 0, 1);
+};
+
+const averagePoint = (points) => {
+  const safePoints = Array.isArray(points)
+    ? points.filter(
+        (point) =>
+          point &&
+          Number.isFinite(Number(point.x)) &&
+          Number.isFinite(Number(point.y))
+      )
+    : [];
+  if (safePoints.length === 0) return null;
+
+  const total = safePoints.reduce(
+    (accumulator, point) => ({
+      x: accumulator.x + Number(point.x),
+      y: accumulator.y + Number(point.y),
+    }),
+    { x: 0, y: 0 }
+  );
+
+  return {
+    x: total.x / safePoints.length,
+    y: total.y / safePoints.length,
+  };
+};
+
+const evaluateFrontFacingPose = (landmarks) => {
+  const leftEyeCenter = averagePoint(landmarks?.getLeftEye?.());
+  const rightEyeCenter = averagePoint(landmarks?.getRightEye?.());
+  const mouthCenter = averagePoint(landmarks?.getMouth?.());
+  const nosePoints = landmarks?.getNose?.();
+  const noseTip =
+    (Array.isArray(nosePoints) && nosePoints[3]) || averagePoint(nosePoints);
+
+  if (!leftEyeCenter || !rightEyeCenter || !mouthCenter || !noseTip) {
+    return {
+      ok: false,
+      reason: "landmarks_missing",
+      frontFacingScore: 0,
+      frontFacingPercent: 0,
+    };
+  }
+
+  const eyeDeltaX = rightEyeCenter.x - leftEyeCenter.x;
+  const eyeDeltaY = rightEyeCenter.y - leftEyeCenter.y;
+  const eyeDistance = Math.max(1, Math.hypot(eyeDeltaX, eyeDeltaY));
+  const eyeMidX = (leftEyeCenter.x + rightEyeCenter.x) / 2;
+  const rollRatio = Math.abs(eyeDeltaY) / eyeDistance;
+  const noseOffsetRatio = Math.abs(noseTip.x - eyeMidX) / eyeDistance;
+  const leftEyeDistance = Math.hypot(
+    noseTip.x - leftEyeCenter.x,
+    noseTip.y - leftEyeCenter.y
+  );
+  const rightEyeDistance = Math.hypot(
+    noseTip.x - rightEyeCenter.x,
+    noseTip.y - rightEyeCenter.y
+  );
+  const averageEyeDistance = Math.max(
+    1,
+    (leftEyeDistance + rightEyeDistance) / 2
+  );
+  const eyeDistanceDeltaRatio =
+    Math.abs(leftEyeDistance - rightEyeDistance) / averageEyeDistance;
+  const mouthOffsetRatio = Math.abs(mouthCenter.x - eyeMidX) / eyeDistance;
+  const rollScore = scorePoseMetric(
+    rollRatio,
+    FRONT_FACE_MAX_EYE_LEVEL_DELTA_RATIO
+  );
+  const noseOffsetScore = scorePoseMetric(
+    noseOffsetRatio,
+    FRONT_FACE_MAX_NOSE_OFFSET_RATIO
+  );
+  const eyeDistanceBalanceScore = scorePoseMetric(
+    eyeDistanceDeltaRatio,
+    FRONT_FACE_MAX_EYE_DISTANCE_DELTA_RATIO
+  );
+  const mouthOffsetScore = scorePoseMetric(
+    mouthOffsetRatio,
+    FRONT_FACE_MAX_MOUTH_OFFSET_RATIO
+  );
+  const frontFacingScore =
+    (rollScore + noseOffsetScore + eyeDistanceBalanceScore + mouthOffsetScore) /
+    4;
+  const frontFacingPercent = buildPercentValue(frontFacingScore);
+  const withinFrontFacingTolerance =
+    rollRatio <= FRONT_FACE_MAX_EYE_LEVEL_DELTA_RATIO &&
+    noseOffsetRatio <= FRONT_FACE_MAX_NOSE_OFFSET_RATIO &&
+    eyeDistanceDeltaRatio <= FRONT_FACE_MAX_EYE_DISTANCE_DELTA_RATIO &&
+    mouthOffsetRatio <= FRONT_FACE_MAX_MOUTH_OFFSET_RATIO;
+
+  if (!withinFrontFacingTolerance) {
+    return {
+      ok: false,
+      reason: "face_not_forward",
+      rollRatio,
+      noseOffsetRatio,
+      eyeDistanceDeltaRatio,
+      mouthOffsetRatio,
+      frontFacingScore,
+      frontFacingPercent,
+    };
+  }
+
+  return {
+    ok: true,
+    rollRatio,
+    noseOffsetRatio,
+    eyeDistanceDeltaRatio,
+    mouthOffsetRatio,
+    frontFacingScore,
+    frontFacingPercent,
+  };
+};
+
+const evaluateFaceFrameQuality = ({
+  detectionScore = 0,
+  box,
+  videoElement,
+  landmarks,
+  requireFrontFacing = false,
+}) => {
   if (!videoElement || !box) {
     return {
       ok: false,
@@ -79,12 +220,14 @@ const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => 
   const centerYRatio = (box.y + box.height / 2) / videoHeight;
   const centerXOffset = Math.abs(centerXRatio - 0.5);
   const centerYOffset = Math.abs(centerYRatio - 0.5);
+  const frontFacing = requireFrontFacing ? evaluateFrontFacingPose(landmarks) : null;
 
   if (Number(detectionScore) < FACE_CAPTURE_MIN_SCORE) {
     return {
       ok: false,
       reason: "low_detection_score",
       detectionScore: Number(detectionScore) || 0,
+      ...(frontFacing || {}),
     };
   }
 
@@ -99,6 +242,7 @@ const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => 
       widthRatio,
       heightRatio,
       areaRatio,
+      ...(frontFacing || {}),
     };
   }
 
@@ -111,6 +255,53 @@ const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => 
       reason: "face_off_center",
       centerXOffset,
       centerYOffset,
+      ...(frontFacing || {}),
+    };
+  }
+
+  if (requireFrontFacing) {
+    if (!frontFacing.ok) {
+      return {
+        ok: false,
+        reason:
+          frontFacing.reason === "landmarks_missing"
+            ? "face_landmarks_missing"
+            : "face_not_forward",
+        widthRatio,
+        heightRatio,
+        areaRatio,
+        centerXOffset,
+        centerYOffset,
+        ...frontFacing,
+      };
+    }
+
+    if (
+      Number(frontFacing.frontFacingScore || 0) <
+      AUTO_REGISTER_FRONT_FACE_CAPTURE_SCORE
+    ) {
+      return {
+        ok: false,
+        reason: "front_face_score_low",
+        detectionScore: Number(detectionScore) || 0,
+        widthRatio,
+        heightRatio,
+        areaRatio,
+        centerXOffset,
+        centerYOffset,
+        ...frontFacing,
+      };
+    }
+
+    return {
+      ok: true,
+      detectionScore: Number(detectionScore) || 0,
+      widthRatio,
+      heightRatio,
+      areaRatio,
+      centerXOffset,
+      centerYOffset,
+      ...frontFacing,
     };
   }
 
@@ -126,6 +317,10 @@ const evaluateFaceFrameQuality = ({ detectionScore = 0, box, videoElement }) => 
 };
 
 const buildLowQualityMessage = (quality = {}) => {
+  const frontFacingPercentLabel = `${Math.round(
+    clampNumber(quality.frontFacingPercent, 0, 100)
+  )}%`;
+
   if (quality.reason === "low_detection_score") {
     return `Face confidence is low (${toPercentLabel(quality.detectionScore)}). Improve light and face the camera.`;
   }
@@ -135,16 +330,20 @@ const buildLowQualityMessage = (quality = {}) => {
   if (quality.reason === "face_off_center") {
     return "Center your face inside the guide for a stable capture.";
   }
+  if (quality.reason === "face_not_forward") {
+    return `Front-facing alignment is ${frontFacingPercentLabel}. Look straight at the camera with your head level until it reaches ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}% for auto capture.`;
+  }
+  if (quality.reason === "front_face_score_low") {
+    return `Front-facing alignment is ${frontFacingPercentLabel}. Auto capture starts once it is above ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`;
+  }
+  if (quality.reason === "face_landmarks_missing") {
+    return `Front-facing alignment is ${frontFacingPercentLabel}. Hold still and keep your full face visible for auto capture.`;
+  }
   if (quality.reason === "camera_not_ready") {
     return "Camera is warming up. Try again.";
   }
   return "Face quality is low. Adjust position and lighting, then retry.";
 };
-
-const wait = (ms) =>
-  new Promise((resolve) => {
-    window.setTimeout(resolve, ms);
-  });
 
 const ensureFaceApiLoaded = async () => {
   if (loadedFaceApiPromise) {
@@ -152,12 +351,7 @@ const ensureFaceApiLoaded = async () => {
   }
 
   loadedFaceApiPromise = (async () => {
-    const importedModule = await import("@vladmandic/face-api");
-    const faceapi = importedModule?.default || importedModule;
-
-    if (!faceapi?.nets) {
-      throw new Error("Face API module could not be initialized.");
-    }
+    const faceapi = await loadFaceApi();
 
     if (faceapi?.tf?.ready) {
       await faceapi.tf.ready();
@@ -182,7 +376,11 @@ const ensureFaceApiLoaded = async () => {
   return loadedFaceApiPromise;
 };
 
-const detectSingleFaceDescriptor = async (faceapi, videoElement) => {
+const detectSingleFaceDescriptor = async (
+  faceapi,
+  videoElement,
+  { requireFrontFacing = false } = {}
+) => {
   if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth <= 0) {
     return { status: "camera_not_ready" };
   }
@@ -213,6 +411,7 @@ const detectSingleFaceDescriptor = async (faceapi, videoElement) => {
   const vector = normalizeDescriptorVector(first?.descriptor);
   const box = first?.detection?.box;
   const detectionScore = Number(first?.detection?.score || 0);
+  const landmarks = first?.landmarks || null;
 
   if (vector.length < MIN_FACE_VECTOR_LENGTH) {
     return { status: "invalid_vector", box };
@@ -222,6 +421,8 @@ const detectSingleFaceDescriptor = async (faceapi, videoElement) => {
     detectionScore,
     box,
     videoElement,
+    landmarks,
+    requireFrontFacing,
   });
   if (!quality.ok) {
     return {
@@ -240,34 +441,6 @@ const detectSingleFaceDescriptor = async (faceapi, videoElement) => {
     quality,
     box,
   };
-};
-
-const detectSingleFaceDescriptorWithRetry = async (
-  faceapi,
-  videoElement,
-  attempts = 1
-) => {
-  const maxAttempts = Math.max(1, Number(attempts) || 1);
-  let lastResult = { status: "no_face" };
-
-  for (let index = 0; index < maxAttempts; index += 1) {
-    const result = await detectSingleFaceDescriptor(faceapi, videoElement);
-
-    if (
-      result.status === "ok" ||
-      result.status === "multiple_faces" ||
-      result.status === "invalid_vector"
-    ) {
-      return result;
-    }
-
-    lastResult = result;
-    if (index < maxAttempts - 1) {
-      await wait(MANUAL_CAPTURE_RETRY_DELAY_MS);
-    }
-  }
-
-  return lastResult;
 };
 
 const registerToneClassMap = {
@@ -292,7 +465,6 @@ export default function FaceAttendanceModal({
   const scanTimerRef = useRef(null);
   const onDescriptorRef = useRef(onDescriptor);
   const inFlightRef = useRef(false);
-  const mountedRef = useRef(false);
 
   const [cameraOn, setCameraOn] = useState(false);
   const [loadingModels, setLoadingModels] = useState(false);
@@ -300,17 +472,13 @@ export default function FaceAttendanceModal({
   const [cameraError, setCameraError] = useState("");
   const [statusText, setStatusText] = useState("");
   const [statusTone, setStatusTone] = useState("info");
-  const [manualBusy, setManualBusy] = useState(false);
+  const [frontFacingPercent, setFrontFacingPercent] = useState(0);
   const [zoomStyle, setZoomStyle] = useState({});
 
   const isRegistrationMode = mode === "register";
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const clampedFrontFacingPercent = clampNumber(frontFacingPercent, 0, 100);
+  const frontFacingReady =
+    clampedFrontFacingPercent >= AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT;
 
   useEffect(() => {
     onDescriptorRef.current = onDescriptor;
@@ -322,13 +490,13 @@ export default function FaceAttendanceModal({
       setCameraError("");
       setStatusText("");
       setModelError("");
-      setManualBusy(false);
+      setFrontFacingPercent(0);
       setZoomStyle({});
       return;
     }
 
     if (!disabled) {
-      setCameraOn(!isRegistrationMode);
+      setCameraOn(true);
     }
   }, [disabled, isRegistrationMode, open]);
 
@@ -349,7 +517,7 @@ export default function FaceAttendanceModal({
   }, []);
 
   const handleDescriptorCapture = useCallback(
-    async ({ isManual = false } = {}) => {
+    async () => {
       const faceapi = faceApiRef.current;
       const videoElement = videoRef.current;
       if (!faceapi || !videoElement || inFlightRef.current) {
@@ -357,16 +525,21 @@ export default function FaceAttendanceModal({
       }
 
       inFlightRef.current = true;
-      if (isManual) {
-        setManualBusy(true);
-      }
 
       try {
-        const detected = await detectSingleFaceDescriptorWithRetry(
-          faceapi,
-          videoElement,
-          isManual ? MANUAL_CAPTURE_MAX_ATTEMPTS : 1
+        const detected = await detectSingleFaceDescriptor(faceapi, videoElement, {
+          requireFrontFacing: isRegistrationMode,
+        });
+        const detectedFrontFacingPercent = clampNumber(
+          detected?.quality?.frontFacingPercent,
+          0,
+          100
         );
+
+        if (isRegistrationMode) {
+          setFrontFacingPercent(detectedFrontFacingPercent);
+        }
+
         if (detected.box) {
           const videoW = videoElement.videoWidth;
           const videoH = videoElement.videoHeight;
@@ -386,18 +559,18 @@ export default function FaceAttendanceModal({
         }
 
         if (detected.status === "camera_not_ready") {
-          if (isManual) {
+          if (isRegistrationMode) {
             setStatusTone("info");
-            setStatusText("Camera is warming up. Try again.");
+            setStatusText("Camera is warming up for auto capture.");
           }
           return;
         }
 
         if (detected.status === "no_face") {
-          if (isManual) {
-            setStatusTone("error");
+          if (isRegistrationMode) {
+            setStatusTone("info");
             setStatusText(
-              "No face detected. Move closer, keep good light, and keep face inside frame."
+              `Keep one front-facing face inside the guide. Auto capture starts above ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
             );
           }
           return;
@@ -416,7 +589,7 @@ export default function FaceAttendanceModal({
         }
 
         if (detected.status === "low_quality") {
-          if (isManual || isRegistrationMode) {
+          if (isRegistrationMode) {
             setStatusTone("info");
             setStatusText(buildLowQualityMessage(detected.quality));
           }
@@ -439,16 +612,19 @@ export default function FaceAttendanceModal({
             : "info");
         } else if (isRegistrationMode) {
           setStatusTone("success");
-          setStatusText("Face captured. Vector is ready to save.");
+          setStatusText(
+            `Face captured. Front-facing alignment reached ${detectedFrontFacingPercent}%.`
+          );
+        }
+
+        if (isRegistrationMode && callbackResult?.tone === "success") {
+          setCameraOn(false);
         }
       } catch {
         setStatusTone("error");
         setStatusText("Face detection failed. Please try again.");
       } finally {
         inFlightRef.current = false;
-        if (isManual && mountedRef.current) {
-          setManualBusy(false);
-        }
       }
     },
     [isRegistrationMode]
@@ -521,17 +697,22 @@ export default function FaceAttendanceModal({
         try {
           await videoElement.play();
         } catch {
-          setCameraError("Tap camera on to start face attendance.");
+          setCameraError("Unable to start camera automatically. Tap Start Camera.");
           setCameraOn(false);
           cleanupStream();
           return;
         }
 
-        if (!isRegistrationMode) {
-          scanTimerRef.current = window.setInterval(() => {
-            void handleDescriptorCapture();
-          }, AUTO_SCAN_INTERVAL_MS);
+        if (isRegistrationMode) {
+          setStatusTone("info");
+          setStatusText(
+            `Auto capture is active. Look straight at the camera until front-facing alignment reaches ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
+          );
         }
+
+        scanTimerRef.current = window.setInterval(() => {
+          void handleDescriptorCapture();
+        }, isRegistrationMode ? AUTO_REGISTER_CAPTURE_INTERVAL_MS : AUTO_SCAN_INTERVAL_MS);
       } catch (error) {
         setCameraError(buildCameraErrorMessage(error));
         setCameraOn(false);
@@ -640,7 +821,7 @@ export default function FaceAttendanceModal({
                 <div className="flex items-start gap-2.5">
                   <ScanFace className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
                   <p className="leading-snug">
-                    Position your face within the oval guide, then capture 3 samples with slight angle changes for better accuracy.
+                    Keep one front-facing face inside the oval guide. Auto capture happens when your front-facing alignment goes above {AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.
                   </p>
                 </div>
               </div>
@@ -656,17 +837,54 @@ export default function FaceAttendanceModal({
                   {loadingModels ? "Loading..." : cameraOn ? "Camera Active" : "Start Camera"}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    void handleDescriptorCapture({ isManual: true });
-                  }}
-                  disabled={disabled || !cameraOn || loadingModels || manualBusy}
-                  className="inline-flex items-center justify-center gap-2 rounded-[10px] border border-[#273853] bg-[#071120] px-3 py-2 text-sm font-semibold text-[#b8c8df] shadow-[inset_0_1px_0_rgba(148,197,255,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300/35 hover:text-white active:translate-y-0 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ScanFace className="h-4 w-4" />
-                  {manualBusy ? "Capturing..." : "Capture Face"}
-                </button>
+                <div className="rounded-[10px] border border-[#273853] bg-[#071120] px-3 py-2 text-[#b8c8df] shadow-[inset_0_1px_0_rgba(148,197,255,0.08)]">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="inline-flex items-center gap-2 text-sm font-semibold text-[#d6e8ff]">
+                      <ScanFace
+                        className={`h-4 w-4 ${
+                          frontFacingReady ? "text-emerald-300" : "text-sky-300"
+                        }`}
+                      />
+                      <span>
+                        Front Facing {cameraOn ? `${clampedFrontFacingPercent}%` : "--"}
+                      </span>
+                    </div>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                        frontFacingReady
+                          ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200"
+                          : "border-[#314661] bg-[#0c1525] text-[#9bb2d0]"
+                      }`}
+                    >
+                      {cameraOn
+                        ? frontFacingReady
+                          ? "Ready"
+                          : `${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}% needed`
+                        : "Standby"}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-[#081223]">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        frontFacingReady
+                          ? "bg-[linear-gradient(90deg,#34d399_0%,#10b981_100%)]"
+                          : "bg-[linear-gradient(90deg,#38bdf8_0%,#0ea5e9_100%)]"
+                      }`}
+                      style={{
+                        width: `${
+                          cameraOn && clampedFrontFacingPercent > 0
+                            ? Math.max(clampedFrontFacingPercent, 6)
+                            : 0
+                        }%`,
+                      }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-[#8fa8c8]">
+                    {cameraOn
+                      ? `Auto capture starts at ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%+ front alignment.`
+                      : "Start the camera to measure front alignment."}
+                  </p>
+                </div>
               </div>
 
               <div className="grid gap-2">

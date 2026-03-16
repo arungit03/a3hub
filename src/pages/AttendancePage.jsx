@@ -56,9 +56,6 @@ const FACE_MATCH_CONFIRMATION_COUNT = 2;
 const FACE_MATCH_CONFIRMATION_WINDOW_MS = 2600;
 const FACE_MATCH_COOLDOWN_MS = 4200;
 const FACE_MIN_VECTOR_LENGTH = 64;
-const FACE_REGISTRATION_SAMPLE_TARGET = 3;
-const FACE_REGISTRATION_SAMPLE_LIMIT = 6;
-const FACE_REGISTRATION_MIN_CONSISTENCY = 0.82;
 const OFFLINE_SCAN_QUEUE_KEY = "a3hub_attendance_scan_queue_v1";
 const MAX_OFFLINE_SCAN_QUEUE_ITEMS = 240;
 const SCAN_QUEUE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -345,6 +342,19 @@ const averageFaceVector = (vectors) => {
   return normalizeFaceVector(averaged);
 };
 
+const serializeFaceSampleVectors = (vectors) =>
+  (Array.isArray(vectors) ? vectors : [])
+    .map((vector, index) => {
+      const normalizedVector = normalizeFaceVector(vector);
+      if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) return null;
+
+      return {
+        id: `sample_${index + 1}`,
+        vector: normalizedVector,
+      };
+    })
+    .filter(Boolean);
+
 const collectFaceSampleVectors = (student) => {
   const faceAttendance = student?.faceAttendance;
   const rawSampleCandidates = [
@@ -412,53 +422,6 @@ const getStudentFaceTemplates = (student) => {
 const getStudentFaceVector = (student) => {
   const templates = getStudentFaceTemplates(student);
   return templates[0] || [];
-};
-
-const computeFaceSampleConsistency = (vectors) => {
-  const safeVectors = dedupeFaceVectors(
-    (Array.isArray(vectors) ? vectors : [])
-      .map((vector) => normalizeFaceVector(vector))
-      .filter((vector) => vector.length >= FACE_MIN_VECTOR_LENGTH)
-  );
-
-  if (safeVectors.length <= 1) {
-    return {
-      sampleCount: safeVectors.length,
-      averageSimilarity: 1,
-      minSimilarity: 1,
-      centroidVector: safeVectors[0] || [],
-    };
-  }
-
-  const centroidVector = averageFaceVector(safeVectors);
-  if (centroidVector.length < FACE_MIN_VECTOR_LENGTH) {
-    return {
-      sampleCount: safeVectors.length,
-      averageSimilarity: 0,
-      minSimilarity: 0,
-      centroidVector: [],
-    };
-  }
-
-  const similarities = safeVectors
-    .map((vector) => cosineSimilarity(vector, centroidVector))
-    .filter((value) => Number.isFinite(value));
-  if (similarities.length === 0) {
-    return {
-      sampleCount: safeVectors.length,
-      averageSimilarity: 0,
-      minSimilarity: 0,
-      centroidVector,
-    };
-  }
-
-  const sum = similarities.reduce((total, value) => total + value, 0);
-  return {
-    sampleCount: safeVectors.length,
-    averageSimilarity: sum / similarities.length,
-    minSimilarity: Math.min(...similarities),
-    centroidVector,
-  };
 };
 
 const toSimilarityPercentLabel = (value) => {
@@ -1684,78 +1647,43 @@ export default function AttendancePage({ forcedStaff }) {
         };
       }
 
-      const existingSamples = Array.isArray(registrationSamplesRef.current)
-        ? registrationSamplesRef.current
-        : [];
-      const mergedSamples = dedupeFaceVectors([
-        ...existingSamples,
-        normalizedVector,
-      ]).slice(-FACE_REGISTRATION_SAMPLE_LIMIT);
-      const consistency = computeFaceSampleConsistency(mergedSamples);
-      const stableVector =
-        consistency.centroidVector.length >= FACE_MIN_VECTOR_LENGTH
-          ? consistency.centroidVector
-          : normalizedVector;
-      const sampleCount = Math.max(1, mergedSamples.length);
-
       setFaceProfileStatus("");
       setFaceProfileError("");
 
       try {
+        const serializedFaceSamples = serializeFaceSampleVectors([normalizedVector]);
         await setDoc(
           doc(db, "users", user.uid),
           {
             faceAttendance: {
-              vector: stableVector,
+              vector: normalizedVector,
               vectorLength: Number.isFinite(vectorLength)
                 ? Number(vectorLength)
-                : stableVector.length,
-              sampleVectors: mergedSamples,
-              sampleCount,
+                : normalizedVector.length,
+              sampleVectors: serializedFaceSamples,
+              sampleCount: serializedFaceSamples.length,
               algorithm: "face-api-128d",
               matchThreshold: FACE_MATCH_THRESHOLD,
               detectionScore: Number.isFinite(detectionScore)
                 ? Number(detectionScore.toFixed(4))
                 : null,
-              sampleConsistency: Number(
-                (consistency.averageSimilarity || 0).toFixed(4)
-              ),
-              sampleMinSimilarity: Number(
-                (consistency.minSimilarity || 0).toFixed(4)
-              ),
+              sampleConsistency: 1,
+              sampleMinSimilarity: 1,
               updatedAt: serverTimestamp(),
             },
           },
           { merge: true }
         );
 
-        registrationSamplesRef.current = mergedSamples;
-
-        const remainingSamples = Math.max(
-          0,
-          FACE_REGISTRATION_SAMPLE_TARGET - sampleCount
-        );
-        let successMessage = "";
-        let successTone = "success";
-
-        if (remainingSamples > 0) {
-          successTone = "info";
-          successMessage = `Face sample ${sampleCount}/${FACE_REGISTRATION_SAMPLE_TARGET} saved. Capture ${remainingSamples} more sample${remainingSamples > 1 ? "s" : ""} for better accuracy.`;
-        } else if (
-          (consistency.minSimilarity || 0) < FACE_REGISTRATION_MIN_CONSISTENCY
-        ) {
-          successTone = "info";
-          successMessage =
-            "Face profile updated, but sample consistency is low. Re-capture in stable light to improve accuracy.";
-        } else {
-          successMessage = `Face profile saved with ${sampleCount} samples for reliable attendance match.`;
-        }
+        registrationSamplesRef.current = [normalizedVector];
+        const successMessage =
+          "Face profile saved. Front-facing auto capture completed.";
 
         setFaceProfileStatus(successMessage);
         setFaceProfileError("");
 
         return {
-          tone: successTone,
+          tone: "success",
           message: successMessage,
         };
       } catch (error) {
@@ -2775,7 +2703,7 @@ export default function AttendancePage({ forcedStaff }) {
             open={isFaceRegisterModalOpen}
             mode="register"
             title="Register Student Face"
-            description="Capture at least 3 samples. A stable 128-dimensional profile is saved for better accuracy."
+            description="Look straight at the camera. A single front-facing face profile will be captured automatically."
             thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
             onClose={() => setIsFaceRegisterModalOpen(false)}
             onDescriptor={handleStudentFaceRegistration}

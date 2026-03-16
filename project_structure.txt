@@ -1,3 +1,4 @@
+.env.example
 .gitattributes
 .gitignore
 docs/backend.json
@@ -12,6 +13,7 @@ firestore.rules
 index.html
 netlify.toml
 netlify/functions/_utils/capacity-guard.cjs
+netlify/functions/_utils/load-env.cjs
 netlify/functions/_utils/provider-chain.cjs
 netlify/functions/_utils/request-guard.cjs
 netlify/functions/ai-generate.cjs
@@ -36,6 +38,7 @@ public/vendor/skulpt/skulpt-stdlib.js
 public/vendor/skulpt/skulpt.min.js
 public/whatsapp-config.js
 README.md
+scripts/generate-firebase-sw-config.mjs
 scripts/loadtest/k6-1500-smoke.js
 scripts/project-structure.mjs
 src/admin/components/AdminLayout.jsx

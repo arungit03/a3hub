@@ -9,7 +9,6 @@ import {
   Redo2,
   RotateCcw,
   Save,
-  Square,
   Trash2,
   Undo2,
   Upload,
@@ -25,17 +24,20 @@ const MAX_ZOOM = 2.2;
 const DRAG_MIME = "application/x-a3cad";
 const OUT = "out-0";
 const IN_PREFIX = "in-";
+const INITIAL_VIEWPORT = Object.freeze({ x: 170, y: 100, zoom: 1 });
+const NODE_W = 148;
+const NODE_H = 96;
 
 const TYPES = {
-  switch: { label: "Input Switch", short: "SW", ins: 0, outs: 1, w: 132, h: 84, cls: "from-amber-500 to-orange-600", logic: "Q = toggle", desc: "Binary source" },
-  led: { label: "Output LED", short: "LED", ins: 1, outs: 0, w: 132, h: 84, cls: "from-emerald-500 to-green-700", logic: "LED = A", desc: "Visual output" },
-  and: { label: "AND Gate", short: "AND", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = A && B", desc: "True only when both inputs are true" },
-  or: { label: "OR Gate", short: "OR", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = A || B", desc: "True when any input is true" },
-  not: { label: "NOT Gate", short: "NOT", ins: 1, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = !A", desc: "Inverter" },
-  nand: { label: "NAND Gate", short: "NAND", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = !(A && B)", desc: "AND then invert" },
-  nor: { label: "NOR Gate", short: "NOR", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = !(A || B)", desc: "OR then invert" },
-  xor: { label: "XOR Gate", short: "XOR", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = (A !== B)", desc: "True when inputs differ" },
-  xnor: { label: "XNOR Gate", short: "XNOR", ins: 2, outs: 1, w: 132, h: 84, cls: "from-slate-700 to-slate-900", logic: "Q = (A === B)", desc: "True when inputs match" },
+  switch: { label: "Input Switch", short: "SW", ins: 0, outs: 1, w: NODE_W, h: NODE_H, cls: "from-amber-500 to-orange-600", logic: "Q = 0 / 1", desc: "Binary source" },
+  led: { label: "Output LED", short: "LED", ins: 1, outs: 0, w: NODE_W, h: NODE_H, cls: "from-emerald-500 to-green-700", logic: "LED = A", desc: "Visual output" },
+  and: { label: "AND Gate", short: "AND", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = A & B", desc: "True only when both inputs are true" },
+  or: { label: "OR Gate", short: "OR", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = A | B", desc: "True when any input is true" },
+  not: { label: "NOT Gate", short: "NOT", ins: 1, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = !A", desc: "Inverter" },
+  nand: { label: "NAND Gate", short: "NAND", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = !(A & B)", desc: "AND then invert" },
+  nor: { label: "NOR Gate", short: "NOR", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = !(A | B)", desc: "OR then invert" },
+  xor: { label: "XOR Gate", short: "XOR", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = A ^ B", desc: "True when inputs differ" },
+  xnor: { label: "XNOR Gate", short: "XNOR", ins: 2, outs: 1, w: NODE_W, h: NODE_H, cls: "from-slate-700 to-slate-900", logic: "Q = !(A ^ B)", desc: "True when inputs match" },
 };
 
 const LIB_ORDER = ["switch", "led", "and", "or", "not", "nand", "nor", "xor", "xnor"];
@@ -109,6 +111,12 @@ const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 const snap = (v) => Math.round(v / GRID) * GRID;
 const sid = (v, fallback = "") => String(v ?? "").trim() || fallback;
 const inPin = (i) => `${IN_PREFIX}${i}`;
+const touchDistance = (touchA, touchB) =>
+  Math.hypot(touchB.clientX - touchA.clientX, touchB.clientY - touchA.clientY);
+const touchMidpoint = (touchA, touchB) => ({
+  x: (touchA.clientX + touchB.clientX) / 2,
+  y: (touchA.clientY + touchB.clientY) / 2,
+});
 const pinIndex = (pin, prefix) => {
   if (typeof pin !== "string" || !pin.startsWith(prefix)) return -1;
   const n = Number(pin.slice(prefix.length));
@@ -455,18 +463,23 @@ export default function A3cadPage() {
   const [components, setComponents] = useState(() => cloneComponents());
   const [wires, setWires] = useState(() => cloneWires());
   const [selection, setSelection] = useState(null);
-  const [viewport, setViewport] = useState({ x: 170, y: 100, zoom: 1 });
+  const [viewport, setViewport] = useState(() => ({ ...INITIAL_VIEWPORT }));
   const [draftWire, setDraftWire] = useState(null);
-  const [running, setRunning] = useState(true);
   const [status, setStatus] = useState("Starter AND circuit loaded.");
-  const [frozen, setFrozen] = useState(() => evaluate(START_COMPONENTS, START_WIRES));
   const [gateGuideOpen, setGateGuideOpen] = useState(false);
+  const [propertiesModalOpen, setPropertiesModalOpen] = useState(false);
 
   const workspaceRef = useRef(null);
   const fileInputRef = useRef(null);
   const componentIdRef = useRef(nextCounter(START_COMPONENTS, "cmp"));
   const wireIdRef = useRef(nextCounter(START_WIRES, "wire"));
   const interactionRef = useRef({ pan: null, move: null, wire: null });
+  const touchGestureRef = useRef({
+    mode: null,
+    startDistance: 0,
+    startViewport: null,
+    anchorWorld: null,
+  });
   const historyRef = useRef({ past: [], future: [] });
   const [, setHistoryTick] = useState(0);
 
@@ -486,12 +499,7 @@ export default function A3cadPage() {
 
   const componentMap = useMemo(() => new Map(components.map((c) => [c.id, c])), [components]);
   const live = useMemo(() => evaluate(components, wires), [components, wires]);
-
-  useEffect(() => {
-    if (running) setFrozen(live);
-  }, [running, live]);
-
-  const sim = running ? live : frozen;
+  const sim = live;
   const canUndo = historyRef.current.past.length > 0;
   const canRedo = historyRef.current.future.length > 0;
 
@@ -692,16 +700,6 @@ export default function A3cadPage() {
     zoomAt(viewportRef.current.zoom * factor, rect.width / 2, rect.height / 2);
   }, [zoomAt]);
 
-  const handleWheel = useCallback((event) => {
-    event.preventDefault();
-    const rect = workspaceRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const x = event.clientX - rect.left;
-    const y = event.clientY - rect.top;
-    const factor = event.deltaY < 0 ? 1.1 : 0.9;
-    zoomAt(viewportRef.current.zoom * factor, x, y);
-  }, [zoomAt]);
-
   const handleWorkspaceMouseDown = useCallback((event) => {
     if (event.button !== 0) return;
     const target = event.target;
@@ -714,6 +712,112 @@ export default function A3cadPage() {
       oy: viewportRef.current.y,
     };
     setSelection(null);
+  }, []);
+
+  const handleWorkspaceTouchStart = useCallback((event) => {
+    const rect = workspaceRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    if (event.touches.length >= 2) {
+      const [touchA, touchB] = event.touches;
+      const startViewport = viewportRef.current;
+      const midpoint = touchMidpoint(touchA, touchB);
+      touchGestureRef.current = {
+        mode: "pinch",
+        startDistance: touchDistance(touchA, touchB),
+        startViewport,
+        anchorWorld: {
+          x: (midpoint.x - rect.left - startViewport.x) / startViewport.zoom,
+          y: (midpoint.y - rect.top - startViewport.y) / startViewport.zoom,
+        },
+      };
+      interactionRef.current.pan = null;
+      event.preventDefault();
+      return;
+    }
+
+    if (event.touches.length !== 1) return;
+
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) return;
+    if (
+      target.closest("[data-component-root]") ||
+      target.closest("[data-wire-root]") ||
+      target.closest("[data-pin-kind]")
+    ) {
+      return;
+    }
+
+    const touch = event.touches[0];
+    interactionRef.current.pan = {
+      sx: touch.clientX,
+      sy: touch.clientY,
+      ox: viewportRef.current.x,
+      oy: viewportRef.current.y,
+    };
+    setSelection(null);
+  }, []);
+
+  const handleWorkspaceTouchMove = useCallback((event) => {
+    const rect = workspaceRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    if (
+      touchGestureRef.current.mode === "pinch" &&
+      event.touches.length >= 2 &&
+      touchGestureRef.current.startViewport &&
+      touchGestureRef.current.anchorWorld
+    ) {
+      const [touchA, touchB] = event.touches;
+      const midpoint = touchMidpoint(touchA, touchB);
+      const nextDistance = touchDistance(touchA, touchB);
+      const scale =
+        nextDistance / Math.max(1, touchGestureRef.current.startDistance);
+      const nextZoom = clamp(
+        touchGestureRef.current.startViewport.zoom * scale,
+        MIN_ZOOM,
+        MAX_ZOOM
+      );
+
+      setViewport({
+        x: midpoint.x - rect.left - touchGestureRef.current.anchorWorld.x * nextZoom,
+        y: midpoint.y - rect.top - touchGestureRef.current.anchorWorld.y * nextZoom,
+        zoom: Number(nextZoom.toFixed(3)),
+      });
+      event.preventDefault();
+      return;
+    }
+
+    const pan = interactionRef.current.pan;
+    if (pan && event.touches.length === 1) {
+      const touch = event.touches[0];
+      setViewport((prev) => ({
+        ...prev,
+        x: pan.ox + (touch.clientX - pan.sx),
+        y: pan.oy + (touch.clientY - pan.sy),
+      }));
+      event.preventDefault();
+    }
+  }, []);
+
+  const handleWorkspaceTouchEnd = useCallback((event) => {
+    if (event.touches.length < 2) {
+      touchGestureRef.current = {
+        mode: null,
+        startDistance: 0,
+        startViewport: null,
+        anchorWorld: null,
+      };
+    }
+
+    if (event.touches.length === 0) {
+      interactionRef.current.pan = null;
+      return;
+    }
+
+    if (event.touches.length === 1) {
+      interactionRef.current.pan = null;
+    }
   }, []);
 
   const handleComponentMouseDown = useCallback((event, componentId) => {
@@ -759,20 +863,18 @@ export default function A3cadPage() {
     addComponent(type, getWorldPoint(event.clientX, event.clientY));
   }, [addComponent, getWorldPoint]);
 
-  const resetSwitches = useCallback(() => {
-    pushHistory();
-    setComponents((prev) => prev.map((c) => c.type === "switch" ? { ...c, state: { ...c.state, value: 0 } } : c));
-    setRunning(true);
-    setStatus("All switches reset to 0.");
-  }, [pushHistory]);
-
-  const clearWorkspace = useCallback(() => {
-    if (!componentsRef.current.length && !wiresRef.current.length) return;
-    pushHistory();
+  const resetWorkspace = useCallback(() => {
+    if (componentsRef.current.length || wiresRef.current.length) {
+      pushHistory();
+    }
     setComponents([]);
     setWires([]);
     setSelection(null);
-    setStatus("Workspace cleared.");
+    setDraftWire(null);
+    setViewport({ ...INITIAL_VIEWPORT });
+    componentIdRef.current = 1;
+    wireIdRef.current = 1;
+    setStatus("New blank workspace ready.");
   }, [pushHistory]);
 
   const loadExample = useCallback(() => {
@@ -782,7 +884,6 @@ export default function A3cadPage() {
     setComponents(cs);
     setWires(ws);
     setSelection(null);
-    setRunning(true);
     setStatus("Starter AND circuit loaded.");
     componentIdRef.current = nextCounter(cs, "cmp");
     wireIdRef.current = nextCounter(ws, "wire");
@@ -822,7 +923,6 @@ export default function A3cadPage() {
       setComponents(clean.components);
       setWires(clean.wires);
       setSelection(null);
-      setRunning(true);
       componentIdRef.current = nextCounter(clean.components, "cmp");
       wireIdRef.current = nextCounter(clean.wires, "wire");
       setStatus(clean.dropped ? `Loaded with ${clean.dropped} invalid wire(s) skipped.` : "Circuit loaded.");
@@ -832,6 +932,34 @@ export default function A3cadPage() {
       event.target.value = "";
     }
   }, [pushHistory]);
+
+  useEffect(() => {
+    const element = workspaceRef.current;
+    if (!element) return undefined;
+
+    const onWheel = (event) => {
+      const rect = element.getBoundingClientRect();
+      if (!rect) return;
+
+      event.preventDefault();
+
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const primaryDelta =
+        Math.abs(event.deltaY) >= Math.abs(event.deltaX)
+          ? event.deltaY
+          : event.deltaX;
+      if (!Number.isFinite(primaryDelta) || primaryDelta === 0) return;
+
+      const factor = Math.exp(-primaryDelta * 0.0035);
+      zoomAt(viewportRef.current.zoom * factor, x, y);
+    };
+
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => {
+      element.removeEventListener("wheel", onWheel);
+    };
+  }, [zoomAt]);
 
   useEffect(() => {
     const onMove = (event) => {
@@ -916,6 +1044,10 @@ export default function A3cadPage() {
           setGateGuideOpen(false);
           return;
         }
+        if (propertiesModalOpen) {
+          setPropertiesModalOpen(false);
+          return;
+        }
         interactionRef.current.wire = null;
         setDraftWire(null);
         setSelection(null);
@@ -923,7 +1055,7 @@ export default function A3cadPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [deleteSelection, duplicateSelection, gateGuideOpen, redo, selection, undo]);
+  }, [deleteSelection, duplicateSelection, gateGuideOpen, propertiesModalOpen, redo, selection, undo]);
 
   const renderedWires = useMemo(() => wires.map((wire) => {
     const from = componentMap.get(wire.from.componentId);
@@ -969,6 +1101,69 @@ export default function A3cadPage() {
   const selectedInputs = selectedComponent ? sim.insMap.get(selectedComponent.id) || [] : [];
   const selectedOutput = selectedComponent ? bit(sim.outMap.get(selectedComponent.id)) : 0;
   const selectedWireSignal = selectedWire ? bit(sim.wireMap.get(selectedWire.id)) : 0;
+  const hasSelection = Boolean(selectedComponent || selectedWire);
+  const propertiesModalContent = (
+    <>
+      {selectedComponent && selectedDef ? (
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Component</p>
+            <h4 className="mt-1 text-base font-semibold text-slate-900">{selectedDef.label}</h4>
+          </div>
+          <dl className="space-y-1.5 text-xs">
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">ID</dt><dd className="font-mono text-slate-800">{selectedComponent.id}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Type</dt><dd>{selectedComponent.type.toUpperCase()}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Position</dt><dd>({selectedComponent.x}, {selectedComponent.y})</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Pins</dt><dd>{selectedDef.ins} in / {selectedDef.outs} out</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Inputs</dt><dd>{selectedInputs.map((v) => bit(v)).join(", ") || "-"}</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Output</dt><dd className="font-semibold">{selectedOutput}</dd></div>
+          </dl>
+          <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">{selectedDef.desc}</p>
+          {selectedComponent.type === "switch" ? (
+            <button type="button" onClick={() => toggleSwitch(selectedComponent.id)} className={panelButtonClass("neutral")}>
+              <Power size={13} />
+              Toggle Switch ({bit(selectedComponent.state?.value)})
+            </button>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={duplicateSelection} className={panelButtonClass("neutral")}>
+              <Copy size={13} />
+              Duplicate
+            </button>
+            <button type="button" onClick={deleteSelection} className={panelButtonClass("danger")}>
+              <Trash2 size={13} />
+              Delete
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {selectedWire ? (
+        <div className={`${selectedComponent ? "mt-3 " : ""}space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700`}>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Wire</p>
+            <h4 className="mt-1 text-base font-semibold text-slate-900">{selectedWire.id}</h4>
+          </div>
+          <dl className="space-y-1.5 text-xs">
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">From</dt><dd className="font-mono text-right">{selectedWire.from.componentId} ({pinLabel(selectedWire.from.pinId)})</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">To</dt><dd className="font-mono text-right">{selectedWire.to.componentId} ({pinLabel(selectedWire.to.pinId)})</dd></div>
+            <div className="flex justify-between gap-3"><dt className="text-slate-500">Signal</dt><dd className={`font-semibold ${selectedWireSignal ? "text-emerald-600" : "text-slate-600"}`}>{selectedWireSignal}</dd></div>
+          </dl>
+          <button type="button" onClick={deleteSelection} className={panelButtonClass("danger")}>
+            <Trash2 size={13} />
+            Delete Wire
+          </button>
+        </div>
+      ) : null}
+
+      {!selectedComponent && !selectedWire ? (
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-600">
+          <p className="font-semibold text-slate-700">No selection</p>
+          <p className="mt-1">Select a component or wire to inspect details. Output pins support fan-out, each input pin accepts one wire.</p>
+        </div>
+      ) : null}
+    </>
+  );
 
   return (
     <section className="mx-auto w-full max-w-[1800px] space-y-4">
@@ -983,9 +1178,6 @@ export default function A3cadPage() {
             <p className="mt-1 text-sm text-slate-600 sm:text-base">Drag gates, wire pins, toggle switches, and observe real-time outputs.</p>
           </div>
           <div className="flex flex-col gap-2 text-xs sm:items-end">
-            <span className={`inline-flex rounded-full border px-3 py-1 font-semibold uppercase tracking-[0.14em] ${running ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-              {running ? "Running" : "Stopped"}
-            </span>
             <p className="max-w-[34rem] text-slate-600 sm:text-right">{status}</p>
           </div>
         </div>
@@ -1053,38 +1245,9 @@ export default function A3cadPage() {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-3 py-2.5">
-            <button
-              type="button"
-              onClick={() => {
-                setRunning(true);
-                setStatus("Simulation running.");
-              }}
-              className={toolbarButtonClass("run")}
-              title="Start real-time simulation"
-            >
-              <Play size={14} />
-              Run
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFrozen(live);
-                setRunning(false);
-                setStatus("Simulation frozen.");
-              }}
-              className={toolbarButtonClass("stop")}
-              title="Freeze outputs"
-            >
-              <Square size={14} />
-              Stop
-            </button>
-            <button type="button" onClick={resetSwitches} className={toolbarButtonClass("neutral")}>
+            <button type="button" onClick={resetWorkspace} className={toolbarButtonClass("neutral")}>
               <RotateCcw size={14} />
-              Reset
-            </button>
-            <button type="button" onClick={clearWorkspace} className={toolbarButtonClass("danger")}>
-              <Trash2 size={14} />
-              Clear
+              New
             </button>
             <button type="button" onClick={saveJson} className={toolbarButtonClass("neutral")}>
               <Save size={14} />
@@ -1110,6 +1273,9 @@ export default function A3cadPage() {
               <ZoomIn size={14} />
               Fit View
             </button>
+            <button type="button" onClick={() => setPropertiesModalOpen(true)} className={toolbarButtonClass(hasSelection ? "accent" : "neutral")}>
+              Properties
+            </button>
             <span className="mx-1 hidden h-5 w-px bg-slate-200 sm:inline-flex" />
             <button type="button" onClick={duplicateSelection} disabled={!selectedComponent} className={toolbarButtonClass("neutral")}>
               <Copy size={14} />
@@ -1130,7 +1296,18 @@ export default function A3cadPage() {
           </div>
 
           <div className="relative min-h-0 flex-1">
-            <div ref={workspaceRef} className="relative h-full w-full overflow-hidden bg-slate-100 select-none" onMouseDown={handleWorkspaceMouseDown} onWheel={handleWheel} onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
+            <div
+              ref={workspaceRef}
+              className="relative h-full w-full overflow-hidden bg-slate-100 select-none"
+              style={{ touchAction: "none" }}
+              onMouseDown={handleWorkspaceMouseDown}
+              onTouchStart={handleWorkspaceTouchStart}
+              onTouchMove={handleWorkspaceTouchMove}
+              onTouchEnd={handleWorkspaceTouchEnd}
+              onTouchCancel={handleWorkspaceTouchEnd}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={handleDrop}
+            >
               <div className="absolute inset-0" style={gridStyle} aria-hidden="true" />
               <svg className="absolute inset-0 h-full w-full" aria-hidden="true">
                 <g transform={`translate(${viewport.x} ${viewport.y}) scale(${viewport.zoom})`}>
@@ -1172,30 +1349,39 @@ export default function A3cadPage() {
                       onMouseDown={(event) => handleComponentMouseDown(event, component.id)}
                       onClick={(event) => { event.stopPropagation(); setSelection({ kind: "component", id: component.id }); }}
                     >
-                      <div className={`relative flex h-full flex-col rounded-2xl border border-white/20 bg-gradient-to-br ${d.cls} p-2 text-white shadow-lg`}>
-                        <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.12em] text-white/90">
-                          <span className="inline-flex items-center gap-1.5">
+                      <div className={`relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${d.cls} px-2 py-1.5 text-white shadow-lg`}>
+                        <div className="flex min-w-0 items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.1em] text-white/90">
+                          <span className="inline-flex min-w-0 items-center gap-1.5">
                             <ComponentGlyph type={component.type} compact />
-                            <span>{d.short}</span>
+                            <span className="truncate">{d.short}</span>
                           </span>
-                          <span>Q: {outputValue}</span>
                         </div>
-                        <p className="mt-1 text-xs font-semibold text-white">{d.label}</p>
-                        <div className="mt-2 flex flex-1 items-center justify-center">
+                        <p className="mt-1 truncate text-[11px] font-semibold leading-tight text-white">
+                          {d.label}
+                        </p>
+                        <div className="mt-1 flex min-h-0 flex-1 items-center justify-center overflow-hidden">
                           {component.type === "switch" ? (
-                            <button type="button" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleSwitch(component.id); }} className={`inline-flex min-w-[3rem] items-center justify-center rounded-lg border px-3 py-1.5 text-lg font-bold ${switchValue ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-300 bg-slate-100 text-slate-700"}`}>
+                            <button type="button" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); toggleSwitch(component.id); }} className={`inline-flex min-w-[2.75rem] items-center justify-center rounded-lg border px-2.5 py-1 text-base font-bold ${switchValue ? "border-emerald-200 bg-emerald-100 text-emerald-700" : "border-slate-300 bg-slate-100 text-slate-700"}`}>
                               {switchValue}
                             </button>
                           ) : null}
                           {component.type === "led" ? (
-                            <span className={`inline-flex h-10 w-10 rounded-full border-2 ${ledValue ? "border-emerald-100 bg-emerald-300 shadow-[0_0_22px_rgba(16,185,129,0.85)]" : "border-slate-500 bg-slate-700"}`} />
+                            <span className={`inline-flex h-9 w-9 rounded-full border-2 ${ledValue ? "border-emerald-100 bg-emerald-300 shadow-[0_0_22px_rgba(16,185,129,0.85)]" : "border-slate-500 bg-slate-700"}`} />
                           ) : null}
                           {component.type !== "switch" && component.type !== "led" ? (
-                            <div className="rounded-lg border border-white/20 bg-black/20 px-2 py-1 text-[11px] font-medium text-white/90">{d.logic}</div>
+                            <div className="max-w-full truncate rounded-lg border border-white/20 bg-black/20 px-2 py-1 text-[10px] font-medium leading-tight text-white/90">
+                              {d.logic}
+                            </div>
                           ) : null}
                         </div>
-                        {d.ins > 0 ? <div className="text-[11px] text-white/85">In: {inputValues.map((v) => bit(v)).join("  ")}</div> : null}
-                        <p className="truncate text-[10px] text-white/70">{component.id}</p>
+                        <div className="mt-1 flex min-w-0 items-center justify-between gap-2 text-[10px] leading-none text-white/80">
+                          <span className="min-w-0 truncate">
+                            {d.ins > 0 ? `In: ${inputValues.map((v) => bit(v)).join(" ")}` : "Ready"}
+                          </span>
+                          <span className="max-w-[3.9rem] truncate text-[9px] text-white/65">
+                            {component.id}
+                          </span>
+                        </div>
                         {active ? (
                           <div className="pointer-events-none absolute inset-0 rounded-2xl ring-2 ring-sky-300">
                             <span className="absolute -left-1 -top-1 h-2.5 w-2.5 rounded-full bg-sky-300" />
@@ -1233,70 +1419,51 @@ export default function A3cadPage() {
           </div>
         </div>
 
-        <aside className="w-full shrink-0 border-t border-slate-200 bg-slate-50/80 p-4 lg:w-80 lg:border-l lg:border-t-0">
-          <h3 className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-600">Properties</h3>
-          {selectedComponent && selectedDef ? (
-            <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Component</p>
-                <h4 className="mt-1 text-base font-semibold text-slate-900">{selectedDef.label}</h4>
-              </div>
-              <dl className="space-y-1.5 text-xs">
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">ID</dt><dd className="font-mono text-slate-800">{selectedComponent.id}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Type</dt><dd>{selectedComponent.type.toUpperCase()}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Position</dt><dd>({selectedComponent.x}, {selectedComponent.y})</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Pins</dt><dd>{selectedDef.ins} in / {selectedDef.outs} out</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Inputs</dt><dd>{selectedInputs.map((v) => bit(v)).join(", ") || "-"}</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Output</dt><dd className="font-semibold">{selectedOutput}</dd></div>
-              </dl>
-              <p className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600">{selectedDef.desc}</p>
-              {selectedComponent.type === "switch" ? (
-                <button type="button" onClick={() => toggleSwitch(selectedComponent.id)} className={panelButtonClass("neutral")}>
-                  <Power size={13} />
-                  Toggle Switch ({bit(selectedComponent.state?.value)})
-                </button>
-              ) : null}
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={duplicateSelection} className={panelButtonClass("neutral")}>
-                  <Copy size={13} />
-                  Duplicate
-                </button>
-                <button type="button" onClick={deleteSelection} className={panelButtonClass("danger")}>
-                  <Trash2 size={13} />
-                  Delete
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {selectedWire ? (
-            <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Selected Wire</p>
-                <h4 className="mt-1 text-base font-semibold text-slate-900">{selectedWire.id}</h4>
-              </div>
-              <dl className="space-y-1.5 text-xs">
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">From</dt><dd className="font-mono text-right">{selectedWire.from.componentId} ({pinLabel(selectedWire.from.pinId)})</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">To</dt><dd className="font-mono text-right">{selectedWire.to.componentId} ({pinLabel(selectedWire.to.pinId)})</dd></div>
-                <div className="flex justify-between gap-3"><dt className="text-slate-500">Signal</dt><dd className={`font-semibold ${selectedWireSignal ? "text-emerald-600" : "text-slate-600"}`}>{selectedWireSignal}</dd></div>
-              </dl>
-              <button type="button" onClick={deleteSelection} className={panelButtonClass("danger")}>
-                <Trash2 size={13} />
-                Delete Wire
-              </button>
-            </div>
-          ) : null}
-
-          {!selectedComponent && !selectedWire ? (
-            <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-3 text-xs text-slate-600">
-              <p className="font-semibold text-slate-700">No selection</p>
-              <p className="mt-1">Select a component or wire to inspect details. Output pins support fan-out, each input pin accepts one wire.</p>
-            </div>
-          ) : null}
-        </aside>
       </div>
 
       <input ref={fileInputRef} type="file" accept="application/json,.json" className="hidden" onChange={loadJson} />
+
+      {propertiesModalOpen ? (
+        <div
+          className="ui-modal ui-modal--compact"
+          role="dialog"
+          aria-modal="true"
+          aria-label="A3cad properties"
+        >
+          <button
+            type="button"
+            aria-label="Close properties"
+            onClick={() => setPropertiesModalOpen(false)}
+            className="ui-modal__scrim"
+            tabIndex={-1}
+          />
+          <div tabIndex={-1} className="ui-modal__panel w-full max-w-xl p-4 sm:p-5">
+            <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-white to-sky-50 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">A3cad</p>
+                  <h3 className="mt-1 text-xl font-semibold text-slate-900 sm:text-2xl">Properties</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Inspect the selected component or wire without shrinking the workspace.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPropertiesModalOpen(false)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                >
+                  <X size={13} />
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {propertiesModalContent}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {gateGuideOpen ? (
         <div

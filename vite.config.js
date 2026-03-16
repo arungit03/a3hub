@@ -87,11 +87,12 @@ export default defineConfig(({ mode }) => {
               return "markdown";
             }
 
-            if (
-              normalizedId.includes("/node_modules/html2canvas/") ||
-              normalizedId.includes("/node_modules/jspdf/")
-            ) {
-              return "pdf-tools";
+            if (normalizedId.includes("/node_modules/jspdf/")) {
+              return "pdf-jspdf";
+            }
+
+            if (normalizedId.includes("/node_modules/html2canvas/")) {
+              return "pdf-html2canvas";
             }
 
             return undefined;

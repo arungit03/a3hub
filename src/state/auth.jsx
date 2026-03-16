@@ -119,6 +119,19 @@ const averageFaceVector = (vectors) => {
   return normalizeFaceVector(averaged);
 };
 
+const serializeFaceSampleVectors = (vectors) =>
+  (Array.isArray(vectors) ? vectors : [])
+    .map((vector, index) => {
+      const normalizedVector = normalizeFaceVector(vector);
+      if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) return null;
+
+      return {
+        id: `sample_${index + 1}`,
+        vector: normalizedVector,
+      };
+    })
+    .filter(Boolean);
+
 const normalizeAccountRole = (value) => {
   const normalized = toSafeText(value).toLowerCase();
   if (!normalized) return "";
@@ -554,6 +567,8 @@ export function AuthProvider({ children }) {
         const normalizedFaceSamples = dedupeFaceVectors(faceSamples).slice(
           -FACE_REGISTRATION_SAMPLE_LIMIT
         );
+        const serializedFaceSamples =
+          serializeFaceSampleVectors(normalizedFaceSamples);
         userProfile.year = year ? Number(year) : null;
         userProfile.rollNo = safeRollNo;
         userProfile.registerNumber = safeRollNo;
@@ -578,8 +593,8 @@ export function AuthProvider({ children }) {
             vectorLength: Number.isFinite(faceVectorLength)
               ? Number(faceVectorLength)
               : resolvedFaceVector.length,
-            sampleVectors: normalizedFaceSamples,
-            sampleCount: normalizedFaceSamples.length,
+            sampleVectors: serializedFaceSamples,
+            sampleCount: serializedFaceSamples.length,
             algorithm: "face-api-128d",
             matchThreshold: FACE_MATCH_THRESHOLD,
             updatedAt: serverTimestamp(),
