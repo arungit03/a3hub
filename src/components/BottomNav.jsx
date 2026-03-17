@@ -20,6 +20,7 @@ export default function BottomNav() {
     "aria-hidden": "true",
   };
   const attendanceEnabled = isFeatureEnabled("attendance");
+  const marksEnabled = isFeatureEnabled("marks");
   const compilersEnabled = isFeatureEnabled("compilers");
   const aiChatEnabled = isFeatureEnabled("ai-chat");
 
@@ -123,6 +124,7 @@ export default function BottomNav() {
       ];
   const filteredNavItems = navItems.filter((item) => {
     if (!attendanceEnabled && item.to.endsWith("/attendance")) return false;
+    if (!marksEnabled && item.to.includes("/marks-progress")) return false;
     if (!compilersEnabled && item.to.endsWith("/code")) return false;
     if (!aiChatEnabled && item.to.endsWith("/ai")) return false;
     return true;

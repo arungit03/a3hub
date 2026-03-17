@@ -3,7 +3,12 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { auth } from "../lib/firebase";
+import {
+  auth,
+  ensureFirebaseAuth,
+  firebaseClientReady,
+  firebaseStartupIssue,
+} from "../lib/firebase";
 
 export default function PasswordChangePage() {
   const navigate = useNavigate();
@@ -16,6 +21,9 @@ export default function PasswordChangePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [checkingLink, setCheckingLink] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const authUnavailableMessage =
+    firebaseStartupIssue ||
+    "Password reset is unavailable for this deploy. Set Firebase environment variables and redeploy.";
 
   const mode = searchParams.get("mode");
   const oobCode = searchParams.get("oobCode") || "";
@@ -36,7 +44,14 @@ export default function PasswordChangePage() {
         return;
       }
 
+      if (!firebaseClientReady) {
+        setLinkError(authUnavailableMessage);
+        setCheckingLink(false);
+        return;
+      }
+
       try {
+        await ensureFirebaseAuth();
         const verifiedEmail = await verifyPasswordResetCode(auth, oobCode);
         if (!cancelled) {
           setEmail(verifiedEmail);
@@ -59,12 +74,17 @@ export default function PasswordChangePage() {
     return () => {
       cancelled = true;
     };
-  }, [hasResetCode, oobCode]);
+  }, [authUnavailableMessage, hasResetCode, oobCode]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setFormError("");
     setSuccessMessage("");
+
+    if (!firebaseClientReady) {
+      setLinkError(authUnavailableMessage);
+      return;
+    }
 
     if (password.length < 6) {
       setFormError("Password must be at least 6 characters.");
@@ -78,6 +98,7 @@ export default function PasswordChangePage() {
 
     setSubmitting(true);
     try {
+      await ensureFirebaseAuth();
       await confirmPasswordReset(auth, oobCode, password);
       setSuccessMessage(
         "Password updated successfully in Firebase. Login with your new password."

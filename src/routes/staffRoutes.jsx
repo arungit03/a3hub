@@ -41,21 +41,36 @@ const STAFF_PAGE_ROUTES = [
     feature: "attendance",
   },
   { path: "/staff/menu", element: <MenuGridPage forcedStaff /> },
-  { path: "/staff/menu/assignments", element: <MenuGridPage forcedStaff /> },
+  {
+    path: "/staff/menu/assignments",
+    element: <MenuGridPage forcedStaff />,
+    feature: "assignments",
+  },
   { path: "/staff/menu/student-details", element: <MenuGridPage forcedStaff /> },
-  { path: "/staff/menu/books", element: <BooksPage forcedRole="staff" /> },
+  {
+    path: "/staff/menu/books",
+    element: <BooksPage forcedRole="staff" />,
+    feature: "books",
+  },
   {
     path: "/staff/menu/marks-progress",
     element: <MarksProgressPage forcedRole="staff" />,
+    feature: "marks",
   },
   {
     path: "/staff/menu/student-assignments",
     element: <StaffStudentAssignmentsPage />,
+    feature: "assignments",
   },
-  { path: "/staff/menu/parent-replies", element: <StaffParentRepliesPage /> },
+  {
+    path: "/staff/menu/parent-replies",
+    element: <StaffParentRepliesPage />,
+    feature: "assignments",
+  },
   {
     path: "/staff/menu/books/:subjectId",
     element: <BookSubjectPage forcedRole="staff" />,
+    feature: "books",
   },
   { path: "/staff/code", element: <CodeLabPage />, feature: "compilers" },
   {
@@ -70,11 +85,19 @@ const STAFF_PAGE_ROUTES = [
     feature: "compilers",
   },
   { path: "/staff/ai", element: <AiChatPage />, feature: "ai-chat" },
-  { path: "/staff/a3cad", element: <A3cadPage /> },
-  { path: "/staff/exam-schedule", element: <ExamSchedulePage forcedRole="staff" /> },
-  { path: "/staff/test", element: <TestPage /> },
-  { path: "/staff/results", element: <TestResultsPage /> },
-  { path: "/staff/leave", element: <LeaveManagementPage forcedStaff={true} /> },
+  { path: "/staff/a3cad", element: <A3cadPage />, feature: "a3cad" },
+  {
+    path: "/staff/exam-schedule",
+    element: <ExamSchedulePage forcedRole="staff" />,
+    feature: "exams",
+  },
+  { path: "/staff/test", element: <TestPage />, feature: "tests" },
+  { path: "/staff/results", element: <TestResultsPage />, feature: "tests" },
+  {
+    path: "/staff/leave",
+    element: <LeaveManagementPage forcedStaff={true} />,
+    feature: "leave",
+  },
   { path: "/staff/profile", element: <ProfilePage forcedRole="staff" /> },
 ];
 

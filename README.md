@@ -5,6 +5,20 @@
 For onboarding and debugging in this multi-feature app (attendance, AI chat, compilers, notifications, admin), use the feature-module guide:
 - `docs/feature-modules.md`
 
+## Deploy Profiles
+
+This repo can now ship smaller deployment profiles so every environment does not need the full feature surface.
+
+- Profiles doc: `docs/deploy-profiles.md`
+- Base env var: `VITE_DEPLOY_PROFILE=full|academic|learning|operations|lean`
+- Local build shortcuts:
+  - `npm run build:academic`
+  - `npm run build:learning`
+  - `npm run build:operations`
+  - `npm run build:lean`
+
+Profiles reduce visible routes, menu entries, route prefetch, and some dashboard listeners for disabled modules.
+
 ## Service Portability and Failover
 
 To reduce external vendor lock-in and outage impact, notification and code-run functions support ordered provider fallback chains (primary + webhook fallback):
@@ -108,8 +122,8 @@ Assignments and student answer files now upload with automatic fallback:
    - `VITE_CLOUDINARY_CLOUD_NAME` (or `CLOUDINARY_CLOUD_NAME`)
    - `VITE_CLOUDINARY_UPLOAD_PRESET` (or `CLOUDINARY_UPLOAD_PRESET`)
 3. Restart dev server locally, or redeploy in Netlify after setting values.
-4. If you do not want env variables, set values directly in:
-   - `public/cloudinary-config.js`
+4. If you do not want env variables, set values directly in the generated browser runtime file:
+   - `public/runtime-config.js`
    - `window.__A3HUB_CLOUDINARY_CONFIG__.cloudName`
    - `window.__A3HUB_CLOUDINARY_CONFIG__.uploadPreset`
 
@@ -143,9 +157,13 @@ Configuration options:
    - `GEMINI_API_KEY` (preferred) or `OPENAI_API_KEY`
 2. Deploy with server function:
    - `netlify/functions/ai-generate.cjs`
-3. Keep client runtime config in `public/gemini-config.js`:
+3. Browser runtime config is generated into `public/runtime-config.js`:
    - `window.__A3HUB_GEMINI_CONFIG__.apiKey = ""`
    - `window.__A3HUB_GEMINI_CONFIG__.endpoint = "/.netlify/functions/ai-generate"`
+4. Client-side AI keys are development-only:
+   - keep `VITE_ALLOW_CLIENT_AI_KEY=false` for production
+   - production builds now fail if `VITE_ALLOW_CLIENT_AI_KEY=true`
+   - use Netlify server environment variables instead of exposing AI keys to the browser
 
 ## Student Mobile WhatsApp Notification (on in-app notification)
 
@@ -170,7 +188,7 @@ Set build env values:
 - `VITE_WHATSAPP_NOTIFY_ENDPOINT=/.netlify/functions/whatsapp-send` (optional)
 
 If you do not use `.env` / build env vars, set runtime config in:
-- `public/whatsapp-config.js`
+- `public/runtime-config.js`
 - `window.__A3HUB_WHATSAPP_CONFIG__.enabled = true`
 - `window.__A3HUB_WHATSAPP_CONFIG__.defaultCountryCode = "91"` (or your country code)
 - `window.__A3HUB_WHATSAPP_CONFIG__.endpoint = "/.netlify/functions/whatsapp-send"`
@@ -214,7 +232,7 @@ Set build env values:
 - `VITE_EMAIL_NOTIFY_ENDPOINT=/.netlify/functions/email-send` (optional)
 
 If you do not use `.env` / build env vars, set runtime config in:
-- `public/email-config.js`
+- `public/runtime-config.js`
 - `window.__A3HUB_EMAIL_CONFIG__.enabled = true`
 - `window.__A3HUB_EMAIL_CONFIG__.endpoint = "/.netlify/functions/email-send"`
 
@@ -222,7 +240,7 @@ If you do not use `.env` / build env vars, set runtime config in:
 
 This repo now includes:
 - `netlify/functions/email-send.cjs`
-- `public/email-config.js`
+- generated browser runtime config in `public/runtime-config.js`
 
 Notes:
 - If email send fails, attendance save and in-app notification still succeed.
@@ -252,7 +270,7 @@ Set these values in local `.env` or your Netlify environment variables:
 - `VITE_PUSH_NOTIFY_ENDPOINT=/.netlify/functions/push-send` (optional)
 - `VITE_PUSH_SW_URL=/firebase-messaging-sw.js` (optional)
 
-If you still prefer runtime config, edit `public/push-config.js`:
+If you still prefer runtime config, edit `public/runtime-config.js`:
 - `enabled: true`
 - `endpoint: "/.netlify/functions/push-send"`
 - `swUrl: "/firebase-messaging-sw.js"`

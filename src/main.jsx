@@ -9,10 +9,16 @@ import {
 import App from './App.jsx'
 import { AuthProvider } from './state/auth.jsx'
 import { ToastProvider } from './components/ToastProvider.jsx'
+import { installChunkLoadRecovery } from './lib/chunkLoadRecovery.js'
+import RouterErrorPage from './routes/RouterErrorPage.jsx'
 import './index.css'
 
+installChunkLoadRecovery()
+
 const router = createBrowserRouter(
-  createRoutesFromElements(<Route path="*" element={<App />} />),
+  createRoutesFromElements(
+    <Route path="*" element={<App />} errorElement={<RouterErrorPage />} />,
+  ),
 )
 
 createRoot(document.getElementById('root')).render(

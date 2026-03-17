@@ -1,4 +1,4 @@
-import { isFeatureEnabled } from "../config/features";
+import { filterByFeature } from "../config/features";
 
 const rawMenuItems = [
   {
@@ -6,6 +6,7 @@ const rawMenuItems = [
     label: "Calendar",
     icon: "\uD83D\uDCC6",
     staffEditable: true,
+    feature: "exams",
   },
   {
     id: "test",
@@ -13,12 +14,14 @@ const rawMenuItems = [
     icon: "\u2705",
     staffEditable: false,
     path: "/test",
+    feature: "tests",
   },
   {
     id: "assignments",
     label: "Assignments",
     icon: "\uD83D\uDCDA",
     staffEditable: true,
+    feature: "assignments",
   },
   {
     id: "student-assignments",
@@ -26,6 +29,7 @@ const rawMenuItems = [
     icon: "\uD83D\uDCC2",
     staffEditable: false,
     path: "/menu/student-assignments",
+    feature: "assignments",
   },
   {
     id: "parent-replies",
@@ -33,6 +37,7 @@ const rawMenuItems = [
     icon: "\uD83D\uDCAC",
     staffEditable: false,
     path: "/menu/parent-replies",
+    feature: "assignments",
   },
   {
     id: "books",
@@ -40,18 +45,21 @@ const rawMenuItems = [
     icon: "\uD83D\uDCDA",
     staffEditable: false,
     path: "/menu/books",
+    feature: "books",
   },
   {
     id: "leave",
     label: "Leave Management",
     icon: "\uD83D\uDCDD",
     staffEditable: false,
+    feature: "leave",
   },
   {
     id: "exam",
     label: "Exam Schedule",
     icon: "\uD83D\uDDD3\uFE0F",
     staffEditable: true,
+    feature: "exams",
   },
   {
     id: "marks-progress",
@@ -59,6 +67,7 @@ const rawMenuItems = [
     icon: "\uD83D\uDCCA",
     staffEditable: false,
     path: "/menu/marks-progress",
+    feature: "marks",
   },
   {
     id: "student-details",
@@ -86,6 +95,7 @@ const rawMenuItems = [
     icon: "\uD83D\uDCDD",
     staffEditable: false,
     path: "/menu/my-to-do-list",
+    feature: "todo",
   },
   {
     id: "resume-builder",
@@ -93,7 +103,7 @@ const rawMenuItems = [
     icon: "\uD83E\uDDFE",
     staffEditable: false,
     path: "/menu/resume-builder",
-    feature: "ai-chat",
+    feature: "resume-builder",
   },
   {
     id: "fees",
@@ -106,11 +116,10 @@ const rawMenuItems = [
     label: "Circulars",
     icon: "\uD83D\uDCE2",
     staffEditable: true,
+    feature: "notifications",
   },
 ];
 
-export const menuItems = rawMenuItems.filter(
-  (item) => !item.feature || isFeatureEnabled(item.feature)
-);
+export const menuItems = /** @type {typeof rawMenuItems} */ (filterByFeature(rawMenuItems));
 
 export const staffEditableModules = menuItems.filter((item) => item.staffEditable);

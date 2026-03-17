@@ -1,5 +1,26 @@
 import { useCallback, useEffect, useRef } from "react";
 
+/**
+ * @typedef {{
+ *   value: unknown;
+ *   updatedAt: number;
+ * }} StoredDraft
+ */
+
+/**
+ * @typedef {{
+ *   key: unknown;
+ *   value: unknown;
+ *   onRestore?: ((value: unknown, updatedAt: number) => void) | undefined;
+ *   enabled?: boolean;
+ *   delayMs?: number;
+ * }} AutosaveDraftOptions
+ */
+
+/**
+ * @param {string | null} raw
+ * @returns {StoredDraft | null}
+ */
 const parseStoredDraft = (raw) => {
   if (!raw) return null;
   try {
@@ -17,6 +38,9 @@ const parseStoredDraft = (raw) => {
   }
 };
 
+/**
+ * @param {AutosaveDraftOptions} options
+ */
 export function useAutosaveDraft({
   key,
   value,

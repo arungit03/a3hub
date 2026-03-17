@@ -1,3 +1,5 @@
+import { isFeatureEnabled } from "../config/features";
+
 const prefetchedRouteChunks = new Set();
 
 const normalizePath = (value) => {
@@ -25,31 +27,37 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "student-attendance",
     match: isExact("/student/attendance"),
     load: () => import("../pages/AttendancePage"),
+    feature: "attendance",
   },
   {
     key: "student-menu-resume-builder",
     match: isExact("/student/menu/resume-builder"),
     load: () => import("../pages/ResumeBuilderPage"),
+    feature: "resume-builder",
   },
   {
     key: "student-menu-todo",
     match: isExact("/student/menu/my-to-do-list"),
     load: () => import("../pages/student/StudentTodoListPage"),
+    feature: "todo",
   },
   {
     key: "student-menu-progress",
     match: isExact("/student/menu/marks-progress"),
     load: () => import("../pages/MarksProgressPage"),
+    feature: "marks",
   },
   {
     key: "student-menu-books",
     match: isExact("/student/menu/books"),
     load: () => import("../pages/BooksPage"),
+    feature: "books",
   },
   {
     key: "student-menu-book-subject",
     match: (path) => path.startsWith("/student/menu/books/"),
     load: () => import("../pages/BookSubjectPage"),
+    feature: "books",
   },
   {
     key: "student-menu",
@@ -60,51 +68,67 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "student-menu-daily-python",
     match: isExact("/student/menu/daily-python-challenges"),
     load: () => import("../pages/MenuGridPage"),
+    feature: "compilers",
   },
   {
     key: "student-code",
     match: isExact("/student/code"),
     load: () => import("../pages/CodeLabPage"),
+    feature: "compilers",
   },
   {
     key: "student-code-python",
     match: isExact("/student/code/python"),
     load: () => import("../pages/PythonInterpreterPage"),
+    feature: "compilers",
   },
   {
     key: "student-code-c",
     match: isExact("/student/code/c"),
     load: () => import("../pages/CCompilerPage"),
+    feature: "compilers",
   },
   {
     key: "student-code-cpp",
     match: isExact("/student/code/cpp"),
     load: () => import("../pages/CppCompilerPage"),
+    feature: "compilers",
   },
   {
     key: "student-ai",
     match: isExact("/student/ai"),
     load: () => import("../pages/AiChatPage"),
+    feature: "ai-chat",
+  },
+  {
+    key: "student-a3cad",
+    match: isExact("/student/a3cad"),
+    load: () => import("../pages/A3cadPage"),
+    feature: "a3cad",
   },
   {
     key: "student-exam-schedule",
     match: isExact("/student/exam-schedule"),
     load: () => import("../pages/ExamSchedulePage"),
+    feature: "exams",
   },
   {
     key: "student-test",
     match: isExact("/student/test"),
     load: () => import("../pages/TestPage"),
+    feature: "tests",
   },
   {
     key: "student-results",
     match: isExact("/student/results"),
     load: () => import("../pages/TestResultsPage"),
+    feature: "tests",
   },
   {
     key: "student-leave",
     match: isExact("/student/leave"),
     load: () => import("../pages/LeaveManagementPage"),
+    feature: "leave",
   },
   {
     key: "student-profile",
@@ -120,31 +144,37 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "staff-attendance",
     match: isExact("/staff/attendance"),
     load: () => import("../pages/AttendancePage"),
+    feature: "attendance",
   },
   {
     key: "staff-menu-progress",
     match: isExact("/staff/menu/marks-progress"),
     load: () => import("../pages/MarksProgressPage"),
+    feature: "marks",
   },
   {
     key: "staff-menu-student-assignments",
     match: isExact("/staff/menu/student-assignments"),
     load: () => import("../pages/staff/StaffStudentAssignmentsPage"),
+    feature: "assignments",
   },
   {
     key: "staff-menu-parent-replies",
     match: isExact("/staff/menu/parent-replies"),
     load: () => import("../pages/staff/StaffParentRepliesPage"),
+    feature: "assignments",
   },
   {
     key: "staff-menu-books",
     match: isExact("/staff/menu/books"),
     load: () => import("../pages/BooksPage"),
+    feature: "books",
   },
   {
     key: "staff-menu-book-subject",
     match: (path) => path.startsWith("/staff/menu/books/"),
     load: () => import("../pages/BookSubjectPage"),
+    feature: "books",
   },
   {
     key: "staff-menu",
@@ -155,46 +185,61 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "staff-code",
     match: isExact("/staff/code"),
     load: () => import("../pages/CodeLabPage"),
+    feature: "compilers",
   },
   {
     key: "staff-code-python",
     match: isExact("/staff/code/python"),
     load: () => import("../pages/PythonInterpreterPage"),
+    feature: "compilers",
   },
   {
     key: "staff-code-c",
     match: isExact("/staff/code/c"),
     load: () => import("../pages/CCompilerPage"),
+    feature: "compilers",
   },
   {
     key: "staff-code-cpp",
     match: isExact("/staff/code/cpp"),
     load: () => import("../pages/CppCompilerPage"),
+    feature: "compilers",
   },
   {
     key: "staff-ai",
     match: isExact("/staff/ai"),
     load: () => import("../pages/AiChatPage"),
+    feature: "ai-chat",
+  },
+  {
+    key: "staff-a3cad",
+    match: isExact("/staff/a3cad"),
+    load: () => import("../pages/A3cadPage"),
+    feature: "a3cad",
   },
   {
     key: "staff-exam-schedule",
     match: isExact("/staff/exam-schedule"),
     load: () => import("../pages/ExamSchedulePage"),
+    feature: "exams",
   },
   {
     key: "staff-test",
     match: isExact("/staff/test"),
     load: () => import("../pages/TestPage"),
+    feature: "tests",
   },
   {
     key: "staff-results",
     match: isExact("/staff/results"),
     load: () => import("../pages/TestResultsPage"),
+    feature: "tests",
   },
   {
     key: "staff-leave",
     match: isExact("/staff/leave"),
     load: () => import("../pages/LeaveManagementPage"),
+    feature: "leave",
   },
   {
     key: "staff-profile",
@@ -210,11 +255,25 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "parent-attendance",
     match: isExact("/parent/attendance"),
     load: () => import("../pages/AttendancePage"),
+    feature: "attendance",
   },
   {
     key: "parent-progress",
     match: isExact("/parent/menu/marks-progress"),
     load: () => import("../pages/MarksProgressPage"),
+    feature: "marks",
+  },
+  {
+    key: "parent-exam-schedule",
+    match: isExact("/parent/exam-schedule"),
+    load: () => import("../pages/ExamSchedulePage"),
+    feature: "exams",
+  },
+  {
+    key: "parent-assignments",
+    match: isExact("/parent/menu/assignments"),
+    load: () => import("../pages/parent/ParentAssignmentsPage"),
+    feature: "assignments",
   },
 ];
 
@@ -224,6 +283,9 @@ export async function prefetchRoute(path) {
 
   const entry = ROUTE_PREFETCH_ENTRIES.find((item) => item.match(normalizedPath));
   if (!entry) return false;
+  if (entry.feature && !isFeatureEnabled(entry.feature)) {
+    return false;
+  }
   if (prefetchedRouteChunks.has(entry.key)) return true;
 
   prefetchedRouteChunks.add(entry.key);

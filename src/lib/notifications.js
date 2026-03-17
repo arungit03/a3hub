@@ -224,9 +224,17 @@ const buildWhatsAppText = ({ title, message = "", link = "" }) => {
 };
 
 const resolveWhatsAppClientConfig = () => {
+  const runtimeRoot =
+    typeof window !== "undefined" &&
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     typeof window !== "undefined" && window.__A3HUB_WHATSAPP_CONFIG__
       ? window.__A3HUB_WHATSAPP_CONFIG__
+      : runtimeRoot.whatsapp && typeof runtimeRoot.whatsapp === "object"
+      ? runtimeRoot.whatsapp
       : {};
 
   const endpointFromBuild = toSafeText(
@@ -302,9 +310,17 @@ const resolveStudentMobileNumber = (profile = {}) =>
   );
 
 const resolvePushClientConfig = () => {
+  const runtimeRoot =
+    typeof window !== "undefined" &&
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     typeof window !== "undefined" && window.__A3HUB_PUSH_CONFIG__
       ? window.__A3HUB_PUSH_CONFIG__
+      : runtimeRoot.push && typeof runtimeRoot.push === "object"
+      ? runtimeRoot.push
       : {};
 
   const endpointFromBuild = toSafeText(import.meta.env.VITE_PUSH_NOTIFY_ENDPOINT);
@@ -323,9 +339,17 @@ const resolvePushClientConfig = () => {
 };
 
 const resolveEmailClientConfig = () => {
+  const runtimeRoot =
+    typeof window !== "undefined" &&
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     typeof window !== "undefined" && window.__A3HUB_EMAIL_CONFIG__
       ? window.__A3HUB_EMAIL_CONFIG__
+      : runtimeRoot.email && typeof runtimeRoot.email === "object"
+      ? runtimeRoot.email
       : {};
 
   const endpointFromBuild = toSafeText(import.meta.env.VITE_EMAIL_NOTIFY_ENDPOINT);

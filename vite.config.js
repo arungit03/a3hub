@@ -74,7 +74,42 @@ export default defineConfig(({ mode }) => {
               normalizedId.includes("/node_modules/firebase/") ||
               normalizedId.includes("/node_modules/@firebase/")
             ) {
-              return "firebase";
+              if (
+                normalizedId.includes("/firebase/auth") ||
+                normalizedId.includes("/@firebase/auth")
+              ) {
+                return "firebase-auth";
+              }
+
+              if (
+                normalizedId.includes("/firebase/firestore") ||
+                normalizedId.includes("/@firebase/firestore")
+              ) {
+                return "firebase-firestore";
+              }
+
+              if (
+                normalizedId.includes("/firebase/storage") ||
+                normalizedId.includes("/@firebase/storage")
+              ) {
+                return "firebase-storage";
+              }
+
+              if (
+                normalizedId.includes("/firebase/messaging") ||
+                normalizedId.includes("/@firebase/messaging")
+              ) {
+                return "firebase-messaging";
+              }
+
+              if (
+                normalizedId.includes("/firebase/analytics") ||
+                normalizedId.includes("/@firebase/analytics")
+              ) {
+                return "firebase-analytics";
+              }
+
+              return "firebase-core";
             }
 
             if (

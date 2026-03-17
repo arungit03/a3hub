@@ -2639,6 +2639,37 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
   }
 }
 
+@keyframes campusWelcomeScrim {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes campusWelcomePanel {
+  from {
+    transform: translateY(20px) scale(0.96);
+  }
+
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes campusWelcomeFloat {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  50% {
+    transform: translate3d(0, -10px, 0) scale(1.06);
+  }
+}
+
 @keyframes softReveal {
   from {
     opacity: 0;
@@ -3000,6 +3031,58 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     -webkit-backdrop-filter: blur(6px);
   }
 
+  .campus-welcome-modal .ui-modal__scrim {
+    animation: campusWelcomeScrim 0.28s ease both;
+  }
+
+  .campus-welcome-modal__panel {
+    animation:
+      riseIn 0.24s ease both,
+      campusWelcomePanel 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  .campus-welcome-modal__card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.7rem;
+    border: 1px solid rgb(255 255 255 / 0.16);
+    background:
+      radial-gradient(420px 240px at 100% 0%, rgb(191 219 254 / 0.16), transparent 70%),
+      radial-gradient(320px 220px at 0% 100%, rgb(167 139 250 / 0.18), transparent 74%),
+      linear-gradient(136deg, rgb(37 99 235 / 0.96) 0%, rgb(79 70 229 / 0.96) 54%, rgb(91 33 182 / 0.96) 100%);
+    padding: 1.45rem;
+    box-shadow:
+      0 34px 84px -52px rgb(15 23 42 / 0.94),
+      0 18px 40px -28px rgb(79 70 229 / 0.7),
+      inset 0 1px 0 rgb(255 255 255 / 0.2);
+  }
+
+  .campus-welcome-modal__orb {
+    position: absolute;
+    border-radius: 999px;
+    filter: blur(10px);
+    opacity: 0.78;
+    pointer-events: none;
+  }
+
+  .campus-welcome-modal__orb--one {
+    top: -3.25rem;
+    right: -2rem;
+    width: 8.5rem;
+    height: 8.5rem;
+    background: rgb(191 219 254 / 0.28);
+    animation: campusWelcomeFloat 5.8s ease-in-out infinite;
+  }
+
+  .campus-welcome-modal__orb--two {
+    bottom: -2.8rem;
+    left: -1.6rem;
+    width: 7rem;
+    height: 7rem;
+    background: rgb(244 114 182 / 0.2);
+    animation: campusWelcomeFloat 6.4s ease-in-out infinite reverse;
+  }
+
   .code-learning-modal__card {
     position: relative;
     width: min(100%, 880px);
@@ -3252,6 +3335,11 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
   }
 
   @media (max-width: 520px) {
+    .campus-welcome-modal__card {
+      border-radius: 1.35rem;
+      padding: 1.1rem;
+    }
+
     .code-learning-modal {
       padding: 0;
     }

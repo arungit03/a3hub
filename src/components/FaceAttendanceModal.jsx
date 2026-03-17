@@ -4,16 +4,17 @@ import { loadFaceApi } from "../lib/faceApiLoader";
 
 const FACE_MODEL_BASE_URI =
   "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
-const AUTO_SCAN_INTERVAL_MS = 900;
+const AUTO_SCAN_INTERVAL_MS = 420;
 const MIN_FACE_VECTOR_LENGTH = 64;
-const FACE_DETECTION_INPUT_SIZE = 608; // Increased to detect smaller/distant faces
+const SCAN_FACE_DETECTION_INPUT_SIZE = 416;
+const REGISTER_FACE_DETECTION_INPUT_SIZE = 512;
 const FACE_DETECTION_SCORE_THRESHOLD = 0.3;
 const FACE_CAPTURE_MIN_SCORE = 0.78;
 const FACE_CAPTURE_MIN_WIDTH_RATIO = 0.16;
 const FACE_CAPTURE_MIN_HEIGHT_RATIO = 0.2;
 const FACE_CAPTURE_MIN_AREA_RATIO = 0.04;
 const FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO = 0.34;
-const AUTO_REGISTER_CAPTURE_INTERVAL_MS = 720;
+const AUTO_REGISTER_CAPTURE_INTERVAL_MS = 520;
 const AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT = 95;
 const AUTO_REGISTER_FRONT_FACE_CAPTURE_SCORE =
   AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT / 100;
@@ -23,6 +24,12 @@ const FRONT_FACE_MAX_EYE_DISTANCE_DELTA_RATIO = 0.18;
 const FRONT_FACE_MAX_MOUTH_OFFSET_RATIO = 0.2;
 
 let loadedFaceApiPromise = null;
+
+const buildTinyFaceDetectorOptions = (faceapi, inputSize) =>
+  new faceapi.TinyFaceDetectorOptions({
+    inputSize,
+    scoreThreshold: FACE_DETECTION_SCORE_THRESHOLD,
+  });
 
 const stopStreamTracks = (stream) => {
   if (!stream) return;
@@ -196,6 +203,7 @@ const evaluateFaceFrameQuality = ({
   videoElement,
   landmarks,
   requireFrontFacing = false,
+  requireCentered = true,
 }) => {
   if (!videoElement || !box) {
     return {
@@ -247,8 +255,9 @@ const evaluateFaceFrameQuality = ({
   }
 
   if (
-    centerXOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO ||
-    centerYOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO
+    requireCentered &&
+    (centerXOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO ||
+      centerYOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO)
   ) {
     return {
       ok: false,
@@ -388,10 +397,7 @@ const detectSingleFaceDescriptor = async (
   const detections = await faceapi
     .detectAllFaces(
       videoElement,
-      new faceapi.TinyFaceDetectorOptions({
-        inputSize: FACE_DETECTION_INPUT_SIZE,
-        scoreThreshold: FACE_DETECTION_SCORE_THRESHOLD,
-      })
+      buildTinyFaceDetectorOptions(faceapi, REGISTER_FACE_DETECTION_INPUT_SIZE)
     )
     .withFaceLandmarks(true)
     .withFaceDescriptors();
@@ -423,6 +429,7 @@ const detectSingleFaceDescriptor = async (
     videoElement,
     landmarks,
     requireFrontFacing,
+    requireCentered: true,
   });
   if (!quality.ok) {
     return {
@@ -440,6 +447,67 @@ const detectSingleFaceDescriptor = async (
     detectionScore,
     quality,
     box,
+  };
+};
+
+const detectMultipleFaceDescriptors = async (faceapi, videoElement) => {
+  if (!videoElement || videoElement.readyState < 2 || videoElement.videoWidth <= 0) {
+    return { status: "camera_not_ready" };
+  }
+
+  const detections = await faceapi
+    .detectAllFaces(
+      videoElement,
+      buildTinyFaceDetectorOptions(faceapi, SCAN_FACE_DETECTION_INPUT_SIZE)
+    )
+    .withFaceLandmarks(true)
+    .withFaceDescriptors();
+
+  if (!Array.isArray(detections) || detections.length === 0) {
+    return { status: "no_face" };
+  }
+
+  const usableDetections = detections
+    .map((entry, detectionIndex) => {
+      const vector = normalizeDescriptorVector(entry?.descriptor);
+      const box = entry?.detection?.box;
+      const detectionScore = Number(entry?.detection?.score || 0);
+      const quality = evaluateFaceFrameQuality({
+        detectionScore,
+        box,
+        videoElement,
+        landmarks: entry?.landmarks || null,
+        requireFrontFacing: false,
+        requireCentered: false,
+      });
+
+      if (vector.length < MIN_FACE_VECTOR_LENGTH || !quality.ok) {
+        return null;
+      }
+
+      return {
+        detectionIndex,
+        vector,
+        vectorLength: vector.length,
+        detectionScore,
+        quality,
+        box,
+      };
+    })
+    .filter(Boolean);
+
+  if (usableDetections.length === 0) {
+    return {
+      status: "low_quality",
+      totalCount: detections.length,
+    };
+  }
+
+  return {
+    status: "ok",
+    detections: usableDetections,
+    totalCount: detections.length,
+    skippedCount: Math.max(0, detections.length - usableDetections.length),
   };
 };
 
@@ -527,9 +595,11 @@ export default function FaceAttendanceModal({
       inFlightRef.current = true;
 
       try {
-        const detected = await detectSingleFaceDescriptor(faceapi, videoElement, {
-          requireFrontFacing: isRegistrationMode,
-        });
+        const detected = isRegistrationMode
+          ? await detectSingleFaceDescriptor(faceapi, videoElement, {
+              requireFrontFacing: true,
+            })
+          : await detectMultipleFaceDescriptors(faceapi, videoElement);
         const detectedFrontFacingPercent = clampNumber(
           detected?.quality?.frontFacingPercent,
           0,
@@ -540,7 +610,7 @@ export default function FaceAttendanceModal({
           setFrontFacingPercent(detectedFrontFacingPercent);
         }
 
-        if (detected.box) {
+        if (isRegistrationMode && detected.box) {
           const videoW = videoElement.videoWidth;
           const videoH = videoElement.videoHeight;
           if (videoW > 0 && videoH > 0) {
@@ -554,7 +624,7 @@ export default function FaceAttendanceModal({
               transform: `scale(${scale})`,
             });
           }
-        } else {
+        } else if (isRegistrationMode) {
           setZoomStyle({ transformOrigin: "50% 50%", transform: "scale(1)" });
         }
 
@@ -572,6 +642,9 @@ export default function FaceAttendanceModal({
             setStatusText(
               `Keep one front-facing face inside the guide. Auto capture starts above ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
             );
+          } else {
+            setStatusTone("info");
+            setStatusText("No faces detected yet. Keep students visible in the frame.");
           }
           return;
         }
@@ -592,17 +665,29 @@ export default function FaceAttendanceModal({
           if (isRegistrationMode) {
             setStatusTone("info");
             setStatusText(buildLowQualityMessage(detected.quality));
+          } else {
+            setStatusTone("info");
+            setStatusText(
+              "Faces detected are too small or unclear. Move students closer and improve lighting."
+            );
           }
           return;
         }
 
-        const callbackPayload = {
-          vector: detected.vector,
-          vectorLength: detected.vectorLength,
-          detectionScore: detected.detectionScore,
-          quality: detected.quality || null,
-          detectedAt: Date.now(),
-        };
+        const callbackPayload = isRegistrationMode
+          ? {
+              vector: detected.vector,
+              vectorLength: detected.vectorLength,
+              detectionScore: detected.detectionScore,
+              quality: detected.quality || null,
+              detectedAt: Date.now(),
+            }
+          : {
+              detections: detected.detections || [],
+              totalCount: Number(detected.totalCount) || 0,
+              skippedCount: Number(detected.skippedCount) || 0,
+              detectedAt: Date.now(),
+            };
 
         const callbackResult = await onDescriptorRef.current?.(callbackPayload);
         if (callbackResult?.message) {
@@ -672,8 +757,9 @@ export default function FaceAttendanceModal({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "user" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+            width: { ideal: isRegistrationMode ? 1280 : 960 },
+            height: { ideal: isRegistrationMode ? 720 : 540 },
+            frameRate: { ideal: 30, max: 30 },
           },
           audio: false,
         });
@@ -1014,7 +1100,7 @@ export default function FaceAttendanceModal({
               <div className="flex items-start gap-2.5">
                 <ScanFace className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
                 <p className="leading-snug">
-                  Keep your face inside the frame with good light. Matching above {thresholdPercent}% threshold records attendance automatically.
+                  Keep one or more student faces visible with good light. Reliable matches above {thresholdPercent}% are marked automatically in the same scan cycle.
                 </p>
               </div>
             </div>

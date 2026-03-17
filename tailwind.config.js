@@ -17,6 +17,7 @@ export default {
         mist: "rgb(var(--mist) / <alpha-value>)",
         ocean: "rgb(var(--ocean) / <alpha-value>)",
         aurora: "rgb(var(--aurora) / <alpha-value>)",
+        cocoa: "rgb(var(--cocoa) / <alpha-value>)",
         clay: "rgb(var(--clay) / <alpha-value>)",
         sand: "rgb(var(--sand) / <alpha-value>)",
         cream: "rgb(var(--cream) / <alpha-value>)",

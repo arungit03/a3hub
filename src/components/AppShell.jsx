@@ -138,9 +138,121 @@ const ICONS = {
 
 const SIDEBAR_ITEM_FEATURES = Object.freeze({
   attendance: "attendance",
+  assignments: "assignments",
+  marks: "marks",
+  exams: "exams",
+  leave: "leave",
+  notices: "notifications",
+  students: "assignments",
+  staff: "assignments",
   coding: "compilers",
   ai: "ai-chat",
+  a3cad: "a3cad",
+  resume: "resume-builder",
 });
+
+const SEARCH_ALIASES = Object.freeze({
+  dashboard: ["home", "overview", "main page"],
+  activity: ["today", "schedule", "timetable", "subjects today"],
+  "campus-services": ["menu", "services", "modules", "campus menu"],
+  attendance: ["present", "absent", "attendance scan", "face attendance"],
+  marks: ["marks", "progress", "scores", "internal marks", "marksheet"],
+  exams: ["exam", "exam schedule", "exam timetable"],
+  assignments: ["assignment", "homework", "submissions"],
+  leave: ["leave", "leave management", "leave request"],
+  notices: ["notice", "notices", "circular", "circulars", "announcements"],
+  books: ["book", "books", "subject", "subjects", "library", "materials"],
+  tests: ["test", "tests", "quiz"],
+  results: ["result", "results", "test results"],
+  fees: ["fee", "fees", "payment", "dues"],
+  "daily-python": ["daily python", "python challenge", "coding challenge"],
+  "student-details": ["student", "students", "student details", "student info"],
+  "student-assignments": ["student assignments", "submission review", "student submissions"],
+  "parent-replies": ["parent replies", "parent reply", "parent responses"],
+  coding: ["code", "coding", "compiler", "practice"],
+  python: ["python", "python compiler"],
+  c: ["c language", "c compiler"],
+  cpp: ["cpp", "c++", "c plus plus"],
+  ai: ["ai", "assistant", "chatbot"],
+  a3cad: ["cad", "circuit", "logic simulator"],
+  resume: ["resume", "cv", "resume builder"],
+  todo: ["todo", "to do", "tasks", "task list"],
+  help: ["support", "help desk"],
+  profile: ["profile", "account", "settings"],
+});
+
+const normalizeSearchText = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/['\u2019]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9+]+/g, " ")
+    .trim();
+
+const getSearchTokens = (value) =>
+  normalizeSearchText(value)
+    .split(" ")
+    .filter(Boolean);
+
+const getSingleCharacterLabelScore = (entry, normalizedQuery) => {
+  const normalizedLabel = normalizeSearchText(entry?.label);
+  if (!normalizedLabel || normalizedQuery.length !== 1) return -1;
+  if (normalizedLabel.startsWith(normalizedQuery)) {
+    return 1500 - normalizedLabel.length * 0.1;
+  }
+
+  const labelTokens = getSearchTokens(entry?.label);
+  const matchedTokenIndex = labelTokens.findIndex((token) => token.startsWith(normalizedQuery));
+  if (matchedTokenIndex === -1) return -1;
+
+  return 1440 - matchedTokenIndex * 24 - normalizedLabel.length * 0.1;
+};
+
+const scoreSearchText = (candidate, normalizedQuery, queryTokens) => {
+  if (!candidate || !normalizedQuery) return -1;
+  if (candidate === normalizedQuery) return 1200;
+  if (candidate.startsWith(normalizedQuery)) {
+    return 950 - candidate.length * 0.1;
+  }
+
+  const candidateTokens = getSearchTokens(candidate);
+  const prefixTokenMatches = queryTokens.filter((token) =>
+    candidateTokens.some((candidateToken) => candidateToken.startsWith(token))
+  ).length;
+  if (prefixTokenMatches === queryTokens.length && prefixTokenMatches > 0) {
+    return 820 + prefixTokenMatches * 12 - candidateTokens.length;
+  }
+
+  if (candidate.includes(normalizedQuery)) {
+    return 720 - candidate.indexOf(normalizedQuery) * 2 - candidate.length * 0.1;
+  }
+
+  const includesAllTokens =
+    queryTokens.length > 0 && queryTokens.every((token) => candidate.includes(token));
+  if (includesAllTokens) {
+    return 560 + prefixTokenMatches * 8 - candidateTokens.length;
+  }
+
+  return -1;
+};
+
+const getQuickSearchScore = (entry, query) => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return -1;
+  if (normalizedQuery.length === 1) {
+    return getSingleCharacterLabelScore(entry, normalizedQuery);
+  }
+
+  const queryTokens = getSearchTokens(normalizedQuery);
+  const candidates = [entry.label, ...(entry.aliases || [])]
+    .map((value) => normalizeSearchText(value))
+    .filter(Boolean);
+
+  return candidates.reduce((bestScore, candidate) => {
+    const nextScore = scoreSearchText(candidate, normalizedQuery, queryTokens);
+    return nextScore > bestScore ? nextScore : bestScore;
+  }, -1);
+};
 
 const filterSidebarItemsByFeature = (items = []) =>
   items.filter((item) => {
@@ -293,6 +405,161 @@ const findActiveItemId = (pathname, search, sections, bottomItems) => {
   return prefixMatch?.id || "dashboard";
 };
 
+const mergeQuickSearchEntries = (entries) => {
+  const mergedEntries = new Map();
+
+  entries.forEach((entry) => {
+    if (!entry?.to) return;
+    const key = `${entry.to}::${entry.search || ""}`;
+    const previous = mergedEntries.get(key);
+    if (!previous) {
+      mergedEntries.set(key, {
+        ...entry,
+        aliases: Array.from(new Set(entry.aliases || [])),
+      });
+      return;
+    }
+
+    mergedEntries.set(key, {
+      ...previous,
+      aliases: Array.from(new Set([...(previous.aliases || []), ...(entry.aliases || [])])),
+    });
+  });
+
+  return Array.from(mergedEntries.values());
+};
+
+const buildQuickSearchEntries = ({ base, role, sections, bottomItems }) => {
+  const sidebarEntries = sections
+    .flatMap((section) => section.items)
+    .concat(bottomItems.filter((item) => typeof item.to === "string"))
+    .filter((item) => typeof item.to === "string" && item.to.length > 0)
+    .map((item) => ({
+      id: item.id,
+      label: item.label,
+      to: item.to,
+      search: item.search || "",
+      aliases: SEARCH_ALIASES[item.id] || [],
+    }));
+
+  if (role === "parent") {
+    return mergeQuickSearchEntries(sidebarEntries);
+  }
+
+  const extraEntries = [];
+
+  if (isFeatureEnabled("notifications")) {
+    extraEntries.push({
+      id: "notices",
+      label: "Circulars",
+      to: `${base}/menu`,
+      search: "?open=circulars",
+      aliases: SEARCH_ALIASES.notices,
+    });
+  }
+
+  extraEntries.push({
+    id: "fees",
+    label: "Fees",
+    to: `${base}/menu`,
+    search: "?open=fees",
+    aliases: SEARCH_ALIASES.fees,
+  });
+
+  if (isFeatureEnabled("books")) {
+    extraEntries.push({
+      id: "books",
+      label: "Books",
+      to: `${base}/menu/books`,
+      aliases: SEARCH_ALIASES.books,
+    });
+  }
+
+  if (isFeatureEnabled("tests")) {
+    extraEntries.push(
+      {
+        id: "tests",
+        label: "Tests",
+        to: `${base}/test`,
+        aliases: SEARCH_ALIASES.tests,
+      },
+      {
+        id: "results",
+        label: "Results",
+        to: `${base}/results`,
+        aliases: SEARCH_ALIASES.results,
+      }
+    );
+  }
+
+  if (isFeatureEnabled("compilers")) {
+    extraEntries.push(
+      {
+        id: "python",
+        label: "Python Compiler",
+        to: `${base}/code/python`,
+        aliases: SEARCH_ALIASES.python,
+      },
+      {
+        id: "c",
+        label: "C Compiler",
+        to: `${base}/code/c`,
+        aliases: SEARCH_ALIASES.c,
+      },
+      {
+        id: "cpp",
+        label: "C++ Compiler",
+        to: `${base}/code/cpp`,
+        aliases: SEARCH_ALIASES.cpp,
+      }
+    );
+  }
+
+  if (role === "student") {
+    if (isFeatureEnabled("compilers")) {
+      extraEntries.push({
+        id: "daily-python",
+        label: "Daily Python",
+        to: `${base}/menu/daily-python-challenges`,
+        aliases: SEARCH_ALIASES["daily-python"],
+      });
+    }
+
+    if (isFeatureEnabled("todo")) {
+      extraEntries.push({
+        id: "todo",
+        label: "My To-Do List",
+        to: `${base}/menu/my-to-do-list`,
+        aliases: SEARCH_ALIASES.todo,
+      });
+    }
+  }
+
+  if (role === "staff") {
+    extraEntries.push(
+      {
+        id: "student-details",
+        label: "Student Details",
+        to: `${base}/menu/student-details`,
+        aliases: SEARCH_ALIASES["student-details"],
+      },
+      {
+        id: "student-assignments",
+        label: "Student Assignments",
+        to: `${base}/menu/student-assignments`,
+        aliases: SEARCH_ALIASES["student-assignments"],
+      },
+      {
+        id: "parent-replies",
+        label: "Parent Replies",
+        to: `${base}/menu/parent-replies`,
+        aliases: SEARCH_ALIASES["parent-replies"],
+      }
+    );
+  }
+
+  return mergeQuickSearchEntries([...sidebarEntries, ...extraEntries]);
+};
 export default function AppShell() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -302,7 +569,7 @@ export default function AppShell() {
   const [searchTerm, setSearchTerm] = useState("");
   const safeRole = role === "staff" || role === "parent" ? role : "student";
   const roleLabel = getRoleLabel(safeRole);
-  const { sections, bottomItems } = useMemo(
+  const { base, sections, bottomItems } = useMemo(
     () => buildSidebarConfig(safeRole),
     [safeRole]
   );
@@ -313,6 +580,28 @@ export default function AppShell() {
   const activeItemId = useMemo(
     () => findActiveItemId(location.pathname, location.search, sections, bottomItems),
     [bottomItems, location.pathname, location.search, sections]
+  );
+  const quickSearchEntries = useMemo(
+    () => buildQuickSearchEntries({ base, role: safeRole, sections, bottomItems }),
+    [base, bottomItems, safeRole, sections]
+  );
+  const rankedSearchEntries = useMemo(() => {
+    if (!normalizeSearchText(searchTerm)) return [];
+
+    return quickSearchEntries
+      .map((entry) => ({
+        entry,
+        score: getQuickSearchScore(entry, searchTerm),
+      }))
+      .filter((item) => item.score >= 0)
+      .sort((left, right) => {
+        if (right.score !== left.score) return right.score - left.score;
+        return left.entry.label.length - right.entry.label.length;
+      });
+  }, [quickSearchEntries, searchTerm]);
+  const searchSuggestions = useMemo(
+    () => rankedSearchEntries.slice(0, 6).map((item) => item.entry),
+    [rankedSearchEntries]
   );
 
   useEffect(() => {
@@ -335,6 +624,18 @@ export default function AppShell() {
       : baseUserName;
   const avatarLetter = baseUserName ? baseUserName.charAt(0).toUpperCase() : "C";
 
+  const navigateToEntry = (entry) => {
+    if (!entry?.to) return;
+    if (entry.search) {
+      navigate({
+        pathname: entry.to,
+        search: entry.search,
+      });
+      return;
+    }
+    navigate(entry.to);
+  };
+
   const handleNavigateFromSidebar = async (item) => {
     if (item.action === "logout") {
       if (isLoggingOut) return;
@@ -349,16 +650,25 @@ export default function AppShell() {
     }
 
     if (item.to) {
-      if (item.search) {
-        navigate({
-          pathname: item.to,
-          search: item.search,
-        });
-      } else {
-        navigate(item.to);
-      }
+      navigateToEntry(item);
       setMobileSidebarOpen(false);
     }
+  };
+
+  const handleSearchSubmit = () => {
+    const bestMatch = rankedSearchEntries[0]?.entry;
+    if (!bestMatch?.to) return;
+
+    navigateToEntry(bestMatch);
+    setMobileSidebarOpen(false);
+    setSearchTerm("");
+  };
+
+  const handleSearchSelect = (entry) => {
+    if (!entry?.to) return;
+    navigateToEntry(entry);
+    setMobileSidebarOpen(false);
+    setSearchTerm("");
   };
 
   return (
@@ -381,6 +691,9 @@ export default function AppShell() {
             avatarLetter={avatarLetter}
             searchTerm={searchTerm}
             onSearchChange={setSearchTerm}
+            onSearchSubmit={handleSearchSubmit}
+            searchSuggestions={searchSuggestions}
+            onSearchSelect={handleSearchSelect}
             onMenuToggle={() => setMobileSidebarOpen(true)}
             onProfileClick={() => {
               if (profileRoute) navigate(profileRoute);

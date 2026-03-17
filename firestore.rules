@@ -58,6 +58,23 @@ service cloud.firestore {
         && !hasActiveBootstrapAdmin();
     }
 
+    function isSelfServiceStudentSignup(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == "student"
+        && (
+          !("status" in request.resource.data)
+          || request.resource.data.status == "active"
+        );
+    }
+
+    function isSelfServiceStaffSignup(userId) {
+      return isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.role == "staff"
+        && request.resource.data.status in ["pending", "pending_approval"];
+    }
+
     function isAssignmentQuestionFolder(folder) {
       return folder is string
         && folder.matches("^a3hub/assignments/[^/]+/question$");
@@ -89,15 +106,8 @@ service cloud.firestore {
           isAdmin()
           && request.resource.data.role in ["student", "staff", "parent", "admin"]
         )
-        || (
-          isSignedIn()
-          && request.auth.uid == userId
-          && request.resource.data.role == "student"
-          && (
-            !("status" in request.resource.data)
-            || request.resource.data.status == "active"
-          )
-        )
+        || isSelfServiceStudentSignup(userId)
+        || isSelfServiceStaffSignup(userId)
         || isFirstAdminBootstrapForUser(userId);
       allow update: if isAdmin() || (
           isSignedIn()

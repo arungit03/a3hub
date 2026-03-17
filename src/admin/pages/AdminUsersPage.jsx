@@ -31,11 +31,26 @@ const ROLE_FILTER_OPTIONS = [
   { value: "admin", label: "Admin" },
 ];
 
-const ROLE_UPDATE_OPTIONS = ["student", "staff", "parent"];
-
 const toSafeText = (value) => String(value || "").trim();
 
-const createSecondaryStaffAuthAccount = async ({ email, password, name }) => {
+const isPermissionDeniedError = (error) => {
+  const code = String(error?.code || "").trim().toLowerCase();
+  const message = String(error?.message || "").trim().toLowerCase();
+  return (
+    code.includes("permission-denied") ||
+    message.includes("missing or insufficient permissions") ||
+    message.includes("insufficient permissions")
+  );
+};
+
+const resolveAdminActionErrorMessage = (error, fallback) => {
+  if (isPermissionDeniedError(error)) {
+    return "This account is not recognized as an active admin by Firestore. Login with a real admin account and try again.";
+  }
+  return error?.message || fallback;
+};
+
+const createSecondaryUserAuthAccount = async ({ email, password, name }) => {
   const appName = `a3hub-admin-provision-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 7)}`;
@@ -67,12 +82,19 @@ export default function AdminUsersPage() {
   const [statusMessage, setStatusMessage] = useState("");
   const [actionBusyId, setActionBusyId] = useState("");
   const [creatingStaff, setCreatingStaff] = useState(false);
+  const [creatingAdmin, setCreatingAdmin] = useState(false);
   const [staffForm, setStaffForm] = useState({
     name: "",
     email: "",
     password: "",
     department: "",
     designation: "Faculty",
+  });
+  const [adminForm, setAdminForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    title: "Administrator",
   });
 
   const usersQuery = useMemo(() => query(collection(db, "users"), limit(2000)), []);
@@ -131,7 +153,7 @@ export default function AdminUsersPage() {
     setStatusMessage("");
 
     try {
-      const uid = await createSecondaryStaffAuthAccount({ email, password, name });
+      const uid = await createSecondaryUserAuthAccount({ email, password, name });
 
       await setDoc(doc(db, "users", uid), {
         name,
@@ -167,50 +189,76 @@ export default function AdminUsersPage() {
       });
       setStatusMessage("Staff account created and verification email sent.");
     } catch (error) {
-      setStatusMessage(error?.message || "Unable to create staff account.");
+      setStatusMessage(
+        resolveAdminActionErrorMessage(error, "Unable to create staff account.")
+      );
     } finally {
       setCreatingStaff(false);
     }
   };
 
-  const handleRoleChange = async (userItem, nextRole) => {
-    if (!userItem?.id || actionBusyId) return;
-    if (userItem.id === user?.uid) {
-      setStatusMessage("You cannot change your own role.");
+  const handleCreateAdmin = async (event) => {
+    event.preventDefault();
+    if (creatingAdmin) return;
+
+    const name = toSafeText(adminForm.name);
+    const email = toSafeText(adminForm.email).toLowerCase();
+    const password = toSafeText(adminForm.password);
+    const title = toSafeText(adminForm.title) || "Administrator";
+
+    if (!name || !email || !password) {
+      setStatusMessage("Admin name, email, and password are required.");
+      return;
+    }
+    if (password.length < 6) {
+      setStatusMessage("Admin password must be at least 6 characters.");
       return;
     }
 
-    const safeNextRole = normalizeRole(nextRole);
-    if (!ROLE_UPDATE_OPTIONS.includes(safeNextRole)) {
-      setStatusMessage("Invalid role update.");
-      return;
-    }
-
-    setActionBusyId(userItem.id);
+    setCreatingAdmin(true);
     setStatusMessage("");
+
     try {
-      const previousRole = normalizeRole(userItem.role);
-      await updateDoc(doc(db, "users", userItem.id), {
-        role: safeNextRole,
-        updatedAt: serverTimestamp(),
-        updatedBy: user?.uid || null,
+      const uid = await createSecondaryUserAuthAccount({ email, password, name });
+
+      await setDoc(doc(db, "users", uid), {
+        name,
+        email,
+        role: "admin",
+        status: "active",
+        department: "Administration",
+        departmentKey: "administration",
+        designation: title,
+        createdAt: serverTimestamp(),
+        createdBy: user?.uid || null,
+        createdByName: performedBy.name,
       });
+
       await logAuditEvent({
         db,
         action: AUDIT_ACTIONS.USER_ROLE_CHANGED,
         module: "users",
-        targetId: userItem.id,
+        targetId: uid,
         performedBy,
         metadata: {
-          previousRole,
-          nextRole: safeNextRole,
+          role: "admin",
+          reason: "admin_account_created",
         },
       }).catch(() => {});
-      setStatusMessage("User role updated.");
-    } catch {
-      setStatusMessage("Unable to update role.");
+
+      setAdminForm({
+        name: "",
+        email: "",
+        password: "",
+        title: "Administrator",
+      });
+      setStatusMessage("Admin account created and verification email sent.");
+    } catch (error) {
+      setStatusMessage(
+        resolveAdminActionErrorMessage(error, "Unable to create admin account.")
+      );
     } finally {
-      setActionBusyId("");
+      setCreatingAdmin(false);
     }
   };
 
@@ -247,8 +295,10 @@ export default function AdminUsersPage() {
         },
       }).catch(() => {});
       setStatusMessage(`User ${nextStatus === "blocked" ? "blocked" : "activated"}.`);
-    } catch {
-      setStatusMessage("Unable to update user status.");
+    } catch (error) {
+      setStatusMessage(
+        resolveAdminActionErrorMessage(error, "Unable to update user status.")
+      );
     } finally {
       setActionBusyId("");
     }
@@ -282,8 +332,8 @@ export default function AdminUsersPage() {
         },
       }).catch(() => {});
       setStatusMessage("User Firestore profile deleted.");
-    } catch {
-      setStatusMessage("Unable to delete user.");
+    } catch (error) {
+      setStatusMessage(resolveAdminActionErrorMessage(error, "Unable to delete user."));
     } finally {
       setActionBusyId("");
     }
@@ -298,64 +348,118 @@ export default function AdminUsersPage() {
         <h2 className="text-2xl font-bold text-slate-900">Manage Users and Roles</h2>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-900">Create Staff Account</h3>
-        <p className="text-xs text-slate-500">
-          Creates Firebase Auth account + Firestore profile with `staff` role.
-        </p>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Create Staff Account</h3>
+          <p className="text-xs text-slate-500">
+            Creates Firebase Auth account + Firestore profile with `staff` role.
+          </p>
 
-        <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateStaff}>
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Full name"
-            value={staffForm.name}
-            onChange={(event) =>
-              setStaffForm((prev) => ({ ...prev, name: event.target.value }))
-            }
-          />
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Email"
-            type="email"
-            value={staffForm.email}
-            onChange={(event) =>
-              setStaffForm((prev) => ({ ...prev, email: event.target.value }))
-            }
-          />
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Temporary password"
-            type="password"
-            value={staffForm.password}
-            onChange={(event) =>
-              setStaffForm((prev) => ({ ...prev, password: event.target.value }))
-            }
-          />
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-            placeholder="Department"
-            value={staffForm.department}
-            onChange={(event) =>
-              setStaffForm((prev) => ({ ...prev, department: event.target.value }))
-            }
-          />
-          <input
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-            placeholder="Designation"
-            value={staffForm.designation}
-            onChange={(event) =>
-              setStaffForm((prev) => ({ ...prev, designation: event.target.value }))
-            }
-          />
-          <button
-            type="submit"
-            disabled={creatingStaff}
-            className="md:col-span-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
-          >
-            {creatingStaff ? "Creating staff account..." : "Create Staff"}
-          </button>
-        </form>
-      </section>
+          <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateStaff}>
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Full name"
+              value={staffForm.name}
+              onChange={(event) =>
+                setStaffForm((prev) => ({ ...prev, name: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Email"
+              type="email"
+              value={staffForm.email}
+              onChange={(event) =>
+                setStaffForm((prev) => ({ ...prev, email: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Temporary password"
+              type="password"
+              value={staffForm.password}
+              onChange={(event) =>
+                setStaffForm((prev) => ({ ...prev, password: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Department"
+              value={staffForm.department}
+              onChange={(event) =>
+                setStaffForm((prev) => ({ ...prev, department: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+              placeholder="Designation"
+              value={staffForm.designation}
+              onChange={(event) =>
+                setStaffForm((prev) => ({ ...prev, designation: event.target.value }))
+              }
+            />
+            <button
+              type="submit"
+              disabled={creatingStaff}
+              className="md:col-span-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-500 disabled:opacity-60"
+            >
+              {creatingStaff ? "Creating staff account..." : "Create Staff"}
+            </button>
+          </form>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-900">Create Admin Account</h3>
+          <p className="text-xs text-slate-500">
+            Adds another admin from this secure panel while public admin signup stays
+            disabled.
+          </p>
+
+          <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateAdmin}>
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Full name"
+              value={adminForm.name}
+              onChange={(event) =>
+                setAdminForm((prev) => ({ ...prev, name: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Email"
+              type="email"
+              value={adminForm.email}
+              onChange={(event) =>
+                setAdminForm((prev) => ({ ...prev, email: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Temporary password"
+              type="password"
+              value={adminForm.password}
+              onChange={(event) =>
+                setAdminForm((prev) => ({ ...prev, password: event.target.value }))
+              }
+            />
+            <input
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
+              placeholder="Admin title"
+              value={adminForm.title}
+              onChange={(event) =>
+                setAdminForm((prev) => ({ ...prev, title: event.target.value }))
+              }
+            />
+            <button
+              type="submit"
+              disabled={creatingAdmin}
+              className="md:col-span-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60"
+            >
+              {creatingAdmin ? "Creating admin account..." : "Create Admin"}
+            </button>
+          </form>
+        </section>
+      </div>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
@@ -411,26 +515,19 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-2 py-3 text-slate-600">{item.email || "-"}</td>
                     <td className="px-2 py-3">
-                      {normalizedRole === "admin" ? (
-                        <span className="inline-flex rounded-full bg-indigo-100 px-2 py-1 text-xs font-semibold text-indigo-700">
-                          admin
-                        </span>
-                      ) : (
-                        <select
-                          className="rounded-lg border border-slate-200 px-2 py-1 text-xs"
-                          value={normalizedRole}
-                          disabled={actionBusyId === item.id || isSelf}
-                          onChange={(event) =>
-                            handleRoleChange(item, event.target.value)
-                          }
-                        >
-                          {ROLE_UPDATE_OPTIONS.map((roleOption) => (
-                            <option key={roleOption} value={roleOption}>
-                              {roleOption}
-                            </option>
-                          ))}
-                        </select>
-                      )}
+                      <span
+                        className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
+                          normalizedRole === "admin"
+                            ? "bg-indigo-100 text-indigo-700"
+                            : normalizedRole === "staff"
+                            ? "bg-sky-100 text-sky-700"
+                            : normalizedRole === "parent"
+                            ? "bg-amber-100 text-amber-700"
+                            : "bg-slate-100 text-slate-700"
+                        }`}
+                      >
+                        {normalizedRole}
+                      </span>
                     </td>
                     <td className="px-2 py-3">
                       <span

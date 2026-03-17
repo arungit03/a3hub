@@ -1,3 +1,7 @@
+/**
+ * @param {unknown} value
+ * @returns {number | null}
+ */
 export const extractNumericQrValue = (value) => {
   const rawValue = String(value ?? "").trim();
   if (!rawValue) return null;
@@ -12,6 +16,10 @@ export const extractNumericQrValue = (value) => {
   return Number.isSafeInteger(parsed) ? parsed : null;
 };
 
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
 const normalizeIdentifierToken = (value) => {
   if (value === null || value === undefined) return "";
   if (typeof value === "number") {
@@ -20,6 +28,10 @@ const normalizeIdentifierToken = (value) => {
   return String(value).trim();
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string[]}
+ */
 export const collectIdentifierTokens = (...values) => {
   const tokens = new Set();
 

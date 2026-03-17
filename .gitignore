@@ -15,6 +15,8 @@ dist-ssr
 .env.*
 !.env.example
 public/firebase-messaging-sw-config.js
+public/gemini-runtime-config.js
+public/runtime-config.js
 
 # Editor directories and files
 .vscode/*
@@ -26,4 +28,3 @@ public/firebase-messaging-sw-config.js
 *.njsproj
 *.sln
 *.sw?
-

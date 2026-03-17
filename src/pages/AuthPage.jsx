@@ -1,13 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { applyActionCode } from "firebase/auth";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { applyActionCode, checkActionCode } from "firebase/auth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/auth";
-import { auth } from "../lib/firebase";
+import { auth, ensureFirebaseAuth } from "../lib/firebase";
 import { prefetchRoute } from "../lib/routePrefetch";
 import { useToast } from "../hooks/useToast";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import { useDirtyPrompt } from "../hooks/useDirtyPrompt";
-import FaceAttendanceModal from "../components/FaceAttendanceModal";
+
+const FaceAttendanceModal = lazy(() => import("../components/FaceAttendanceModal"));
 
 const AUTH_BACKGROUND_IMAGE = "/auth-campus.png";
 const AUTH_DRAFT_KEY = "a3hub:draft:auth";
@@ -16,6 +17,8 @@ const SECURITY_EMAIL_INBOX_HINT =
   "Check Primary inbox first. If Gmail sends it to Spam, mark Not spam to move future emails to Primary.";
 const TOO_MANY_REQUESTS_MESSAGE =
   "Too many requests right now. Please wait 15 minutes and try again.";
+const PARENT_SIGNUP_DISABLED_MESSAGE =
+  "Parent signup is disabled. Use login with student credentials.";
 const FACE_MATCH_THRESHOLD = 0.74;
 const FACE_MIN_VECTOR_LENGTH = 64;
 
@@ -40,18 +43,48 @@ const resolveAuthErrorMessage = (err, fallback) => {
   if (err?.code === "auth/too-many-requests") {
     return TOO_MANY_REQUESTS_MESSAGE;
   }
+  if (err?.code === "auth/operation-not-allowed") {
+    return "Email/Password sign-in is disabled in Firebase Authentication. Enable it in Firebase Console.";
+  }
+  if (
+    err?.code === "auth/invalid-continue-uri" ||
+    err?.code === "auth/unauthorized-continue-uri"
+  ) {
+    return "Verification link configuration is invalid for this domain. Add your app domain to Firebase Authorized domains.";
+  }
+  if (err?.code === "auth/network-request-failed") {
+    return "Network error while sending verification email. Check internet and try again.";
+  }
+  if (err?.code === "auth/internal-error") {
+    return "Firebase could not send the verification email right now. Check Firebase Authentication templates and authorized domains.";
+  }
+  if (err?.code === "firebase/not-configured") {
+    return err?.message || "Firebase is not configured for this deploy.";
+  }
   if (err?.code === "auth/quota-exceeded") {
     return "Service quota reached. Please try again later.";
   }
   return err?.message || fallback;
 };
 
+const resolveVerificationLinkErrorMessage = (err) => {
+  if (
+    err?.code === "auth/invalid-action-code" ||
+    err?.code === "auth/expired-action-code"
+  ) {
+    return "This verification link is invalid, expired, or replaced by a newer email. If you requested multiple verification emails, open the latest email link only.";
+  }
+  return err?.message || "Unable to verify email right now.";
+};
+
 export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const {
+    firebaseReady,
     login,
     signup,
+    startupIssue,
     resetPassword,
     user,
     logout,
@@ -84,6 +117,9 @@ export default function AuthPage() {
   const [faceRegisterError, setFaceRegisterError] = useState("");
   const [resendingVerification, setResendingVerification] = useState(false);
   const [processingVerificationLink, setProcessingVerificationLink] = useState(false);
+  const authUnavailableMessage =
+    startupIssue ||
+    "Authentication is unavailable for this deploy. Set Firebase environment variables and redeploy.";
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -102,20 +138,37 @@ export default function AuthPage() {
         setError("");
         setMessage("");
 
+        if (!firebaseReady) {
+          if (!cancelled) {
+            setError(authUnavailableMessage);
+            toastError(authUnavailableMessage);
+            setProcessingVerificationLink(false);
+            navigate("/", { replace: true });
+          }
+          return;
+        }
+
         try {
+          await ensureFirebaseAuth();
+          const actionInfo = await checkActionCode(auth, oobCode);
           await applyActionCode(auth, oobCode);
           if (cancelled) return;
+          const verifiedEmail = String(actionInfo?.data?.email || "")
+            .trim()
+            .toLowerCase();
+          if (verifiedEmail) {
+            setForm((prev) => ({
+              ...prev,
+              email: verifiedEmail,
+            }));
+          }
           setAwaitingVerification(false);
           setMode("login");
           setMessage("Email verified successfully. You can login now.");
           success("Email verified successfully.");
         } catch (err) {
           if (cancelled) return;
-          const nextError =
-            err?.code === "auth/invalid-action-code" ||
-            err?.code === "auth/expired-action-code"
-              ? "Verification link is invalid or expired. Resend verification email."
-              : err?.message || "Unable to verify email right now.";
+          const nextError = resolveVerificationLinkErrorMessage(err);
           setError(nextError);
           toastError(nextError);
         } finally {
@@ -135,7 +188,15 @@ export default function AuthPage() {
     if (user) {
       navigate("/home");
     }
-  }, [location.search, navigate, success, toastError, user]);
+  }, [
+    authUnavailableMessage,
+    firebaseReady,
+    location.search,
+    navigate,
+    success,
+    toastError,
+    user,
+  ]);
 
   const clearFieldError = useCallback((field) => {
     setFieldErrors((prev) => {
@@ -145,6 +206,34 @@ export default function AuthPage() {
       return next;
     });
   }, []);
+
+  const resetAuthFeedback = useCallback(() => {
+    setFieldErrors({});
+    setError("");
+    setMessage("");
+  }, []);
+
+  const resetFaceRegistration = useCallback(() => {
+    setIsFaceRegisterModalOpen(false);
+    setRegisteredFaceSamples([]);
+    setRegisteredFaceVector([]);
+    setRegisteredFaceVectorLength(0);
+    setFaceRegisterStatus("");
+    setFaceRegisterError("");
+  }, []);
+
+  const switchToLogin = useCallback(
+    (nextMessage = "", { announce = false } = {}) => {
+      setAwaitingVerification(false);
+      setMode("login");
+      setError("");
+      setMessage(nextMessage);
+      if (announce && nextMessage) {
+        info(nextMessage);
+      }
+    },
+    [info]
+  );
 
   const onChange = (event) => {
     const { name, value } = event.target;
@@ -187,12 +276,8 @@ export default function AuthPage() {
     if (mode === "signup" && selectedRole === "student") {
       return;
     }
-    setRegisteredFaceSamples([]);
-    setRegisteredFaceVector([]);
-    setRegisteredFaceVectorLength(0);
-    setFaceRegisterStatus("");
-    setFaceRegisterError("");
-  }, [mode, selectedRole]);
+    resetFaceRegistration();
+  }, [mode, resetFaceRegistration, selectedRole]);
 
   const restoreDraft = useCallback((draftValue) => {
     if (!draftValue || typeof draftValue !== "object") return;
@@ -208,9 +293,7 @@ export default function AuthPage() {
         : {};
 
     setMode(
-      (draftRole === "parent" || draftRole === "admin") && draftMode === "signup"
-        ? "login"
-        : draftMode
+      draftRole === "parent" && draftMode === "signup" ? "login" : draftMode
     );
     setSelectedRole(draftRole);
     sessionStorage.setItem("roleSelection", draftRole);
@@ -282,56 +365,23 @@ export default function AuthPage() {
     setSelectedRole(value);
     sessionStorage.setItem("roleSelection", value);
     if (value === "parent" && mode === "signup") {
-      setMode("login");
-      setAwaitingVerification(false);
-      setError("");
-      setMessage("Parent signup is disabled. Use login with student credentials.");
-      info("Parent signup is disabled. Use login with student credentials.");
+      switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
       return;
     }
-    if (value === "admin" && mode === "signup") {
-      setMode("login");
-      setAwaitingVerification(false);
-      setError("");
-      setMessage("Admin signup is disabled. Login with existing admin account.");
-      info("Admin signup is disabled. Login with existing admin account.");
-      return;
-    }
-    setFieldErrors({});
-    setError("");
-    setMessage("");
+    resetAuthFeedback();
   };
 
   const handleToggleMode = () => {
     if (selectedRole === "parent") {
-      setMode("login");
-      setAwaitingVerification(false);
-      setError("");
-      setMessage("Parent signup is disabled. Use login with student credentials.");
-      info("Parent signup is disabled. Use login with student credentials.");
-      return;
-    }
-    if (selectedRole === "admin") {
-      setMode("login");
-      setAwaitingVerification(false);
-      setError("");
-      setMessage("Admin signup is disabled. Login with existing admin account.");
-      info("Admin signup is disabled. Login with existing admin account.");
+      switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
       return;
     }
     setMode((prev) => (prev === "login" ? "signup" : "login"));
     setAwaitingVerification(false);
-    setFieldErrors({});
-    setError("");
-    setMessage("");
+    resetAuthFeedback();
   };
 
-  const handleShowLogin = () => {
-    setAwaitingVerification(false);
-    setMode("login");
-    setError("");
-    setMessage("");
-  };
+  const handleShowLogin = () => switchToLogin();
 
   const roleLabel =
     selectedRole === "staff"
@@ -343,6 +393,7 @@ export default function AuthPage() {
       : "Student";
   const isLoginMode = mode === "login";
   const isParentRole = selectedRole === "parent";
+  const isAdminRole = selectedRole === "admin";
   const hasRegisteredFace = registeredFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
   const isDirty = useMemo(() => {
     const hasFieldContent = Object.values(form).some((value) =>
@@ -439,6 +490,11 @@ export default function AuthPage() {
     event.preventDefault();
     setError("");
     setMessage("");
+    if (!firebaseReady) {
+      setError(authUnavailableMessage);
+      toastError(authUnavailableMessage);
+      return;
+    }
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setFieldErrors(validationErrors);
@@ -451,15 +507,7 @@ export default function AuthPage() {
 
     try {
       if (mode !== "login" && selectedRole === "parent") {
-        setMode("login");
-        setMessage("Parent signup is disabled. Use login with student credentials.");
-        info("Parent signup is disabled. Use login with student credentials.");
-        return;
-      }
-      if (mode !== "login" && selectedRole === "admin") {
-        setMode("login");
-        setMessage("Admin signup is disabled. Login with existing admin account.");
-        info("Admin signup is disabled. Login with existing admin account.");
+        switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
         return;
       }
       if (mode === "login") {
@@ -481,7 +529,7 @@ export default function AuthPage() {
         return;
       }
 
-      await signup({
+      const signupResult = await signup({
         email: form.email,
         password: form.password,
         role: selectedRole,
@@ -499,8 +547,16 @@ export default function AuthPage() {
       setAwaitingVerification(true);
       setMode("login");
       clearDraft();
-      success("Account created. Security verification email sent.");
-      info(SECURITY_EMAIL_INBOX_HINT);
+      if (signupResult?.verificationEmailStatus === "cooldown") {
+        const nextMessage =
+          "Account created, but Firebase could not send the verification email right now. Tap Resend Verification Email to try again.";
+        setMessage(nextMessage);
+        info(nextMessage);
+      } else {
+        setMessage("Verification email sent. Check inbox/spam and use the latest email link.");
+        success("Account created. Security verification email sent.");
+        info(SECURITY_EMAIL_INBOX_HINT);
+      }
     } catch (err) {
       const nextError = resolveAuthErrorMessage(
         err,
@@ -516,6 +572,11 @@ export default function AuthPage() {
   const handleReset = async () => {
     setError("");
     setMessage("");
+    if (!firebaseReady) {
+      setError(authUnavailableMessage);
+      toastError(authUnavailableMessage);
+      return;
+    }
     const resetEmail = form.email.trim();
 
     if (!resetEmail) {
@@ -560,6 +621,12 @@ export default function AuthPage() {
     setError("");
     setMessage("");
 
+    if (!firebaseReady) {
+      setError(authUnavailableMessage);
+      toastError(authUnavailableMessage);
+      return;
+    }
+
     const safeEmail = form.email.trim();
     const safePassword = form.password.trim();
 
@@ -578,10 +645,10 @@ export default function AuthPage() {
         password: safePassword,
       });
       if (result?.alreadyVerified) {
-        setMessage("Email already verified. You can login now.");
+        switchToLogin("Email already verified. You can login now.");
         success("Email already verified.");
       } else {
-        setMessage("Verification email sent again. Check inbox/spam.");
+        setMessage("Fresh verification email sent. Check inbox/spam and open the latest email link.");
         success("Verification email resent.");
         info(SECURITY_EMAIL_INBOX_HINT);
       }
@@ -665,6 +732,17 @@ export default function AuthPage() {
             </p>
           </div>
 
+          {error ? (
+            <div className="mb-3 rounded-xl border border-red-200/[0.55] bg-red-500/[0.22] px-3 py-2 text-xs font-medium text-red-50">
+              {error}
+            </div>
+          ) : null}
+          {message ? (
+            <div className="mb-3 rounded-xl border border-ocean/45 bg-sand/88 px-3 py-2 text-xs font-medium text-ink/85">
+              {message}
+            </div>
+          ) : null}
+
           <div className="grid gap-3">
             <button
               type="button"
@@ -684,6 +762,10 @@ export default function AuthPage() {
               Back to Login
             </button>
           </div>
+
+          <p className="mt-3 text-center text-xs font-semibold text-ink/72">
+            Repeated resend clicks request a fresh verification email. Open the latest email link.
+          </p>
         </div>
       </div>
     );
@@ -699,22 +781,28 @@ export default function AuthPage() {
       <div className={authOverlayClassName} />
       <div className={authGlowClassName} />
 
-      <div className={`${panelClassName} max-w-[470px]`}>
-        <div className="mb-6 text-center">
+        <div className={`${panelClassName} max-w-[470px]`}>
+          <div className="mb-6 text-center">
           <p className="text-[0.7rem] font-semibold uppercase tracking-[0.26em] text-ink/72">
             {roleLabel} Portal
           </p>
           <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl">
             {isLoginMode ? "Login" : "Sign Up"}
           </h1>
-          <p className="mt-2 text-sm text-ink/80">
-            {isLoginMode
-              ? "Login to continue to your A3 Hub dashboard"
-              : `Create your ${roleLabel.toLowerCase()} account`}
-          </p>
-        </div>
+            <p className="mt-2 text-sm text-ink/80">
+              {isLoginMode
+                ? "Login to continue to your A3 Hub dashboard"
+                : `Create your ${roleLabel.toLowerCase()} account`}
+            </p>
+          </div>
 
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
+          {!firebaseReady ? (
+            <div className="mb-4 rounded-2xl border border-amber-300/80 bg-amber-100/90 px-4 py-3 text-sm font-medium text-amber-950">
+              {authUnavailableMessage}
+            </div>
+          ) : null}
+
+          <form className="flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
           <div className="grid gap-2">
             <label className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/72">
               Role
@@ -897,18 +985,20 @@ export default function AuthPage() {
 
           {isLoginMode ? (
             <div className="flex justify-end text-sm">
-              <button
-                type="button"
-                onClick={handleReset}
-                className="font-semibold text-ink/80 transition-colors hover:text-ocean"
-              >
-                Forget Password
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={!firebaseReady}
+              className="font-semibold text-ink/80 transition-colors hover:text-ocean"
+            >
+              Forget Password
               </button>
             </div>
           ) : (
             <button
               type="button"
               onClick={handleReset}
+              disabled={!firebaseReady}
               className="self-start text-sm font-semibold text-ink/80 transition-colors hover:text-ocean"
             >
               Forgot / Change password?
@@ -928,7 +1018,7 @@ export default function AuthPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !firebaseReady}
             className="mt-1 rounded-full bg-[linear-gradient(135deg,rgb(var(--ocean))_0%,rgb(var(--aurora))_100%)] px-4 py-3 text-base font-semibold text-white shadow-[0_14px_28px_-18px_rgb(var(--cocoa)_/_0.42)] transition-all hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-80"
           >
             {loading
@@ -951,22 +1041,32 @@ export default function AuthPage() {
               onClick={handleToggleMode}
               className="ml-1 font-semibold text-ink/84 underline underline-offset-4 transition-colors hover:text-ocean"
             >
-              {isLoginMode ? "Register" : "Login"}
+              {isLoginMode && isAdminRole ? "Register Admin" : isLoginMode ? "Register" : "Login"}
             </button>
+            {isAdminRole ? (
+              <p className="mt-2 text-xs text-ink/68">
+                Public admin registration is only for the first admin account. After
+                that, create extra admins from the Admin Users panel.
+              </p>
+            ) : null}
           </div>
         )}
       </div>
 
-      {mode === "signup" && selectedRole === "student" ? (
-        <FaceAttendanceModal
-          open={isFaceRegisterModalOpen}
-          mode="register"
-          title="Student Face Registration"
-          description="Look straight at the camera. A single front-facing face profile will be captured automatically for your student account."
-          thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
-          onClose={() => setIsFaceRegisterModalOpen(false)}
-          onDescriptor={handleRegisterFaceDescriptor}
-        />
+      {mode === "signup" &&
+      selectedRole === "student" &&
+      isFaceRegisterModalOpen ? (
+        <Suspense fallback={null}>
+          <FaceAttendanceModal
+            open={isFaceRegisterModalOpen}
+            mode="register"
+            title="Student Face Registration"
+            description="Look straight at the camera. A single front-facing face profile will be captured automatically for your student account."
+            thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
+            onClose={() => setIsFaceRegisterModalOpen(false)}
+            onDescriptor={handleRegisterFaceDescriptor}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

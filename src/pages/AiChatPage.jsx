@@ -68,14 +68,12 @@ const makeMessage = ({
   text,
   payloadText,
   mode = "",
-  model = "",
 }) => ({
   id: makeId(),
   role,
   text: String(text || ""),
   payloadText: String(payloadText || text || ""),
   mode: String(mode || ""),
-  model: String(model || ""),
   createdAt: Date.now(),
 });
 
@@ -227,7 +225,6 @@ export default function AiChatPage() {
   const [prompt, setPrompt] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
-  const [activeModel, setActiveModel] = useState("");
 
   const messagesRef = useRef(messages);
   const textareaRef = useRef(null);
@@ -301,10 +298,8 @@ export default function AiChatPage() {
         role: "assistant",
         text: response?.text || "",
         payloadText: response?.text || "",
-        model: response?.model || transportLabel,
       });
 
-      setActiveModel(String(response?.model || transportLabel).trim());
       setMessages((prev) => {
         const next = [...prev, assistantMessage];
         messagesRef.current = next;
@@ -335,7 +330,6 @@ export default function AiChatPage() {
     setPrompt("");
     setMode("doubt");
     setError("");
-    setActiveModel("");
     window.requestAnimationFrame(() => {
       focusComposer();
       autosizeTextarea(textareaRef.current, false);
@@ -445,14 +439,6 @@ export default function AiChatPage() {
                   <h2 className="truncate text-lg font-semibold text-zinc-950 sm:text-xl">
                     Campus Assistant
                   </h2>
-                  <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
-                    {transportLabel}
-                  </span>
-                  {activeModel ? (
-                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                      {activeModel}
-                    </span>
-                  ) : null}
                 </div>
               </div>
             </div>
@@ -567,11 +553,6 @@ export default function AiChatPage() {
                             {isUser && message.mode ? (
                               <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-1 text-[11px] font-semibold text-zinc-600">
                                 {message.mode === "quiz" ? "Quiz request" : "Tutor request"}
-                              </span>
-                            ) : null}
-                            {!isUser && message.model ? (
-                              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
-                                {message.model}
                               </span>
                             ) : null}
                           </div>

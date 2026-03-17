@@ -28,8 +28,8 @@ import { menuItems } from "../data/menuItems";
 import { useAuth } from "../state/auth";
 import {
   db,
+  ensureFirebaseStorage,
   getStorageForBucket,
-  storage,
   storageBuckets,
 } from "../lib/firebase";
 import {
@@ -62,911 +62,46 @@ import {
   where,
 } from "firebase/firestore";
 import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
-
-const SERVICE_CARD_META = Object.freeze({
-  calendar: {
-    icon: CalendarDays,
-    description: "Track events, holidays, and academic milestones.",
-  },
-  test: {
-    icon: ClipboardCheck,
-    description: "Attend tests and review performance quickly.",
-  },
-  assignments: {
-    icon: FileText,
-    description: "Upload, review, and submit assignment work.",
-  },
-  "student-assignments": {
-    icon: FileText,
-    description: "Review student assignment submissions.",
-  },
-  "parent-replies": {
-    icon: NotebookPen,
-    description: "Check parent communication and follow-ups.",
-  },
-  books: {
-    icon: BookOpen,
-    description: "Open subject resources and digital books.",
-  },
-  leave: {
-    icon: BadgeCheck,
-    description: "Manage leave applications and approvals.",
-  },
-  exam: {
-    icon: GraduationCap,
-    description: "View upcoming exam plans and timetables.",
-  },
-  "marks-progress": {
-    icon: BarChart3,
-    description: "Monitor marks trends and progress reports.",
-  },
-  "student-details": {
-    icon: NotebookPen,
-    description: "Access student profile and department details.",
-  },
-  "daily-python-challenges": {
-    icon: Code2,
-    description: "Practice daily coding with guided challenges.",
-  },
-  "interview-quiz-contact": {
-    icon: Bot,
-    description: "Prepare with AI-driven interview support.",
-  },
-  "my-todo-list": {
-    icon: CheckCircle2,
-    description: "Organize tasks and track daily productivity.",
-  },
-  "resume-builder": {
-    icon: Sparkles,
-    description: "Generate resumes with structured AI guidance.",
-  },
-  fees: {
-    icon: Landmark,
-    description: "View fee details, pending dues, and receipts.",
-  },
-  circulars: {
-    icon: Megaphone,
-    description: "Read latest notices and campus announcements.",
-  },
-});
-
-const ACTION_BADGE_CLASS = Object.freeze({
-  Open: "bg-sky-50 text-sky-700",
-  View: "bg-indigo-50 text-indigo-700",
-  Manage: "bg-indigo-50 text-indigo-700",
-  Practice: "bg-emerald-50 text-emerald-700",
-  AI: "bg-violet-50 text-violet-700",
-  Edit: "bg-amber-50 text-amber-700",
-});
-
-const formatFileSize = (bytes) => {
-  if (!bytes && bytes !== 0) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-};
-
-const formatNoticeDate = (value) => {
-  if (!value) return "";
-  const date = value?.toDate ? value.toDate() : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-};
-
-const getNoticeMeta = (notice) => {
-  const dateLabel = formatNoticeDate(notice?.createdAt);
-  const author = notice?.createdByName || "";
-  const audienceLabel =
-    notice?.departmentKey === "all"
-      ? "All departments"
-      : notice?.departmentLabel ||
-        (notice?.departmentKey ? notice.departmentKey.toUpperCase() : "");
-  const audienceMeta =
-    audienceLabel && audienceLabel !== "All departments"
-      ? `Dept: ${audienceLabel}`
-      : audienceLabel;
-  const showMeta =
-    (dateLabel && dateLabel.length > 0) ||
-    (author && author.length > 0) ||
-    (audienceMeta && audienceMeta.length > 0);
-
-  return { dateLabel, author, audienceMeta, showMeta };
-};
-
-const normalizeDepartment = (value) =>
-  (value || "").trim().toLowerCase();
-
-const EMPTY_VALUE = "-";
-
-const toInputValue = (value) => {
-  if (value === 0) return "0";
-  if (value === null || value === undefined) return "";
-  return String(value).trim();
-};
-
-const pickFirstValue = (...values) => {
-  for (const value of values) {
-    const normalized = toInputValue(value);
-    if (normalized) return normalized;
-  }
-  return "";
-};
-
-const toDisplayValue = (value, fallback = EMPTY_VALUE) => {
-  if (value === 0) return "0";
-  if (!value) return fallback;
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    return trimmed || fallback;
-  }
-  return String(value);
-};
-
-const splitParentNames = (value) => {
-  const raw = toInputValue(value);
-  if (!raw) {
-    return { fatherName: "", motherName: "" };
-  }
-
-  const separators = ["&", "/", ",", "|"];
-  for (const separator of separators) {
-    if (!raw.includes(separator)) continue;
-    const [first, second] = raw.split(separator);
-    return {
-      fatherName: toInputValue(first),
-      motherName: toInputValue(second),
-    };
-  }
-
-  return { fatherName: raw, motherName: "" };
-};
-
-const buildStudentDetails = (value) => {
-  const nestedDetails =
-    value?.studentDetails && typeof value.studentDetails === "object"
-      ? value.studentDetails
-      : {};
-  const parentNameFallback = splitParentNames(
-    pickFirstValue(
-      nestedDetails.parentNames,
-      nestedDetails.parentName,
-      nestedDetails.fatherMotherName,
-      value?.parentNames,
-      value?.parentName,
-      value?.fatherMotherName
-    )
-  );
-
-  return {
-    rollNo: pickFirstValue(
-      nestedDetails.rollNo,
-      nestedDetails.rollNO,
-      nestedDetails.roll_no,
-      nestedDetails.registerNumber,
-      nestedDetails.registerNo,
-      nestedDetails.registrationNo,
-      value?.rollNo,
-      value?.rollNO,
-      value?.roll_no,
-      value?.registerNumber,
-      value?.registerNo,
-      value?.registrationNo,
-      value?.studentRollNo
-    ),
-    department: pickFirstValue(
-      nestedDetails.department,
-      nestedDetails.departmentName,
-      nestedDetails.dept,
-      value?.department,
-      value?.departmentName,
-      value?.dept
-    ),
-    email: pickFirstValue(
-      nestedDetails.email,
-      nestedDetails.emailId,
-      nestedDetails.emailID,
-      nestedDetails.studentEmail,
-      value?.email,
-      value?.emailId,
-      value?.emailID,
-      value?.studentEmail
-    ),
-    studentMobile: pickFirstValue(
-      nestedDetails.studentMobile,
-      nestedDetails.studentMobileNumber,
-      nestedDetails.mobile,
-      nestedDetails.phone,
-      nestedDetails.phoneNumber,
-      nestedDetails.studentPhone,
-      nestedDetails.whatsapp,
-      value?.studentMobile,
-      value?.studentMobileNumber,
-      value?.mobile,
-      value?.phone,
-      value?.phoneNumber,
-      value?.studentPhone,
-      value?.whatsapp
-    ),
-    bloodGroup: pickFirstValue(
-      nestedDetails.bloodGroup,
-      nestedDetails.blood_group,
-      value?.bloodGroup,
-      value?.blood_group
-    ),
-    fatherName: pickFirstValue(
-      nestedDetails.fatherName,
-      nestedDetails.fathersName,
-      value?.fatherName,
-      value?.fathersName,
-      parentNameFallback.fatherName
-    ),
-    motherName: pickFirstValue(
-      nestedDetails.motherName,
-      nestedDetails.mothersName,
-      value?.motherName,
-      value?.mothersName,
-      parentNameFallback.motherName
-    ),
-    parentMobile: pickFirstValue(
-      nestedDetails.parentMobile,
-      nestedDetails.parentMobileNumber,
-      nestedDetails.parentPhone,
-      nestedDetails.guardianMobile,
-      nestedDetails.fatherMobile,
-      nestedDetails.motherMobile,
-      value?.parentMobile,
-      value?.parentMobileNumber,
-      value?.parentPhone,
-      value?.guardianMobile,
-      value?.fatherMobile,
-      value?.motherMobile
-    ),
-  };
-};
-
-const calendarTypeOptions = [
-  {
-    value: "event",
-    label: "Event",
-    dotClass: "bg-emerald-500",
-    chipClass: "border-emerald-200 bg-emerald-100/80 text-emerald-900",
-    rowClass: "border-emerald-200 bg-emerald-100/60",
-    dateTileClass: "border-emerald-200 bg-emerald-50",
-  },
-  {
-    value: "holiday",
-    label: "Holiday",
-    dotClass: "bg-rose-500",
-    chipClass: "border-rose-200 bg-rose-100/80 text-rose-900",
-    rowClass: "border-rose-200 bg-rose-100/60",
-    dateTileClass: "border-rose-200 bg-rose-50",
-  },
-  {
-    value: "iqac",
-    label: "IQAC Note",
-    dotClass: "bg-amber-500",
-    chipClass: "border-amber-200 bg-amber-100/80 text-amber-900",
-    rowClass: "border-amber-200 bg-amber-100/60",
-    dateTileClass: "border-amber-200 bg-amber-50",
-  },
-];
-
-const getCalendarTypeMeta = (value) => {
-  const found = calendarTypeOptions.find((item) => item.value === value);
-  return found || calendarTypeOptions[0];
-};
-
-const formatDateKey = (date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const formatCalendarDateLabel = (dateKey) => {
-  if (!dateKey) return "";
-  const date = new Date(`${dateKey}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "2-digit",
-  });
-};
-
-const getCalendarDateParts = (dateKey) => {
-  const label = formatCalendarDateLabel(dateKey);
-  const [month = "Day", day = "--"] = label.split(" ");
-  return { month, day };
-};
-
-const DAILY_PYTHON_CHALLENGE_COLLECTION = "dailyPythonChallenges";
-const DAILY_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
-const DAILY_PYTHON_PROGRESS_COLLECTION = "dailyPythonProgress";
-const DAILY_PYTHON_CHALLENGE_COUNT = 5;
-const DAILY_PYTHON_LOCAL_CACHE_PREFIX = "a3hub.dailyPythonChallenges";
-const DAILY_PYTHON_CHALLENGE_REQUIRED_FIELDS = [
-  "id",
-  "title",
-  "topic",
-  "difficulty",
-  "statement",
-  "inputFormat",
-  "outputFormat",
-  "sampleInput",
-  "sampleOutput",
-  "hint",
-];
-
-const getMillis = (value) => {
-  if (!value) return 0;
-  if (typeof value?.toMillis === "function") return value.toMillis();
-  const parsed = new Date(value);
-  const millis = parsed.getTime();
-  return Number.isNaN(millis) ? 0 : millis;
-};
-
-const formatChallengeDateTime = (value) => {
-  const millis = getMillis(value);
-  if (!millis) return "";
-  return new Date(millis).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
-const formatDateTimeLabel = (value) => {
-  const millis = getMillis(value);
-  if (!millis) return "";
-  return new Date(millis).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
-const ASSIGNMENT_FILE_MAX_SIZE_BYTES = 10 * 1024 * 1024;
-const ASSIGNMENT_TYPE_VALUE = "assignment";
-const ASSIGNMENT_TYPE_LABEL = "Assignment";
-
-const getAssignmentDueMillis = (assignment) => {
-  const dueMillis = getMillis(assignment?.expiresAt || assignment?.dueAt);
-  if (dueMillis) return dueMillis;
-
-  const rawDue = String(assignment?.submitEnd || "").trim();
-  if (!rawDue) return 0;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(rawDue)) {
-    const date = new Date(`${rawDue}T23:59:59`);
-    return Number.isNaN(date.getTime()) ? 0 : date.getTime();
-  }
-
-  const fallback = new Date(rawDue);
-  return Number.isNaN(fallback.getTime()) ? 0 : fallback.getTime();
-};
-
-const formatAssignmentDueLabel = (assignment) => {
-  const dueMillis = getAssignmentDueMillis(assignment);
-  if (!dueMillis) return assignment?.submitEnd || "Not set";
-  return new Date(dueMillis).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-};
-
-const isAssignmentClosed = (assignment) => {
-  const dueMillis = getAssignmentDueMillis(assignment);
-  return dueMillis > 0 && dueMillis <= Date.now();
-};
-
-const getAssignmentUploadErrorMessage = (error) => {
-  const code = error?.code || "";
-  if (code === "cloudinary/network-error") {
-    return "Network issue while uploading file.";
-  }
-  if (code === "cloudinary/no-file") {
-    return "Choose a file before uploading.";
-  }
-  if (code === "storage/unauthenticated") {
-    return "Upload requires a signed-in account.";
-  }
-  if (code === "storage/unauthorized") {
-    return "Upload blocked by Firebase Storage rules. Allow signed-in users to upload.";
-  }
-  if (code === "storage/unknown") {
-    const detail = String(error?.message || "");
-    if (/cors|preflight|xmlhttprequest|http status|failed to fetch/i.test(detail)) {
-      return "Firebase Storage CORS/bucket issue. Configure Cloudinary runtime config in public/cloudinary-config.js or fix Storage bucket/CORS.";
-    }
-    return "Firebase Storage error occurred. Please verify bucket and rules.";
-  }
-  if (
-    code === "storage/bucket-not-found" ||
-    code === "storage/project-not-found" ||
-    code === "storage/bucket-not-configured"
-  ) {
-    return "Firebase Storage is not ready. Enable Storage in Firebase Console.";
-  }
-  if (code === "upload/inline-too-large") {
-    return "Upload fallback supports only small files (<= 700 KB) when using inline mode. Enable Firestore chunk fallback by deploying updated rules.";
-  }
-  if (code === "permission-denied") {
-    return "Upload blocked by Firestore rules. Deploy updated firestore.rules.";
-  }
-  if (code === "resource-exhausted") {
-    return "Firestore quota limit reached. Try later or reduce file size.";
-  }
-  if (code === "upload/no-provider") {
-    if (error?.message) {
-      return `All upload methods failed. ${error.message}`;
-    }
-    return "All upload methods failed. Enable Firebase Storage or configure Cloudinary.";
-  }
-  if (code) {
-    return `Upload failed (${code}).`;
-  }
-  return "Upload failed. Please try again.";
-};
-
-const getPreviousDateKey = (dateKey) => {
-  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return "";
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const date = new Date(year, month - 1, day);
-  date.setDate(date.getDate() - 1);
-  return formatDateKey(date);
-};
-
-const isValidDailyPythonChallenge = (challenge) => {
-  if (!challenge || typeof challenge !== "object") return false;
-
-  const hasRequiredText = DAILY_PYTHON_CHALLENGE_REQUIRED_FIELDS.every((field) => {
-    const value = challenge[field];
-    return typeof value === "string" && value.trim().length > 0;
-  });
-  if (!hasRequiredText) return false;
-
-  const sampleInput = String(challenge.sampleInput || "").trim();
-  const sampleOutput = String(challenge.sampleOutput || "").trim();
-
-  // Defensive check: malformed docs can accidentally copy input into output.
-  if (sampleInput.includes("\n") && sampleOutput === sampleInput) {
-    return false;
-  }
-
-  return true;
-};
-
-const hasValidDailyPythonChallenges = (challenges) =>
-  Array.isArray(challenges) &&
-  challenges.length === DAILY_PYTHON_CHALLENGE_COUNT &&
-  challenges.every((challenge) => isValidDailyPythonChallenge(challenge));
-
-const getDailyPythonLocalCacheKey = (userId) => {
-  const safeUserId = String(userId || "").trim();
-  return safeUserId ? `${DAILY_PYTHON_LOCAL_CACHE_PREFIX}.${safeUserId}` : "";
-};
-
-const clearDailyPythonChallengeCache = (userId) => {
-  if (typeof window === "undefined") return;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return;
-  try {
-    window.localStorage.removeItem(storageKey);
-  } catch {
-    // Ignore storage cleanup errors.
-  }
-};
-
-const loadDailyPythonChallengeCache = ({ userId, expectedDateKey, nowMs }) => {
-  if (typeof window === "undefined") return null;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return null;
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    const cachedDateKey = String(parsed?.generatedAtKey || "").trim();
-    const cachedChallenges = parsed?.challenges;
-    const cachedExpiresMs = getMillis(parsed?.expiresAt);
-
-    const isValid =
-      cachedDateKey === expectedDateKey &&
-      hasValidDailyPythonChallenges(cachedChallenges) &&
-      cachedExpiresMs > nowMs;
-
-    if (!isValid) {
-      window.localStorage.removeItem(storageKey);
-      return null;
-    }
-
-    return {
-      challenges: cachedChallenges,
-      generatedAtKey: cachedDateKey,
-      expiresAt: new Date(cachedExpiresMs),
-    };
-  } catch {
-    return null;
-  }
-};
-
-const saveDailyPythonChallengeCache = ({
-  userId,
-  generatedAtKey,
-  challenges,
-  expiresAt,
-}) => {
-  if (typeof window === "undefined") return;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return;
-  if (!hasValidDailyPythonChallenges(challenges)) return;
-
-  const expiresMs = getMillis(expiresAt);
-  if (!expiresMs) return;
-
-  const payload = {
-    generatedAtKey: String(generatedAtKey || "").trim(),
-    challenges,
-    expiresAt: new Date(expiresMs).toISOString(),
-  };
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(payload));
-  } catch {
-    // Ignore storage write errors.
-  }
-};
-
-const ensureScript = (src) =>
-  new Promise((resolve, reject) => {
-    const existing = document.querySelector(`script[src="${src}"]`);
-    if (existing) {
-      if (existing.dataset.loaded === "true") {
-        resolve();
-      } else {
-        existing.addEventListener("load", resolve, { once: true });
-        existing.addEventListener("error", reject, { once: true });
-      }
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = src;
-    script.async = true;
-    script.dataset.loaded = "false";
-    script.addEventListener("load", () => {
-      script.dataset.loaded = "true";
-      resolve();
-    });
-    script.addEventListener("error", reject);
-    document.body.appendChild(script);
-  });
-
-const normalizeChallengeOutput = (value) =>
-  String(value || "")
-    .replace(/\r/g, "")
-    .trim()
-    .split(/\s+/)
-    .filter((token) => token.length > 0);
-
-const outputsMatch = (actualOutput, expectedOutput) => {
-  const actualTokens = normalizeChallengeOutput(actualOutput);
-  const expectedTokens = normalizeChallengeOutput(expectedOutput);
-
-  if (actualTokens.length !== expectedTokens.length) return false;
-
-  const exactMatch = actualTokens.every(
-    (token, index) => token === expectedTokens[index]
-  );
-  if (exactMatch) return true;
-
-  return actualTokens.every(
-    (token, index) => token.toLowerCase() === expectedTokens[index].toLowerCase()
-  );
-};
-
-const executePythonWithInput = async ({ sourceCode, stdin }) => {
-  await ensureScript("https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt.min.js");
-  await ensureScript("https://cdn.jsdelivr.net/npm/skulpt@1.2.0/dist/skulpt-stdlib.js");
-
-  const Sk = window.Sk;
-  if (!Sk) {
-    throw new Error("Python engine not available.");
-  }
-
-  const outputParts = [];
-  const inputQueue = String(stdin || "")
-    .replace(/\r/g, "")
-    .split("\n");
-  let inputIndex = 0;
-
-  const builtinRead = (filename) => {
-    if (!Sk.builtinFiles || !Sk.builtinFiles.files[filename]) {
-      throw new Error(`File not found: '${filename}'`);
-    }
-    return Sk.builtinFiles.files[filename];
-  };
-
-  Sk.configure({
-    output: (text) => {
-      outputParts.push(String(text));
-    },
-    read: builtinRead,
-    inputfun: () => Promise.resolve(inputQueue[inputIndex++] ?? ""),
-    inputfunTakesPrompt: true,
-  });
-
-  const runPromise = Sk.misceval.asyncToPromise(() =>
-    Sk.importMainWithBody("<stdin>", false, sourceCode, true)
-  );
-
-  let timerId = 0;
-  const timeoutPromise = new Promise((_, reject) => {
-    timerId = window.setTimeout(() => {
-      reject(new Error("Execution timeout. Check for infinite loops."));
-    }, 4000);
-  });
-
-  await Promise.race([runPromise, timeoutPromise]).finally(() => {
-    if (timerId) {
-      window.clearTimeout(timerId);
-    }
-  });
-  return outputParts.join("");
-};
-
-const createSeededRng = (seedText) => {
-  let seed = 2166136261;
-  for (let index = 0; index < seedText.length; index += 1) {
-    seed ^= seedText.charCodeAt(index);
-    seed = Math.imul(seed, 16777619);
-  }
-
-  return () => {
-    seed += 0x6d2b79f5;
-    let t = seed;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-};
-
-const pickInt = (rng, min, max) =>
-  Math.floor(rng() * (max - min + 1)) + min;
-
-const shuffleWithRng = (items, rng) => {
-  const next = [...items];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(rng() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  return next;
-};
-
-const buildNumberList = (rng, count, min, max) =>
-  Array.from({ length: count }, () => pickInt(rng, min, max));
-
-const isComplexDailyPythonSolutionCode = (sourceCode) => {
-  const code = String(sourceCode || "");
-  return (
-    /\bimport\s+sys\b/.test(code) ||
-    /\bsys\.stdin\b/.test(code) ||
-    /\bdef\s+solve\s*\(/.test(code) ||
-    /__name__\s*==\s*["']__main__["']/.test(code)
-  );
-};
-
-const getDailyPythonCorrectCode = (challenge) => {
-  const solutionCode = String(challenge?.solutionCode || "").trim();
-  if (!solutionCode) return "";
-  if (isComplexDailyPythonSolutionCode(solutionCode)) return "";
-  return solutionCode;
-};
-
-const DAILY_PYTHON_CHALLENGE_TEMPLATES = [
-  {
-    id: "sum-first-n",
-    topic: "Loops",
-    difficulty: "Easy",
-    build: (rng) => {
-      const n = pickInt(rng, 15, 45);
-      return {
-        title: "Sum of First N Numbers",
-        statement:
-          "Given N, print the sum of all numbers from 1 to N.",
-        inputFormat: "A single integer N",
-        outputFormat: "A single integer: sum(1..N)",
-        sampleInput: String(n),
-        sampleOutput: String((n * (n + 1)) / 2),
-        hint: "Use an accumulator variable inside a for loop.",
-      };
-    },
-  },
-  {
-    id: "even-odd-check",
-    topic: "Conditionals",
-    difficulty: "Easy",
-    build: (rng) => {
-      const value = pickInt(rng, 21, 999);
-      return {
-        title: "Even or Odd",
-        statement:
-          "Read one integer and print EVEN if it is divisible by 2, otherwise print ODD.",
-        inputFormat: "A single integer N",
-        outputFormat: "EVEN or ODD",
-        sampleInput: String(value),
-        sampleOutput: value % 2 === 0 ? "EVEN" : "ODD",
-        hint: "Check `n % 2 == 0`.",
-      };
-    },
-  },
-  {
-    id: "max-in-list",
-    topic: "Lists",
-    difficulty: "Easy",
-    build: (rng) => {
-      const list = buildNumberList(rng, 6, 3, 99);
-      return {
-        title: "Find Maximum in List",
-        statement:
-          "Read a list of integers and print the maximum value.",
-        inputFormat:
-          "First line: integer N\nSecond line: N space-separated integers",
-        outputFormat: "Single integer maximum value",
-        sampleInput: `${list.length}\n${list.join(" ")}`,
-        sampleOutput: String(Math.max(...list)),
-        hint: "Track max while iterating or use Python's max().",
-      };
-    },
-  },
-  {
-    id: "count-vowels",
-    topic: "Strings",
-    difficulty: "Medium",
-    build: (rng) => {
-      const words = ["education", "algorithm", "pythonic", "developer", "automation"];
-      const word = words[pickInt(rng, 0, words.length - 1)];
-      const vowels = new Set(["a", "e", "i", "o", "u"]);
-      const count = word
-        .toLowerCase()
-        .split("")
-        .filter((char) => vowels.has(char)).length;
-      return {
-        title: "Count Vowels",
-        statement:
-          "Given a lowercase word, count how many vowels (a, e, i, o, u) it contains.",
-        inputFormat: "Single string S",
-        outputFormat: "Single integer vowel count",
-        sampleInput: word,
-        sampleOutput: String(count),
-        hint: "Loop through characters and check membership in a vowel set.",
-      };
-    },
-  },
-  {
-    id: "second-largest",
-    topic: "Lists",
-    difficulty: "Medium",
-    build: (rng) => {
-      const list = buildNumberList(rng, 7, 10, 120);
-      const sorted = [...new Set(list)].sort((a, b) => b - a);
-      const second = sorted.length > 1 ? sorted[1] : sorted[0];
-      return {
-        title: "Second Largest Number",
-        statement:
-          "Given a list of integers, print the second largest distinct number.",
-        inputFormat:
-          "First line: integer N\nSecond line: N space-separated integers",
-        outputFormat: "Single integer second largest value",
-        sampleInput: `${list.length}\n${list.join(" ")}`,
-        sampleOutput: String(second),
-        hint: "Use a set to remove duplicates, then sort descending.",
-      };
-    },
-  },
-  {
-    id: "fibonacci-n",
-    topic: "Loops",
-    difficulty: "Medium",
-    build: (rng) => {
-      const n = pickInt(rng, 5, 9);
-      const sequence = [];
-      let a = 0;
-      let b = 1;
-      for (let index = 0; index < n; index += 1) {
-        sequence.push(a);
-        const next = a + b;
-        a = b;
-        b = next;
-      }
-      return {
-        title: "Print N Fibonacci Terms",
-        statement:
-          "Print the first N terms of the Fibonacci sequence starting from 0 and 1.",
-        inputFormat: "Single integer N",
-        outputFormat: "N space-separated integers",
-        sampleInput: String(n),
-        sampleOutput: sequence.join(" "),
-        hint: "Maintain two variables and update them each iteration.",
-      };
-    },
-  },
-  {
-    id: "palindrome-check",
-    topic: "Strings",
-    difficulty: "Medium",
-    build: (rng) => {
-      const samples = ["level", "civic", "radar", "python"];
-      const word = samples[pickInt(rng, 0, samples.length - 1)];
-      return {
-        title: "Palindrome Checker",
-        statement:
-          "Given a word, print YES if it reads the same forwards and backwards, else print NO.",
-        inputFormat: "Single string S",
-        outputFormat: "YES or NO",
-        sampleInput: word,
-        sampleOutput: word === word.split("").reverse().join("") ? "YES" : "NO",
-        hint: "Compare the string with its reverse.",
-      };
-    },
-  },
-  {
-    id: "count-odd-even",
-    topic: "Loops",
-    difficulty: "Easy",
-    build: (rng) => {
-      const list = buildNumberList(rng, 8, 1, 30);
-      const evenCount = list.filter((value) => value % 2 === 0).length;
-      const oddCount = list.length - evenCount;
-      return {
-        title: "Count Even and Odd",
-        statement:
-          "Given a list of integers, print the number of even values and odd values.",
-        inputFormat:
-          "First line: integer N\nSecond line: N space-separated integers",
-        outputFormat: "Two integers: even_count odd_count",
-        sampleInput: `${list.length}\n${list.join(" ")}`,
-        sampleOutput: `${evenCount} ${oddCount}`,
-        hint: "Use modulus (%) to classify each number.",
-      };
-    },
-  },
-];
-
-const generateDailyPythonChallenges = (dateKey) => {
-  const rng = createSeededRng(`a3hub-${dateKey}`);
-  const selectedTemplates = shuffleWithRng(
-    DAILY_PYTHON_CHALLENGE_TEMPLATES,
-    rng
-  ).slice(0, DAILY_PYTHON_CHALLENGE_COUNT);
-
-  return selectedTemplates.map((template, index) => {
-    const challenge = template.build(rng);
-    return {
-      id: `${dateKey}-${template.id}-${index + 1}`,
-      title: challenge.title,
-      topic: template.topic,
-      difficulty: template.difficulty,
-      statement: challenge.statement,
-      inputFormat: challenge.inputFormat,
-      outputFormat: challenge.outputFormat,
-      sampleInput: challenge.sampleInput,
-      sampleOutput: challenge.sampleOutput,
-      hint: challenge.hint,
-      solutionCode: "",
-    };
-  });
-};
+import {
+  ACTION_BADGE_CLASS,
+  ASSIGNMENT_FILE_MAX_SIZE_BYTES,
+  ASSIGNMENT_TYPE_LABEL,
+  ASSIGNMENT_TYPE_VALUE,
+  buildStudentDetails,
+  calendarTypeOptions,
+  clearDailyPythonChallengeCache,
+  DAILY_CHALLENGE_TTL_MS,
+  DAILY_PYTHON_CHALLENGE_COUNT,
+  DAILY_PYTHON_CHALLENGE_COLLECTION,
+  DAILY_PYTHON_PROGRESS_COLLECTION,
+  formatChallengeDateTime,
+  formatDateKey,
+  formatDateTimeLabel,
+  formatFileSize,
+  formatAssignmentDueLabel,
+  getAssignmentUploadErrorMessage,
+  getAssignmentDueMillis,
+  getCalendarDateParts,
+  getCalendarTypeMeta,
+  getMillis,
+  getNoticeMeta,
+  getPreviousDateKey,
+  hasValidDailyPythonChallenges,
+  isValidDailyPythonChallenge,
+  isAssignmentClosed,
+  loadDailyPythonChallengeCache,
+  normalizeDepartment,
+  saveDailyPythonChallengeCache,
+  SERVICE_CARD_META,
+  toDisplayValue,
+  toInputValue,
+} from "../features/menuGrid/menuGridHelpers.js";
+import {
+  executePythonWithInput,
+  generateDailyPythonChallenges,
+  getDailyPythonCorrectCode,
+  outputsMatch,
+} from "../features/menuGrid/menuGridDailyPython.js";
 
 const semesterOptions = Array.from({ length: 8 }, (_, index) => `Semester ${index + 1}`);
 
@@ -1026,7 +161,14 @@ const uploadNoticeFile = async ({ file, noticeId }) => {
   for (let index = 0; index < buckets.length; index += 1) {
     const bucket = buckets[index];
     const bucketStorage =
-      index === 0 ? storage : getStorageForBucket(bucket);
+      index === 0
+        ? await ensureFirebaseStorage()
+        : await getStorageForBucket(bucket);
+    if (!bucketStorage) {
+      const error = new Error("Storage bucket not configured.");
+      error.code = "storage/bucket-not-configured";
+      throw error;
+    }
     const storageRef = ref(
       bucketStorage,
       `notices/${noticeId}/${file.name}`
@@ -1047,7 +189,6 @@ const uploadNoticeFile = async ({ file, noticeId }) => {
 };
 
 const INTERVIEW_QUIZ_AI_CACHE_KEY = "a3hub:interview-quiz-contact:v1";
-
 const formatInterviewQuizDateLabel = (dateKey) => {
   if (!dateKey) return "";
   const date = new Date(`${dateKey}T00:00:00`);
@@ -3865,7 +3006,11 @@ export default function MenuGridPage({ forcedStaff }) {
         <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-cyan-300/20 blur-3xl" />
 
         <div className="relative rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-xl sm:p-5">
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-start">
+          <div
+            className={`grid gap-4 lg:items-start ${
+              isStaff ? "" : "lg:grid-cols-[minmax(0,1fr)_auto]"
+            }`}
+          >
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/90">
                 A3 Hub - Campus Services
@@ -3879,14 +3024,16 @@ export default function MenuGridPage({ forcedStaff }) {
               </div>
             </div>
 
-            <div className="w-full max-w-[180px] rounded-2xl border border-white/25 bg-white/10 p-2">
-              <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-center">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-100/80">
-                  Attendance
-                </p>
-                <p className="mt-1 text-sm font-semibold text-white">{attendanceSummary}%</p>
+            {!isStaff ? (
+              <div className="w-full max-w-[180px] rounded-2xl border border-white/25 bg-white/10 p-2">
+                <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-center">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-100/80">
+                    Attendance
+                  </p>
+                  <p className="mt-1 text-sm font-semibold text-white">{attendanceSummary}%</p>
+                </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           <div className="mt-4 flex items-center justify-between">
@@ -6111,5 +5258,7 @@ export default function MenuGridPage({ forcedStaff }) {
     </div>
   );
 }
+
+
 
 

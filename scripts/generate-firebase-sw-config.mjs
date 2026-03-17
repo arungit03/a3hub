@@ -3,7 +3,12 @@ import path from "node:path";
 import { loadEnv } from "vite";
 
 const rootDir = process.cwd();
-const mode = process.env.MODE || process.env.NODE_ENV || "development";
+const lifecycleEvent = String(process.env.npm_lifecycle_event || "").trim();
+const inferredMode =
+  lifecycleEvent === "prebuild" || lifecycleEvent === "build"
+    ? "production"
+    : "development";
+const mode = process.env.MODE || process.env.NODE_ENV || inferredMode;
 const env = loadEnv(mode, rootDir, "");
 
 const getEnvValue = (...keys) => {
@@ -16,19 +21,56 @@ const getEnvValue = (...keys) => {
   return "";
 };
 
-const firebaseConfig = {
-  apiKey: getEnvValue("VITE_FIREBASE_API_KEY"),
-  authDomain: getEnvValue("VITE_FIREBASE_AUTH_DOMAIN"),
-  projectId: getEnvValue("VITE_FIREBASE_PROJECT_ID"),
-  storageBucket: getEnvValue("VITE_FIREBASE_STORAGE_BUCKET"),
-  messagingSenderId: getEnvValue("VITE_FIREBASE_MESSAGING_SENDER_ID"),
-  appId: getEnvValue("VITE_FIREBASE_APP_ID"),
-};
-
 const outputPath = path.join(
   rootDir,
   "public",
   "firebase-messaging-sw-config.js"
+);
+const FIREBASE_ENV_KEY_BY_CONFIG_KEY = Object.freeze({
+  apiKey: "VITE_FIREBASE_API_KEY",
+  authDomain: "VITE_FIREBASE_AUTH_DOMAIN",
+  projectId: "VITE_FIREBASE_PROJECT_ID",
+  storageBucket: "VITE_FIREBASE_STORAGE_BUCKET",
+  messagingSenderId: "VITE_FIREBASE_MESSAGING_SENDER_ID",
+  appId: "VITE_FIREBASE_APP_ID",
+  measurementId: "VITE_FIREBASE_MEASUREMENT_ID",
+  databaseURL: "VITE_FIREBASE_DATABASE_URL",
+});
+const REQUIRED_FIREBASE_KEYS = Object.freeze([
+  "apiKey",
+  "authDomain",
+  "projectId",
+  "storageBucket",
+  "messagingSenderId",
+  "appId",
+]);
+
+const toSafeText = (value) => (typeof value === "string" ? value.trim() : "");
+
+const readExistingFirebaseConfig = async () => {
+  try {
+    const currentFile = await fs.readFile(outputPath, "utf8");
+    const match = currentFile.match(
+      /__A3HUB_FIREBASE_CONFIG__\s*=\s*(\{[\s\S]*\})\s*;/
+    );
+    if (!match) return {};
+    const parsed = JSON.parse(match[1]);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const existingFirebaseConfig = await readExistingFirebaseConfig();
+const firebaseConfig = Object.fromEntries(
+  Object.entries(FIREBASE_ENV_KEY_BY_CONFIG_KEY).flatMap(([configKey, envKey]) => {
+    const value = toSafeText(getEnvValue(envKey) || existingFirebaseConfig[configKey]);
+    return value ? [[configKey, value]] : [];
+  })
+);
+
+const missingFirebaseKeys = REQUIRED_FIREBASE_KEYS.filter(
+  (key) => !toSafeText(firebaseConfig[key])
 );
 
 await fs.mkdir(path.dirname(outputPath), { recursive: true });
@@ -41,3 +83,9 @@ await fs.writeFile(
   ].join("\n"),
   "utf8"
 );
+
+if (missingFirebaseKeys.length > 0) {
+  console.warn(
+    `[firebase-sw-config] Missing Firebase values: ${missingFirebaseKeys.join(", ")}`
+  );
+}

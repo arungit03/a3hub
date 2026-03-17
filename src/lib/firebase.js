@@ -1,8 +1,4 @@
 import { initializeApp } from "firebase/app";
-import { getAnalytics, isSupported } from "firebase/analytics";
-import { browserSessionPersistence, initializeAuth } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage";
 
 /** @type {Partial<ImportMetaEnv>} */
 const importMetaEnv =
@@ -15,8 +11,36 @@ const processEnv =
   typeof globalThis.process.env === "object"
     ? globalThis.process.env
     : {};
+/** @type {Record<string, unknown>} */
+const runtimeRootConfig =
+  typeof window !== "undefined" &&
+  window.__A3HUB_RUNTIME_CONFIG__ &&
+  typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+    ? /** @type {Record<string, unknown>} */ (window.__A3HUB_RUNTIME_CONFIG__)
+    : {};
+/** @type {Record<string, unknown>} */
+const runtimeFirebaseConfig =
+  typeof window !== "undefined" &&
+  window.__A3HUB_FIREBASE_CONFIG__ &&
+  typeof window.__A3HUB_FIREBASE_CONFIG__ === "object"
+    ? /** @type {Record<string, unknown>} */ (window.__A3HUB_FIREBASE_CONFIG__)
+    : runtimeRootConfig.firebase &&
+      typeof runtimeRootConfig.firebase === "object"
+    ? /** @type {Record<string, unknown>} */ (runtimeRootConfig.firebase)
+    : {};
 const isBrowserRuntime =
   typeof window !== "undefined" && typeof document !== "undefined";
+/** @type {Readonly<Record<string, string>>} */
+const FIREBASE_RUNTIME_KEY_BY_ENV_KEY = Object.freeze({
+  VITE_FIREBASE_API_KEY: "apiKey",
+  VITE_FIREBASE_AUTH_DOMAIN: "authDomain",
+  VITE_FIREBASE_PROJECT_ID: "projectId",
+  VITE_FIREBASE_STORAGE_BUCKET: "storageBucket",
+  VITE_FIREBASE_MESSAGING_SENDER_ID: "messagingSenderId",
+  VITE_FIREBASE_APP_ID: "appId",
+  VITE_FIREBASE_MEASUREMENT_ID: "measurementId",
+  VITE_FIREBASE_DATABASE_URL: "databaseURL",
+});
 
 /**
  * @param {unknown} value
@@ -28,8 +52,17 @@ const toSafeEnv = (value) => (typeof value === "string" ? value.trim() : "");
  * @param {keyof ImportMetaEnv} key
  * @returns {string}
  */
+const getRuntimeFirebaseValue = (key) => {
+  const runtimeKey = FIREBASE_RUNTIME_KEY_BY_ENV_KEY[key];
+  return runtimeKey ? toSafeEnv(runtimeFirebaseConfig[runtimeKey]) : "";
+};
+
+/**
+ * @param {keyof ImportMetaEnv} key
+ * @returns {string}
+ */
 const getFirebaseEnvValue = (key) =>
-  toSafeEnv(importMetaEnv[key] ?? processEnv[key]);
+  toSafeEnv(importMetaEnv[key] ?? processEnv[key] ?? getRuntimeFirebaseValue(key));
 
 const firebaseMeasurementId = getFirebaseEnvValue(
   "VITE_FIREBASE_MEASUREMENT_ID"
@@ -49,17 +82,30 @@ const missingFirebaseEnv = Object.entries(firebaseBaseConfig)
   .filter(([, value]) => !value)
   .map(([key]) => key);
 
-if (missingFirebaseEnv.length > 0 && isBrowserRuntime) {
-  throw new Error(
-    `Missing Firebase environment values: ${missingFirebaseEnv.join(", ")}`
-  );
-}
-
 export const firebaseConfig = Object.freeze({
   ...firebaseBaseConfig,
   ...(firebaseDatabaseUrl ? { databaseURL: firebaseDatabaseUrl } : {}),
   ...(firebaseMeasurementId ? { measurementId: firebaseMeasurementId } : {}),
 });
+
+export const missingFirebaseConfigKeys = Object.freeze([...missingFirebaseEnv]);
+export const firebaseConfigured = missingFirebaseConfigKeys.length === 0;
+export const firebaseStartupIssue = firebaseConfigured
+  ? ""
+  : `Firebase is not configured for this deploy. Missing values: ${missingFirebaseConfigKeys.join(", ")}. Set the VITE_FIREBASE_* variables in Netlify and redeploy.`;
+
+export const createFirebaseUnavailableError = (feature = "Firebase") => {
+  const safeFeature = String(feature || "Firebase").trim() || "Firebase";
+  /** @type {Error & { code?: string, feature?: string, missingKeys?: string[] }} */
+  const error = new Error(
+    firebaseStartupIssue ||
+      `${safeFeature} is unavailable because Firebase is not configured for this deploy.`
+  );
+  error.code = "firebase/not-configured";
+  error.feature = safeFeature;
+  error.missingKeys = [...missingFirebaseConfigKeys];
+  return error;
+};
 
 /**
  * @param {unknown} value
@@ -78,56 +124,148 @@ const bucketCandidates = [
 
 export const storageBuckets = [...new Set(bucketCandidates)];
 const shouldInitializeFirebase =
-  missingFirebaseEnv.length === 0 && isBrowserRuntime;
+  firebaseConfigured && isBrowserRuntime;
+export const firebaseClientReady = shouldInitializeFirebase;
+const defaultStorageBucket =
+  storageBuckets.length > 0 ? `gs://${storageBuckets[0]}` : undefined;
 
 /** @type {import("firebase/app").FirebaseApp | null} */
-let app = null;
-/** @type {import("firebase/auth").Auth | { currentUser: null }} */
-let authInstance = { currentUser: null };
-/** @type {import("firebase/firestore").Firestore | null} */
-let dbInstance = null;
-/** @type {import("firebase/storage").FirebaseStorage | null} */
-let storageInstance = null;
+const app = shouldInitializeFirebase ? initializeApp(firebaseConfig) : null;
+const DEFAULT_EMPTY_AUTH = Object.freeze({ currentUser: null });
 
-if (shouldInitializeFirebase) {
-  const initializedApp = initializeApp(firebaseConfig);
-  app = initializedApp;
-  authInstance = initializeAuth(initializedApp, {
-    persistence: browserSessionPersistence,
-  });
-  dbInstance = getFirestore(initializedApp);
-  storageInstance = getStorage(
-    initializedApp,
-    storageBuckets.length > 0 ? `gs://${storageBuckets[0]}` : undefined
-  );
-}
+/** @type {import("firebase/auth").Auth | { currentUser: null }} */
+export let auth = DEFAULT_EMPTY_AUTH;
+/** @type {import("firebase/firestore").Firestore | null} */
+export let db = null;
+/** @type {import("firebase/storage").FirebaseStorage | null} */
+export let storage = null;
+/** @type {Promise<import("firebase/analytics").Analytics | null> | null} */
+export let analyticsPromise = null;
+
+/** @type {Promise<import("firebase/auth").Auth | { currentUser: null }> | null} */
+let authInitPromise = null;
+/** @type {Promise<import("firebase/firestore").Firestore | null> | null} */
+let firestoreInitPromise = null;
+/** @type {Promise<import("firebase/storage").FirebaseStorage | null> | null} */
+let storageInitPromise = null;
 
 export { app };
-export const auth = authInstance;
-export const db = dbInstance;
-export const storage = storageInstance;
+
+/**
+ * @returns {import("firebase/app").FirebaseApp | null}
+ */
+export const ensureFirebaseApp = () =>
+  shouldInitializeFirebase && app ? app : null;
+
+/**
+ * @returns {Promise<import("firebase/auth").Auth | { currentUser: null }>}
+ */
+export const ensureFirebaseAuth = async () => {
+  if (!shouldInitializeFirebase || !app) {
+    return auth;
+  }
+  if (auth !== DEFAULT_EMPTY_AUTH) {
+    return auth;
+  }
+  if (!authInitPromise) {
+    authInitPromise = import("firebase/auth")
+      .then(({ browserSessionPersistence, initializeAuth }) => {
+        auth = initializeAuth(app, {
+          persistence: browserSessionPersistence,
+        });
+        return auth;
+      })
+      .catch((error) => {
+        authInitPromise = null;
+        throw error;
+      });
+  }
+  return authInitPromise;
+};
+
+/**
+ * @returns {Promise<import("firebase/firestore").Firestore | null>}
+ */
+export const ensureFirestore = async () => {
+  if (!shouldInitializeFirebase || !app) {
+    return null;
+  }
+  if (db) {
+    return db;
+  }
+  if (!firestoreInitPromise) {
+    firestoreInitPromise = import("firebase/firestore")
+      .then(({ getFirestore }) => {
+        db = getFirestore(app);
+        return db;
+      })
+      .catch((error) => {
+        firestoreInitPromise = null;
+        throw error;
+      });
+  }
+  return firestoreInitPromise;
+};
+
+/**
+ * @returns {Promise<import("firebase/storage").FirebaseStorage | null>}
+ */
+export const ensureFirebaseStorage = async () => {
+  if (!shouldInitializeFirebase || !app) {
+    return null;
+  }
+  if (storage) {
+    return storage;
+  }
+  if (!storageInitPromise) {
+    storageInitPromise = import("firebase/storage")
+      .then(({ getStorage }) => {
+        storage = getStorage(app, defaultStorageBucket);
+        return storage;
+      })
+      .catch((error) => {
+        storageInitPromise = null;
+        throw error;
+      });
+  }
+  return storageInitPromise;
+};
 
 /**
  * @param {string | undefined | null} bucket
- * @returns {import("firebase/storage").FirebaseStorage | null}
+ * @returns {Promise<import("firebase/storage").FirebaseStorage | null>}
  */
-export const getStorageForBucket = (bucket) => {
+export const getStorageForBucket = async (bucket) => {
   if (!shouldInitializeFirebase || !app) {
     return null;
   }
 
+  const { getStorage } = await import("firebase/storage");
   return getStorage(app, bucket ? `gs://${normalizeBucket(bucket)}` : undefined);
 };
 
-export const analyticsPromise = (() => {
+/**
+ * @returns {Promise<import("firebase/analytics").Analytics | null>}
+ */
+export const loadAnalytics = () => {
+  if (analyticsPromise) {
+    return analyticsPromise;
+  }
   if (!shouldInitializeFirebase || !app) {
-    return Promise.resolve(null);
+    analyticsPromise = Promise.resolve(null);
+    return analyticsPromise;
   }
 
-  const initializedApp = app;
-  return isSupported().then((supported) =>
-    supported ? getAnalytics(initializedApp) : null
-  );
-})();
+  analyticsPromise = import("firebase/analytics")
+    .then(async ({ getAnalytics, isSupported }) => {
+      const supported = await isSupported();
+      return supported ? getAnalytics(app) : null;
+    })
+    .catch((error) => {
+      analyticsPromise = null;
+      throw error;
+    });
+  return analyticsPromise;
+};
 
 export default app;

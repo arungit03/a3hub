@@ -1,4 +1,9 @@
 import { auth } from "./firebase.js";
+import {
+  extractJsonPayload,
+  normalizeInterviewQuizAndContactPlaces,
+  normalizeTopTechnicalNews,
+} from "./gemini/normalize.js";
 
 const MODEL_PREFERENCE = [
   "gemini-2.5-flash",
@@ -18,10 +23,6 @@ const OPENAI_FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o"];
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_AI_PROXY_ENDPOINT = "/.netlify/functions/ai-generate";
 const SERVER_PROXY_API_KEY = "__A3HUB_SERVER_AI_PROXY__";
-const ENABLE_CLIENT_SIDE_AI_KEY =
-  String(import.meta.env.VITE_ALLOW_CLIENT_AI_KEY || "")
-    .trim()
-    .toLowerCase() === "true";
 const CHAT_MAX_OUTPUT_TOKENS = 4096;
 const CHAT_MAX_CONTINUATION_ROUNDS = 2;
 const CHAT_CONTINUE_PROMPT =
@@ -30,21 +31,34 @@ let discoveredModelsPromise = null;
 let discoveredModelsForKey = "";
 
 const isOpenAiKey = (apiKey) => String(apiKey || "").trim().startsWith("sk-");
+const isLocalDevelopmentRuntime = () => {
+  if (typeof window === "undefined") {
+    return Boolean(import.meta.env.DEV);
+  }
 
-const getBuildTimeApiKey = () =>
-  String(
-    import.meta.env.VITE_GEMINI_API_KEY ||
-      import.meta.env.VITE_OPENAI_API_KEY ||
-      ""
-  ).trim();
+  const host = String(window.location.hostname || "").trim().toLowerCase();
+  return (
+    Boolean(import.meta.env.DEV) ||
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host.endsWith(".local")
+  );
+};
 
 const getRuntimeApiKey = () => {
+  if (!isLocalDevelopmentRuntime()) return "";
   if (typeof window === "undefined") return "";
+  const runtimeRoot =
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     window.__A3HUB_GEMINI_CONFIG__ ||
     window.__GEMINI_CONFIG__ ||
     window.__A3HUB_OPENAI_CONFIG__ ||
-    window.__OPENAI_CONFIG__;
+    window.__OPENAI_CONFIG__ ||
+    runtimeRoot.ai;
   if (!runtimeConfig || typeof runtimeConfig !== "object") return "";
   const key =
     runtimeConfig.apiKey ||
@@ -65,11 +79,17 @@ const resolveAiProxyEndpoint = () => {
     return endpointFromBuild || DEFAULT_AI_PROXY_ENDPOINT;
   }
 
+  const runtimeRoot =
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     window.__A3HUB_GEMINI_CONFIG__ ||
     window.__GEMINI_CONFIG__ ||
     window.__A3HUB_OPENAI_CONFIG__ ||
     window.__OPENAI_CONFIG__ ||
+    runtimeRoot.ai ||
     {};
   const endpointFromRuntime = String(
     runtimeConfig.endpoint ||
@@ -153,6 +173,14 @@ const requestAiProxyAction = async ({ action, payload = {} }) => {
     if (response.status === 403) {
       error.userMessage =
         "Your account is not allowed to use AI features. Contact admin.";
+      throw error;
+    }
+    if (
+      [404, 405].includes(response.status) &&
+      endpoint.includes("/.netlify/functions/")
+    ) {
+      error.userMessage =
+        "This deploy cannot reach the AI function. Rebuild locally and upload the dist folder, or deploy with Netlify Functions enabled.";
       throw error;
     }
     error.userMessage =
@@ -355,359 +383,7 @@ const requestOpenAiChatCompletion = async ({
 export const getGeminiApiKey = () => {
   const runtimeKey = getRuntimeApiKey();
   if (runtimeKey) return runtimeKey;
-
-  const key = ENABLE_CLIENT_SIDE_AI_KEY ? getBuildTimeApiKey() : "";
-  if (key) return key;
   return resolveAiProxyEndpoint() ? SERVER_PROXY_API_KEY : "";
-};
-
-const extractJsonPayload = (text) => {
-  const raw = String(text || "").trim();
-  if (!raw) return null;
-
-  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1]?.trim() || raw;
-
-  try {
-    return JSON.parse(candidate);
-  } catch {
-    // Continue with best-effort extraction.
-  }
-
-  const firstBrace = candidate.indexOf("{");
-  const lastBrace = candidate.lastIndexOf("}");
-  if (firstBrace >= 0 && lastBrace > firstBrace) {
-    const objectSlice = candidate.slice(firstBrace, lastBrace + 1);
-    try {
-      return JSON.parse(objectSlice);
-    } catch {
-      // Ignore parse error and try array extraction.
-    }
-  }
-
-  const firstBracket = candidate.indexOf("[");
-  const lastBracket = candidate.lastIndexOf("]");
-  if (firstBracket >= 0 && lastBracket > firstBracket) {
-    const arraySlice = candidate.slice(firstBracket, lastBracket + 1);
-    try {
-      return JSON.parse(arraySlice);
-    } catch {
-      return null;
-    }
-  }
-
-  return null;
-};
-
-const toSentenceLines = (value) => {
-  const raw = String(value || "")
-    .replace(/\r/g, "")
-    .replace(/\t/g, " ")
-    .trim();
-  if (!raw) return [];
-
-  const explicitLines = raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (explicitLines.length >= 3) return explicitLines.slice(0, 5);
-
-  const sentenceMatches = raw.match(/[^.!?]+[.!?]?/g) || [];
-  const sentenceLines = sentenceMatches
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (sentenceLines.length >= 3) return sentenceLines.slice(0, 5);
-
-  const words = raw.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
-
-  const lines = [];
-  const chunks = 3;
-  const wordsPerLine = Math.max(1, Math.ceil(words.length / chunks));
-  for (let index = 0; index < words.length; index += wordsPerLine) {
-    lines.push(words.slice(index, index + wordsPerLine).join(" "));
-    if (lines.length === 5) break;
-  }
-  return lines;
-};
-
-const normalizeTopTechnicalNews = (value, count) => {
-  const fallbackList = Array.isArray(value?.topics)
-    ? value.topics
-    : Array.isArray(value?.news)
-    ? value.news
-    : Array.isArray(value)
-    ? value
-    : [];
-
-  return fallbackList
-    .map((item) => {
-      const title = String(item?.title || item?.headline || "").trim();
-      const summaryLines = toSentenceLines(
-        item?.summary || item?.description || item?.details
-      );
-      const summary = summaryLines.slice(0, 5).join("\n");
-      const source = String(item?.source || item?.publisher || "").trim();
-      const sourceUrl = String(item?.sourceUrl || item?.url || item?.link || "").trim();
-
-      if (!title || !summary) return null;
-
-      return {
-        title,
-        summary,
-        source,
-        sourceUrl,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, count);
-};
-
-const toSingleLine = (value) =>
-  String(value || "")
-    .replace(/\r/g, "")
-    .replace(/\n+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const toLineList = (value) =>
-  String(value || "")
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-const normalizeInterviewQaEntries = (value) => {
-  const list = Array.isArray(value)
-    ? value
-    : value && typeof value === "object"
-    ? Object.entries(value).map(([question, answer]) => ({
-        question,
-        answer,
-      }))
-    : typeof value === "string"
-    ? toLineList(value)
-    : [];
-
-  return list
-    .map((item, index) => {
-      if (typeof item === "string") {
-        const line = toSingleLine(item);
-        if (!line) return null;
-
-        const labelledMatch = line.match(
-          /^q(?:uestion)?\s*\d*\s*[:.)-]?\s*(.+?)\s*a(?:nswer)?\s*[:.)-]\s*(.+)$/i
-        );
-        if (labelledMatch) {
-          return {
-            question: toSingleLine(labelledMatch[1]) || `Question ${index + 1}`,
-            answer: toSingleLine(labelledMatch[2]),
-          };
-        }
-
-        const splitMatch = line.match(/^(.+?)\s*(?:-|:|–|—)\s*(.+)$/);
-        if (splitMatch) {
-          return {
-            question: toSingleLine(splitMatch[1]) || `Question ${index + 1}`,
-            answer: toSingleLine(splitMatch[2]),
-          };
-        }
-
-        return {
-          question: `Question ${index + 1}`,
-          answer: line,
-        };
-      }
-
-      if (item !== null && typeof item !== "object") {
-        const answer = toSingleLine(item);
-        if (!answer) return null;
-        return {
-          question: `Question ${index + 1}`,
-          answer,
-        };
-      }
-
-      const question = toSingleLine(
-        item?.question ||
-          item?.q ||
-          item?.prompt ||
-          item?.title ||
-          item?.questionText ||
-          `Question ${index + 1}`
-      );
-      const answer = toSingleLine(
-        item?.answer ||
-          item?.a ||
-          item?.explanation ||
-          item?.response ||
-          item?.solution ||
-          item?.details ||
-          item?.answerText
-      );
-      if (!answer) return null;
-
-      return {
-        question: question || `Question ${index + 1}`,
-        answer,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, 5);
-};
-
-const toNamedObjectEntries = (value) => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  return Object.entries(value).filter(([key]) => String(key || "").trim().length > 0);
-};
-
-const normalizeCompanyList = (value) => {
-  if (Array.isArray(value?.companies)) return value.companies;
-  if (Array.isArray(value?.topCompanies)) return value.topCompanies;
-  if (Array.isArray(value?.interviewQuiz)) return value.interviewQuiz;
-  if (Array.isArray(value)) return value;
-
-  const companyMap =
-    (value?.companies &&
-      typeof value.companies === "object" &&
-      !Array.isArray(value.companies) &&
-      value.companies) ||
-    (value?.topCompanies &&
-      typeof value.topCompanies === "object" &&
-      !Array.isArray(value.topCompanies) &&
-      value.topCompanies) ||
-    (value?.interviewQuiz &&
-      typeof value.interviewQuiz === "object" &&
-      !Array.isArray(value.interviewQuiz) &&
-      value.interviewQuiz);
-
-  if (companyMap) {
-    return toNamedObjectEntries(companyMap).map(([company, details]) =>
-      details && typeof details === "object" && !Array.isArray(details)
-        ? { company, ...details }
-        : { company, qa: details }
-    );
-  }
-
-  const fallbackEntries = toNamedObjectEntries(value).filter(([key]) => {
-    const normalized = key.toLowerCase();
-    return ![
-      "companies",
-      "topcompanies",
-      "interviewquiz",
-      "contactplaces",
-      "interviewcontactplaces",
-      "places",
-      "generatedat",
-      "date",
-      "model",
-    ].includes(normalized);
-  });
-
-  return fallbackEntries.map(([company, details]) =>
-    details && typeof details === "object" && !Array.isArray(details)
-      ? { company, ...details }
-      : { company, qa: details }
-  );
-};
-
-const normalizeContactPlaceList = (value) => {
-  if (Array.isArray(value?.contactPlaces)) return value.contactPlaces;
-  if (Array.isArray(value?.interviewContactPlaces)) return value.interviewContactPlaces;
-  if (Array.isArray(value?.places)) return value.places;
-
-  const placeMap =
-    (value?.contactPlaces &&
-      typeof value.contactPlaces === "object" &&
-      !Array.isArray(value.contactPlaces) &&
-      value.contactPlaces) ||
-    (value?.interviewContactPlaces &&
-      typeof value.interviewContactPlaces === "object" &&
-      !Array.isArray(value.interviewContactPlaces) &&
-      value.interviewContactPlaces) ||
-    (value?.places &&
-      typeof value.places === "object" &&
-      !Array.isArray(value.places) &&
-      value.places);
-
-  if (placeMap) {
-    return toNamedObjectEntries(placeMap).map(([place, details]) =>
-      details && typeof details === "object" && !Array.isArray(details)
-        ? { place, ...details }
-        : { place, description: details }
-    );
-  }
-
-  if (Array.isArray(value)) return value;
-  return [];
-};
-
-const normalizeInterviewQuizAndContactPlaces = ({
-  value,
-  companyCount,
-  placeCount,
-}) => {
-  const companyList = normalizeCompanyList(value);
-
-  const companies = companyList
-    .map((item) => {
-      const company = toSingleLine(
-        item?.company || item?.name || item?.organization || item?.brand
-      );
-      const quizTopic = toSingleLine(
-        item?.quizTopic ||
-          item?.topic ||
-          item?.focusArea ||
-          item?.domain ||
-          item?.specialization ||
-          "Interview fundamentals"
-      );
-      const qa = normalizeInterviewQaEntries(
-        item?.qa ||
-          item?.questions ||
-          item?.questionAnswers ||
-          item?.answers ||
-          item?.interviewQuestions ||
-          item?.items
-      );
-
-      if (!company || qa.length === 0) return null;
-
-      return {
-        company,
-        quizTopic,
-        qa: qa.slice(0, 5),
-      };
-    })
-    .filter(Boolean)
-    .slice(0, companyCount);
-
-  const placeList = normalizeContactPlaceList(value);
-
-  const contactPlaces = placeList
-    .map((item) => {
-      const place = toSingleLine(
-        item?.place || item?.name || item?.venue || item?.center || item?.hub
-      );
-      const city = toSingleLine(
-        item?.city || item?.district || item?.location || item?.address || "Tamil Nadu"
-      );
-      const description = toSingleLine(
-        item?.description || item?.about || item?.note || item?.details
-      );
-
-      if (!place) return null;
-
-      return {
-        place,
-        city: city || "Tamil Nadu",
-        description,
-      };
-    })
-    .filter(Boolean)
-    .slice(0, placeCount);
-
-  return { companies, contactPlaces };
 };
 
 const requestOpenAiTopTechnicalNews = async ({ apiKey, dateKey, count = 3 }) => {
@@ -2032,3 +1708,4 @@ export async function requestGeminiChat({ apiKey, messages }) {
   error.code = "gemini/request-failed";
   throw error;
 }
+

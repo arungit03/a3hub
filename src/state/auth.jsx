@@ -1,29 +1,25 @@
 /* eslint-disable react-refresh/only-export-components */
 import {
+  useCallback,
   createContext,
   useContext,
   useEffect,
   useState,
 } from "react";
 import {
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  reload,
-  sendEmailVerification,
-  sendPasswordResetEmail,
-  signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
-} from "firebase/auth";
-import {
-  doc,
-  getDoc,
-  serverTimestamp,
-  setDoc,
-} from "firebase/firestore";
-import { auth, db } from "../lib/firebase";
-import { registerPushTokenForUser } from "../lib/pushNotifications";
+  auth,
+  createFirebaseUnavailableError,
+  db,
+  ensureFirebaseAuth,
+  ensureFirestore,
+  firebaseClientReady,
+  firebaseStartupIssue,
+} from "../lib/firebase";
 import { extractNumericQrValue } from "../lib/qr";
+
+let firebaseAuthModulePromise = null;
+let firebaseFirestoreModulePromise = null;
+let pushNotificationsModulePromise = null;
 
 const normalizeDepartment = (value) =>
   (value || "").trim().toLowerCase();
@@ -36,6 +32,27 @@ const STAFF_PENDING_APPROVAL_MESSAGE =
 const FACE_MIN_VECTOR_LENGTH = 64;
 const FACE_REGISTRATION_SAMPLE_LIMIT = 6;
 const FACE_MATCH_THRESHOLD = 0.74;
+
+const loadFirebaseAuthModule = () => {
+  if (!firebaseAuthModulePromise) {
+    firebaseAuthModulePromise = import("firebase/auth");
+  }
+  return firebaseAuthModulePromise;
+};
+
+const loadFirebaseFirestoreModule = () => {
+  if (!firebaseFirestoreModulePromise) {
+    firebaseFirestoreModulePromise = import("firebase/firestore");
+  }
+  return firebaseFirestoreModulePromise;
+};
+
+const loadPushNotificationsModule = () => {
+  if (!pushNotificationsModulePromise) {
+    pushNotificationsModulePromise = import("../lib/pushNotifications");
+  }
+  return pushNotificationsModulePromise;
+};
 
 const normalizeFaceVector = (value) => {
   if (!Array.isArray(value)) return [];
@@ -180,6 +197,16 @@ const normalizeAccountStatus = (value) => {
   return "active";
 };
 
+const isPermissionDeniedError = (error) => {
+  const code = String(error?.code || "").trim().toLowerCase();
+  const message = String(error?.message || "").trim().toLowerCase();
+  return (
+    code.includes("permission-denied") ||
+    message.includes("missing or insufficient permissions") ||
+    message.includes("insufficient permissions")
+  );
+};
+
 const inferAccountRoleFromProfile = (profile = {}, selectedRole = "student") => {
   const hasStaffSignals = [
     profile?.designation,
@@ -229,18 +256,6 @@ const resolveEffectiveRole = ({ accountRole, selectedRole }) => {
     return "student";
   }
 
-  if (safeSelectedRole === "admin") {
-    return "admin";
-  }
-
-  if (safeSelectedRole === "staff") {
-    return "staff";
-  }
-
-  if (safeSelectedRole === "parent") {
-    return "parent";
-  }
-
   return "student";
 };
 
@@ -282,33 +297,150 @@ const buildResetActionCodeSettings = () => {
   return buildAuthActionCodeSettings("/password-change");
 };
 
-const getAuthBootstrapRef = () =>
-  doc(db, "systemSettings", AUTH_BOOTSTRAP_DOC_ID);
+const DEFAULT_VERIFICATION_EMAIL_PROXY_ENDPOINT =
+  "/.netlify/functions/auth-send-verification";
 
-const sendVerificationEmailWithFallback = async (firebaseUser) => {
+const shouldTryVerificationEmailProxy = (error) => {
+  const code = toSafeText(error?.code).toLowerCase();
+  return (
+    code !== "auth/too-many-requests" &&
+    code !== "auth/operation-not-allowed" &&
+    code !== "auth/user-disabled" &&
+    code !== "auth/invalid-user-token"
+  );
+};
+
+const requestVerificationEmailViaProxy = async (
+  firebaseUser,
+  actionCodeSettings
+) => {
+  if (!firebaseUser?.getIdToken || typeof fetch !== "function") {
+    throw new Error("Unable to send verification email.");
+  }
+
+  const idToken = await firebaseUser.getIdToken();
+  if (!idToken) {
+    throw new Error("Unable to authorize verification email request.");
+  }
+
+  const response = await fetch(DEFAULT_VERIFICATION_EMAIL_PROXY_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      idToken,
+      continueUrl: actionCodeSettings?.url || "",
+    }),
+  });
+
+  const rawText = await response.text();
+  let payload = {};
+  try {
+    payload = rawText ? JSON.parse(rawText) : {};
+  } catch {
+    payload = {};
+  }
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error("Verification email fallback endpoint unavailable.");
+    }
+    throw createAuthErrorWithCode(
+      payload?.code || "auth/internal-error",
+      payload?.error || "Unable to send verification email."
+    );
+  }
+};
+
+const ensureFirebaseConfigured = (feature = "Authentication") => {
+  if (firebaseClientReady) return;
+  throw createFirebaseUnavailableError(feature);
+};
+
+const loadFirebaseAuthRuntime = async (feature = "Authentication") => {
+  ensureFirebaseConfigured(feature);
+  const [authModule] = await Promise.all([
+    loadFirebaseAuthModule(),
+    ensureFirebaseAuth(),
+  ]);
+  return { authModule, auth };
+};
+
+const loadFirebaseSessionRuntime = async (feature = "Authentication") => {
+  ensureFirebaseConfigured(feature);
+  const [authModule, firestoreModule] = await Promise.all([
+    loadFirebaseAuthModule(),
+    loadFirebaseFirestoreModule(),
+    ensureFirebaseAuth(),
+    ensureFirestore(),
+  ]);
+  return {
+    authModule,
+    firestoreModule,
+    auth,
+    db,
+  };
+};
+
+const getAuthBootstrapRef = (docRef) =>
+  docRef(db, "systemSettings", AUTH_BOOTSTRAP_DOC_ID);
+
+const sendVerificationEmailWithFallback = async (
+  firebaseUser,
+  sendEmailVerificationFn
+) => {
   if (!firebaseUser) {
     throw new Error("Unable to send verification email.");
   }
 
   const actionCodeSettings = buildVerificationActionCodeSettings();
-  if (!actionCodeSettings) {
-    await sendEmailVerification(firebaseUser);
-    return;
-  }
-
   try {
-    await sendEmailVerification(firebaseUser, actionCodeSettings);
+    if (!actionCodeSettings) {
+      await sendEmailVerificationFn(firebaseUser);
+      return;
+    }
+
+    await sendEmailVerificationFn(firebaseUser, actionCodeSettings);
   } catch (error) {
     if (
       error?.code === "auth/unauthorized-continue-uri" ||
       error?.code === "auth/invalid-continue-uri"
     ) {
-      await sendEmailVerification(firebaseUser);
-      return;
+      try {
+        await sendEmailVerificationFn(firebaseUser);
+        return;
+      } catch (fallbackError) {
+        if (!shouldTryVerificationEmailProxy(fallbackError)) {
+          throw fallbackError;
+        }
+
+        try {
+          await requestVerificationEmailViaProxy(firebaseUser);
+          return;
+        } catch (proxyError) {
+          throw proxyError?.code ? proxyError : fallbackError;
+        }
+      }
     }
 
-    throw error;
+    if (!shouldTryVerificationEmailProxy(error)) {
+      throw error;
+    }
+
+    try {
+      await requestVerificationEmailViaProxy(firebaseUser, actionCodeSettings);
+      return;
+    } catch (proxyError) {
+      throw proxyError?.code ? proxyError : error;
+    }
   }
+};
+
+const createAuthErrorWithCode = (code, message) => {
+  const error = new Error(message);
+  error.code = code;
+  return error;
 };
 
 const AuthContext = createContext(null);
@@ -319,178 +451,210 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setLoading(true);
+  const resetSignedOutState = useCallback(() => {
+    setUser(null);
+    setRole(normalizeSessionRole(sessionStorage.getItem("roleSelection")));
+    setProfile(null);
+  }, []);
 
-      if (currentUser) {
-        try {
-          await reload(currentUser);
-        } catch {
-          // Non-blocking: fall back to cached auth state if reload fails.
-        }
-      }
-
-      if (!currentUser || !currentUser.emailVerified) {
-        setUser(null);
-        setRole(normalizeSessionRole(sessionStorage.getItem("roleSelection")));
-        setProfile(null);
-        setLoading(false);
-        return;
-      }
-
-      setUser(currentUser);
-
-      try {
-        const userDoc = await getDoc(doc(db, "users", currentUser.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          const accountStatus = normalizeAccountStatus(data?.status);
-          if (accountStatus === "blocked" || accountStatus === "pending") {
-            setUser(null);
-            setProfile(null);
-            setRole(normalizeSessionRole(sessionStorage.getItem("roleSelection")));
-            try {
-              await signOut(auth);
-            } catch {
-              // Ignore sign-out race conditions; blocked accounts should still be cleared locally.
-            }
-            setLoading(false);
-            return;
-          }
-          const resolvedName = resolveProfileName({
-            profileName: data?.name,
-            userName: currentUser.displayName,
-            userEmail: currentUser.email,
-          });
-          const selectedRole = normalizeSessionRole(
-            sessionStorage.getItem("roleSelection")
-          );
-          const explicitAccountRole = normalizeAccountRole(data?.role);
-          const inferredAccountRole = inferAccountRoleFromProfile(
-            data,
-            selectedRole
-          );
-          const accountRole =
-            explicitAccountRole === "student" && inferredAccountRole === "staff"
-              ? "staff"
-              : explicitAccountRole || inferredAccountRole;
-          const effectiveRole = resolveEffectiveRole({
-            accountRole,
-            selectedRole,
-          });
-          const canonicalAccountRole = normalizeAccountRole(accountRole || effectiveRole);
-          setRole(effectiveRole);
-          sessionStorage.setItem("roleSelection", effectiveRole);
-
-          const profileBackfill = {};
-          const storedRole = String(data?.role || "").trim().toLowerCase();
-          if (storedRole !== canonicalAccountRole) {
-            profileBackfill.role = canonicalAccountRole;
-          }
-          if (!data.departmentKey && data.department) {
-            profileBackfill.departmentKey = normalizeDepartment(data.department);
-          }
-          if (!String(data?.name || "").trim()) {
-            profileBackfill.name = resolvedName;
-          }
-          if (!String(data?.status || "").trim()) {
-            profileBackfill.status = "active";
-          }
-
-          if (Object.keys(profileBackfill).length > 0) {
-            try {
-              await setDoc(
-                doc(db, "users", currentUser.uid),
-                profileBackfill,
-                { merge: true }
-              );
-            } catch {
-              // Non-blocking: continue with local profile even if backfill fails.
-            }
-          }
-
-          if (canonicalAccountRole === "admin") {
-            try {
-              await setDoc(
-                getAuthBootstrapRef(),
-                {
-                  adminUid: currentUser.uid,
-                  updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-              );
-            } catch {
-              // Ignore bootstrap sync failures for legacy projects.
-            }
-          }
-          setProfile({
-            ...data,
-            name: resolvedName,
-            role: effectiveRole,
-            accountRole: canonicalAccountRole,
-            status: accountStatus,
-            departmentKey:
-              data.departmentKey || normalizeDepartment(data.department),
-          });
-        } else {
-          const selectedRole = normalizeSessionRole(
-            sessionStorage.getItem("roleSelection")
-          );
-          const fallbackAccountRole = normalizeAccountRole(selectedRole) || "student";
-          const effectiveRole = resolveEffectiveRole({
-            accountRole: fallbackAccountRole,
-            selectedRole,
-          });
-          const resolvedName = resolveProfileName({
-            profileName: "",
-            userName: currentUser.displayName,
-            userEmail: currentUser.email,
-          });
-          setRole(effectiveRole);
-          sessionStorage.setItem("roleSelection", effectiveRole);
-          setProfile({
-            email: currentUser.email,
-            name: resolvedName,
-            role: effectiveRole,
-            accountRole: fallbackAccountRole,
-            status: "active",
-          });
-        }
-      } catch {
-        const selectedRole = normalizeSessionRole(
-          sessionStorage.getItem("roleSelection")
-        );
-        const fallbackAccountRole = normalizeAccountRole(selectedRole) || "student";
-        const effectiveRole = resolveEffectiveRole({
-          accountRole: fallbackAccountRole,
-          selectedRole,
-        });
-        const resolvedName = resolveProfileName({
-          profileName: "",
-          userName: currentUser.displayName,
-          userEmail: currentUser.email,
-        });
-        setRole(effectiveRole);
-        sessionStorage.setItem("roleSelection", effectiveRole);
-        setProfile({
-          email: currentUser.email,
-          name: resolvedName,
-          role: effectiveRole,
-          accountRole: fallbackAccountRole,
-          status: "active",
-        });
-      } finally {
-        setLoading(false);
-      }
+  const applyFallbackProfile = useCallback((currentUser) => {
+    const selectedRole = normalizeSessionRole(sessionStorage.getItem("roleSelection"));
+    const fallbackAccountRole = "student";
+    const effectiveRole = resolveEffectiveRole({
+      accountRole: fallbackAccountRole,
+      selectedRole,
+    });
+    const resolvedName = resolveProfileName({
+      profileName: "",
+      userName: currentUser?.displayName,
+      userEmail: currentUser?.email,
     });
 
-    return () => unsubscribe();
+    setRole(effectiveRole);
+    sessionStorage.setItem("roleSelection", effectiveRole);
+    setProfile({
+      email: currentUser?.email || "",
+      name: resolvedName,
+      role: effectiveRole,
+      accountRole: fallbackAccountRole,
+      status: "active",
+    });
   }, []);
 
   useEffect(() => {
+    if (!firebaseClientReady) {
+      resetSignedOutState();
+      setLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    let unsubscribe = () => {};
+
+    const connectAuth = async () => {
+      try {
+        const {
+          authModule: { onAuthStateChanged, reload, signOut },
+        } = await loadFirebaseAuthRuntime("Authentication");
+
+        if (cancelled) return;
+
+        unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+          setLoading(true);
+
+          if (currentUser) {
+            try {
+              await reload(currentUser);
+            } catch {
+              // Non-blocking: fall back to cached auth state if reload fails.
+            }
+          }
+
+          if (!currentUser || !currentUser.emailVerified) {
+            resetSignedOutState();
+            setLoading(false);
+            return;
+          }
+
+          setUser(currentUser);
+
+          try {
+            const {
+              firestoreModule: { doc, getDoc, serverTimestamp, setDoc },
+            } = await loadFirebaseSessionRuntime("User profile");
+            const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+            if (userDoc.exists()) {
+              const data = userDoc.data();
+              const accountStatus = normalizeAccountStatus(data?.status);
+              if (accountStatus === "blocked" || accountStatus === "pending") {
+                resetSignedOutState();
+                try {
+                  await signOut(auth);
+                } catch {
+                  // Ignore sign-out race conditions; blocked accounts should still be cleared locally.
+                }
+                setLoading(false);
+                return;
+              }
+              const resolvedName = resolveProfileName({
+                profileName: data?.name,
+                userName: currentUser.displayName,
+                userEmail: currentUser.email,
+              });
+              const selectedRole = normalizeSessionRole(
+                sessionStorage.getItem("roleSelection")
+              );
+              const explicitAccountRole = normalizeAccountRole(data?.role);
+              const inferredAccountRole = inferAccountRoleFromProfile(
+                data,
+                selectedRole
+              );
+              const accountRole =
+                explicitAccountRole === "student" && inferredAccountRole === "staff"
+                  ? "staff"
+                  : explicitAccountRole || inferredAccountRole;
+              const effectiveRole = resolveEffectiveRole({
+                accountRole,
+                selectedRole,
+              });
+              const canonicalAccountRole = normalizeAccountRole(accountRole || effectiveRole);
+              setRole(effectiveRole);
+              sessionStorage.setItem("roleSelection", effectiveRole);
+
+              const profileBackfill = {};
+              const storedRole = String(data?.role || "").trim().toLowerCase();
+              if (storedRole !== canonicalAccountRole) {
+                profileBackfill.role = canonicalAccountRole;
+              }
+              if (!data.departmentKey && data.department) {
+                profileBackfill.departmentKey = normalizeDepartment(data.department);
+              }
+              if (!String(data?.name || "").trim()) {
+                profileBackfill.name = resolvedName;
+              }
+              if (!String(data?.status || "").trim()) {
+                profileBackfill.status = "active";
+              }
+
+              if (Object.keys(profileBackfill).length > 0) {
+                try {
+                  await setDoc(
+                    doc(db, "users", currentUser.uid),
+                    profileBackfill,
+                    { merge: true }
+                  );
+                } catch {
+                  // Non-blocking: continue with local profile even if backfill fails.
+                }
+              }
+
+              if (canonicalAccountRole === "admin") {
+                try {
+                  await setDoc(
+                    getAuthBootstrapRef(doc),
+                    {
+                      adminUid: currentUser.uid,
+                      updatedAt: serverTimestamp(),
+                    },
+                    { merge: true }
+                  );
+                } catch {
+                  // Ignore bootstrap sync failures for legacy projects.
+                }
+              }
+              setProfile({
+                ...data,
+                name: resolvedName,
+                role: effectiveRole,
+                accountRole: canonicalAccountRole,
+                status: accountStatus,
+                departmentKey:
+                  data.departmentKey || normalizeDepartment(data.department),
+              });
+            } else {
+              applyFallbackProfile(currentUser);
+            }
+          } catch {
+            applyFallbackProfile(currentUser);
+          } finally {
+            setLoading(false);
+          }
+        });
+      } catch {
+        if (cancelled) return;
+        resetSignedOutState();
+        setLoading(false);
+      }
+    };
+
+    void connectAuth();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [applyFallbackProfile, resetSignedOutState]);
+
+  useEffect(() => {
     if (!user?.uid) return;
-    void registerPushTokenForUser(user.uid);
+    let cancelled = false;
+
+    const registerPushToken = async () => {
+      try {
+        const { registerPushTokenForUser } = await loadPushNotificationsModule();
+        if (!cancelled) {
+          void registerPushTokenForUser(user.uid);
+        }
+      } catch {
+        // Ignore optional push registration failures during session bootstrap.
+      }
+    };
+
+    void registerPushToken();
+
+    return () => {
+      cancelled = true;
+    };
   }, [user?.uid]);
 
   const signup = async ({
@@ -507,6 +671,16 @@ export function AuthProvider({ children }) {
     faceVectorLength,
     designation,
   }) => {
+    const {
+      authModule: {
+        createUserWithEmailAndPassword,
+        sendEmailVerification,
+        signOut,
+        updateProfile,
+      },
+      firestoreModule: { doc, serverTimestamp, setDoc, writeBatch },
+    } = await loadFirebaseSessionRuntime("Account signup");
+
     const safeEmail = toSafeText(email).toLowerCase();
     const safeRole = normalizeSessionRole(role);
 
@@ -514,12 +688,13 @@ export function AuthProvider({ children }) {
       throw new Error("Parent signup is disabled. Use login credentials provided.");
     }
 
-    if (!["student", "staff"].includes(safeRole)) {
+    if (!["student", "staff", "admin"].includes(safeRole)) {
       throw new Error("Invalid role selected.");
     }
 
     let credential = null;
     let profileStored = false;
+    let verificationEmailStatus = "sent";
 
     try {
       credential = await createUserWithEmailAndPassword(auth, safeEmail, password);
@@ -605,21 +780,43 @@ export function AuthProvider({ children }) {
       }
 
       const userRef = doc(db, "users", credential.user.uid);
-      await setDoc(userRef, userProfile);
+
+      if (safeRole === "admin") {
+        const bootstrapRef = getAuthBootstrapRef(doc);
+        const batch = writeBatch(db);
+        batch.set(userRef, userProfile);
+        batch.set(
+          bootstrapRef,
+          {
+            adminUid: credential.user.uid,
+            updatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        );
+        await batch.commit();
+      } else {
+        await setDoc(userRef, userProfile);
+      }
 
       profileStored = true;
 
       try {
-        await sendVerificationEmailWithFallback(credential.user);
+        await sendVerificationEmailWithFallback(
+          credential.user,
+          sendEmailVerification
+        );
       } catch (error) {
         if (error?.code !== "auth/too-many-requests") {
           throw error;
         }
-        // Non-blocking: account is created; user can resend after cooldown.
+        verificationEmailStatus = "cooldown";
       }
       await signOut(auth);
 
-      return credential;
+      return {
+        credential,
+        verificationEmailStatus,
+      };
     } catch (error) {
       if (credential?.user && !profileStored) {
         try {
@@ -628,12 +825,34 @@ export function AuthProvider({ children }) {
           // Ignore cleanup failures; orphaned auth account can be handled by admin later.
         }
       }
+      if (
+        safeRole === "admin" &&
+        isPermissionDeniedError(error)
+      ) {
+        throw new Error(
+          "Admin registration is available only for the first admin account. Login with an existing admin account and create extra admins from Admin Users."
+        );
+      }
+      if (
+        safeRole === "staff" &&
+        isPermissionDeniedError(error)
+      ) {
+        throw new Error(
+          "Staff signup could not be saved. Publish the latest Firestore rules, then the account will be created in pending approval status."
+        );
+      }
       throw error;
     }
   };
 
   const login = async (email, password) => {
+    const {
+      authModule: { reload, signInWithEmailAndPassword, signOut },
+      firestoreModule: { doc, getDoc },
+    } = await loadFirebaseSessionRuntime("Login");
+
     const safeEmail = toSafeText(email).toLowerCase();
+    const selectedRole = normalizeSessionRole(sessionStorage.getItem("roleSelection"));
     const credential = await signInWithEmailAndPassword(
       auth,
       safeEmail,
@@ -647,26 +866,45 @@ export function AuthProvider({ children }) {
 
     try {
       const profileSnapshot = await getDoc(doc(db, "users", credential.user.uid));
+      const profileData = profileSnapshot.exists() ? profileSnapshot.data() : null;
+      const accountRole = normalizeAccountRole(profileData?.role);
       if (
         profileSnapshot.exists() &&
-        normalizeAccountStatus(profileSnapshot.data()?.status) === "blocked"
+        normalizeAccountStatus(profileData?.status) === "blocked"
       ) {
         await signOut(auth);
         throw new Error(BLOCKED_ACCOUNT_MESSAGE);
       }
       if (
         profileSnapshot.exists() &&
-        normalizeAccountStatus(profileSnapshot.data()?.status) === "pending"
+        normalizeAccountStatus(profileData?.status) === "pending"
       ) {
         await signOut(auth);
         throw new Error(STAFF_PENDING_APPROVAL_MESSAGE);
       }
+      if (selectedRole === "admin" && accountRole !== "admin") {
+        await signOut(auth);
+        throw new Error(
+          "This account does not have admin access. Login with an existing admin account."
+        );
+      }
     } catch (error) {
       if (
         error?.message === BLOCKED_ACCOUNT_MESSAGE ||
-        error?.message === STAFF_PENDING_APPROVAL_MESSAGE
+        error?.message === STAFF_PENDING_APPROVAL_MESSAGE ||
+        error?.message ===
+          "This account does not have admin access. Login with an existing admin account."
       ) {
         throw error;
+      }
+      if (selectedRole === "admin") {
+        await signOut(auth).catch(() => {});
+        if (isPermissionDeniedError(error)) {
+          throw new Error(
+            "Admin access could not be verified. This signed-in account is not recognized as an active admin by Firestore."
+          );
+        }
+        throw new Error("Unable to verify admin access right now. Please try again.");
       }
       // Non-blocking: avoid failing login if profile lookup has a transient issue.
     }
@@ -675,6 +913,16 @@ export function AuthProvider({ children }) {
   };
 
   const resendVerificationEmail = async ({ email, password }) => {
+    const {
+      authModule: {
+        reload,
+        sendEmailVerification,
+        signInWithEmailAndPassword,
+        signOut,
+      },
+      firestoreModule: { doc, getDoc },
+    } = await loadFirebaseSessionRuntime("Email verification");
+
     const safeEmail = toSafeText(email).toLowerCase();
     const safePassword = String(password || "");
     if (!safeEmail || !safePassword) {
@@ -713,10 +961,14 @@ export function AuthProvider({ children }) {
       }
 
       try {
-        await sendVerificationEmailWithFallback(credential.user);
+        await sendVerificationEmailWithFallback(
+          credential.user,
+          sendEmailVerification
+        );
       } catch (error) {
         if (error?.code === "auth/too-many-requests") {
-          throw new Error(
+          throw createAuthErrorWithCode(
+            "auth/too-many-requests",
             "Too many verification attempts. Please wait 15 minutes and try again."
           );
         }
@@ -728,35 +980,48 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (!firebaseClientReady) {
+      sessionStorage.removeItem("roleSelection");
+      return;
+    }
+    const {
+      authModule: { signOut },
+    } = await loadFirebaseAuthRuntime("Logout");
     sessionStorage.removeItem("roleSelection");
     return signOut(auth);
   };
 
-  const resetPassword = (email) => {
+  const resetPassword = async (email) => {
+    const {
+      authModule: { sendPasswordResetEmail },
+    } = await loadFirebaseAuthRuntime("Password reset");
+
     const safeEmail = toSafeText(email).toLowerCase();
 
     if (!safeEmail) {
-      return Promise.reject(new Error("Enter your email to reset password."));
+      throw new Error("Enter your email to reset password.");
     }
 
     const actionCodeSettings = buildResetActionCodeSettings();
     if (!actionCodeSettings) {
-      return sendPasswordResetEmail(auth, safeEmail);
+      await sendPasswordResetEmail(auth, safeEmail);
+      return;
     }
 
-    return sendPasswordResetEmail(auth, safeEmail, actionCodeSettings).catch(
-      (error) => {
-        if (
-          error?.code === "auth/unauthorized-continue-uri" ||
-          error?.code === "auth/invalid-continue-uri"
-        ) {
-          return sendPasswordResetEmail(auth, safeEmail);
-        }
-
-        throw error;
+    try {
+      await sendPasswordResetEmail(auth, safeEmail, actionCodeSettings);
+    } catch (error) {
+      if (
+        error?.code === "auth/unauthorized-continue-uri" ||
+        error?.code === "auth/invalid-continue-uri"
+      ) {
+        await sendPasswordResetEmail(auth, safeEmail);
+        return;
       }
-    );
+
+      throw error;
+    }
   };
 
   const value = {
@@ -764,6 +1029,8 @@ export function AuthProvider({ children }) {
     role,
     profile,
     loading,
+    firebaseReady: firebaseClientReady,
+    startupIssue: firebaseStartupIssue,
     login,
     signup,
     logout,

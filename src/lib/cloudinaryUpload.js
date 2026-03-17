@@ -1,8 +1,41 @@
+/**
+ * @typedef {{
+ *   cloudName?: string;
+ *   cloud_name?: string;
+ *   uploadPreset?: string;
+ *   upload_preset?: string;
+ * }} CloudinaryRuntimeConfig
+ */
+
+/**
+ * @typedef {{
+ *   cloudName: string;
+ *   uploadPreset: string;
+ * }} CloudinaryResolvedConfig
+ */
+
+/**
+ * @typedef {Error & { code: string }} CloudinaryError
+ */
+
+/**
+ * @param {string} key
+ * @returns {string}
+ */
 const getRequiredEnv = (key) => {
-  const value = import.meta.env[key];
+  const env = /** @type {Record<string, unknown>} */ (
+    typeof import.meta.env === "object" && import.meta.env !== null
+      ? import.meta.env
+      : {}
+  );
+  const value = env[key];
   return typeof value === "string" ? value.trim() : "";
 };
 
+/**
+ * @param {...unknown} values
+ * @returns {string}
+ */
 const pickFirstNonEmpty = (...values) => {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) {
@@ -22,14 +55,27 @@ const getDefinedUploadPreset = () =>
     ? __CLOUDINARY_UPLOAD_PRESET__.trim()
     : "";
 
+/**
+ * @returns {CloudinaryRuntimeConfig}
+ */
 const getRuntimeConfig = () => {
   if (typeof window === "undefined") return {};
+  const runtimeRoot =
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const config =
-    window.__A3HUB_CLOUDINARY_CONFIG__ || window.__CLOUDINARY_CONFIG__;
+    window.__A3HUB_CLOUDINARY_CONFIG__ ||
+    window.__CLOUDINARY_CONFIG__ ||
+    runtimeRoot.cloudinary;
   if (!config || typeof config !== "object") return {};
   return config;
 };
 
+/**
+ * @returns {CloudinaryResolvedConfig}
+ */
 const resolveCloudinaryConfig = () => {
   const runtimeConfig = getRuntimeConfig();
   const cloudName = pickFirstNonEmpty(
@@ -49,26 +95,49 @@ const resolveCloudinaryConfig = () => {
   return { cloudName, uploadPreset };
 };
 
+/**
+ * @returns {CloudinaryResolvedConfig}
+ */
 const ensureConfigured = () => {
   const config = resolveCloudinaryConfig();
   if (config.cloudName && config.uploadPreset) return config;
 
-  const error = new Error(
-    "Cloud upload is not configured. Set Cloudinary values in Netlify env and redeploy, or set them in public/cloudinary-config.js."
+  const error = /** @type {CloudinaryError} */ (
+    Object.assign(
+      new Error(
+        "Cloud upload is not configured. Set Cloudinary values in Netlify env and redeploy, or set them in public/runtime-config.js."
+      ),
+      { code: "cloudinary/not-configured" }
+    )
   );
-  error.code = "cloudinary/not-configured";
   throw error;
 };
 
+/**
+ * @param {string} cloudName
+ * @returns {string}
+ */
 const buildUploadEndpoint = (cloudName) =>
   `https://api.cloudinary.com/v1_1/${cloudName}/auto/upload`;
 
+/**
+ * @param {string} message
+ * @param {string} [code]
+ * @returns {CloudinaryError}
+ */
 const buildUploadError = (message, code = "cloudinary/upload-failed") => {
-  const error = new Error(message || "Unable to upload file.");
-  error.code = code;
+  const error = /** @type {CloudinaryError} */ (
+    Object.assign(new Error(message || "Unable to upload file."), { code })
+  );
   return error;
 };
 
+/**
+ * @param {{
+ *   file: File | Blob | null | undefined;
+ *   folder?: string;
+ * }} options
+ */
 export async function uploadFileToCloudinary({
   file,
   folder = "a3hub/assignments",

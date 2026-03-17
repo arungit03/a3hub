@@ -15,9 +15,19 @@
   "files": [
     "src/types/runtime-globals.d.ts",
     "src/config/features.js",
+    "src/hooks/useAutosaveDraft.js",
+    "src/hooks/useDirtyPrompt.js",
+    "src/hooks/useToast.js",
+    "src/lib/chunkLoadRecovery.js",
+    "src/lib/cloudinaryUpload.js",
     "src/lib/codeChallengeProgress.js",
+    "src/lib/codeLearningChallenges.js",
+    "src/lib/codingTools.js",
+    "src/lib/firebase.js",
     "src/lib/nativeCodeRunner.js",
+    "src/lib/qr.js",
     "src/lib/scheduleDate.js",
+    "src/state/toast-context.js",
     "scripts/project-structure.mjs"
   ]
 }

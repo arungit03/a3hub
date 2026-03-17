@@ -1,3 +1,27 @@
+/**
+ * @typedef {{
+ *   value: string;
+ *   selectionStart: number;
+ *   selectionEnd: number;
+ * }} TextEditResult
+ */
+
+/**
+ * @typedef {{
+ *   text: string;
+ *   safeStart: number;
+ *   safeEnd: number;
+ *   lineStart: number;
+ *   lineEnd: number;
+ *   block: string;
+ * }} ExpandedLineSelection
+ */
+
+/**
+ * @param {string} storageKey
+ * @param {unknown} fallbackValue
+ * @returns {string}
+ */
 export const readDraftValue = (storageKey, fallbackValue) => {
   if (typeof window === "undefined") {
     return String(fallbackValue ?? "");
@@ -15,6 +39,11 @@ export const readDraftValue = (storageKey, fallbackValue) => {
   return String(fallbackValue ?? "");
 };
 
+/**
+ * @param {string} storageKey
+ * @param {unknown} value
+ * @returns {void}
+ */
 export const saveDraftValue = (storageKey, value) => {
   if (typeof window === "undefined") return;
 
@@ -25,6 +54,10 @@ export const saveDraftValue = (storageKey, value) => {
   }
 };
 
+/**
+ * @param {unknown} value
+ * @returns {Promise<boolean>}
+ */
 export const copyTextValue = async (value) => {
   const text = String(value ?? "");
   if (!text) return false;
@@ -50,6 +83,11 @@ export const copyTextValue = async (value) => {
 
 const DEFAULT_INDENT = "    ";
 
+/**
+ * @param {unknown} value
+ * @param {number} position
+ * @returns {number}
+ */
 const toSafePosition = (value, position) => {
   const length = String(value || "").length;
   const numeric = Number(position);
@@ -57,6 +95,12 @@ const toSafePosition = (value, position) => {
   return Math.max(0, Math.min(length, Math.floor(numeric)));
 };
 
+/**
+ * @param {unknown} value
+ * @param {number} start
+ * @param {number} end
+ * @returns {ExpandedLineSelection}
+ */
 const expandSelectionToLines = (value, start, end) => {
   const text = String(value || "");
   const safeStart = Math.min(toSafePosition(text, start), toSafePosition(text, end));
@@ -76,6 +120,11 @@ const expandSelectionToLines = (value, start, end) => {
   };
 };
 
+/**
+ * @param {string} line
+ * @param {string} indentUnit
+ * @returns {{ nextLine: string; removed: number }}
+ */
 const removeLeadingIndent = (line, indentUnit) => {
   if (!line) {
     return { nextLine: line, removed: 0 };
@@ -94,6 +143,15 @@ const removeLeadingIndent = (line, indentUnit) => {
   return { nextLine: line, removed: 0 };
 };
 
+/**
+ * @param {{
+ *   value: unknown;
+ *   selectionStart: number;
+ *   selectionEnd: number;
+ *   indentUnit?: string;
+ * }} options
+ * @returns {TextEditResult}
+ */
 export const applyIndentToText = ({
   value,
   selectionStart,
@@ -128,6 +186,15 @@ export const applyIndentToText = ({
   };
 };
 
+/**
+ * @param {{
+ *   value: unknown;
+ *   selectionStart: number;
+ *   selectionEnd: number;
+ *   indentUnit?: string;
+ * }} options
+ * @returns {TextEditResult}
+ */
 export const applyOutdentToText = ({
   value,
   selectionStart,
@@ -183,6 +250,15 @@ export const applyOutdentToText = ({
   };
 };
 
+/**
+ * @param {{
+ *   value: unknown;
+ *   selectionStart: number;
+ *   selectionEnd: number;
+ *   commentToken: unknown;
+ * }} options
+ * @returns {TextEditResult}
+ */
 export const applyToggleLineComment = ({
   value,
   selectionStart,
@@ -208,6 +284,10 @@ export const applyToggleLineComment = ({
     meaningful.length > 0 &&
     meaningful.every((line) => line.trimStart().startsWith(token));
 
+  /**
+   * @param {string} line
+   * @returns {string}
+   */
   const normalizeUncomment = (line) => {
     const indentMatch = line.match(/^\s*/);
     const indent = indentMatch ? indentMatch[0] : "";
@@ -217,6 +297,10 @@ export const applyToggleLineComment = ({
     return `${indent}${afterToken.startsWith(" ") ? afterToken.slice(1) : afterToken}`;
   };
 
+  /**
+   * @param {string} line
+   * @returns {string}
+   */
   const normalizeComment = (line) => {
     if (!line.trim()) return line;
     const indentMatch = line.match(/^\s*/);

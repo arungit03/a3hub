@@ -5,8 +5,17 @@ This project includes multiple product areas in one codebase. To reduce onboardi
 ## Feature Keys
 
 - `attendance`
+- `assignments`
+- `books`
+- `marks`
+- `exams`
+- `tests`
+- `leave`
+- `todo`
 - `ai-chat`
 - `compilers`
+- `resume-builder`
+- `a3cad`
 - `notifications`
 - `admin`
 
@@ -18,31 +27,65 @@ Implementation source:
 - `attendance`:
   - Student/staff/parent attendance routes
   - Attendance quick navigation entries
+- `assignments`:
+  - Assignment routes, submissions, and related menu items
+- `books`:
+  - Book library routes and subject pages
+- `marks`:
+  - Marks/progress routes and related dashboard links
+- `exams`:
+  - Exam schedule routes and schedule-style menu entries
+- `tests`:
+  - Test and results routes
+- `leave`:
+  - Leave management routes and leave menu links
+- `todo`:
+  - Student to-do list routes
 - `ai-chat`:
   - Student/staff AI chat routes
   - AI-related menu/sidebar entries
 - `compilers`:
   - Student/staff code lab + compilers/interpreter routes
   - Coding quick navigation entries
+- `resume-builder`:
+  - Resume builder routes and related menu/sidebar entries
+- `a3cad`:
+  - Student/staff A3 CAD routes and related sidebar entry
 - `notifications`:
   - Navbar notification center trigger
 - `admin`:
   - `/admin/*` route tree
 
+## Deploy Profiles
+
+Profiles now provide a higher-level way to reduce scope without manually listing every feature:
+
+- `full`
+- `academic`
+- `learning`
+- `operations`
+- `lean`
+
+See:
+- `docs/deploy-profiles.md`
+
 ## Isolation Workflow
 
 Use either variable in your environment (for local use `.env.local`):
 
+- `VITE_DEPLOY_PROFILE=academic`
 - `VITE_FEATURES_ONLY=attendance`
 - `VITE_FEATURES_DISABLED=ai-chat,compilers`
 
 Rules:
 
+- If `VITE_DEPLOY_PROFILE` is set, that profile becomes the base feature set.
 - If `VITE_FEATURES_ONLY` is set, only listed features are enabled.
-- If `VITE_FEATURES_ONLY` is empty, all features are enabled except those in `VITE_FEATURES_DISABLED`.
+- If `VITE_FEATURES_ONLY` is empty, the active profile is used and then `VITE_FEATURES_DISABLED` is removed from it.
 
 Optional runtime override (without rebuild):
 
+- `window.__A3HUB_FEATURE_FLAGS__ = { profile: \"academic\" }`
 - `window.__A3HUB_FEATURE_FLAGS__ = { only: \"attendance\", disabled: \"\" }`
 - `window.__A3HUB_FEATURE_FLAGS__ = { disabled: \"ai-chat,compilers\" }`
 

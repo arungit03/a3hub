@@ -39,21 +39,40 @@ const STUDENT_PAGE_ROUTES = [
     feature: "attendance",
   },
   { path: "/student/menu", element: <MenuGridPage forcedStaff={false} /> },
-  { path: "/student/menu/assignments", element: <MenuGridPage forcedStaff={false} /> },
+  {
+    path: "/student/menu/assignments",
+    element: <MenuGridPage forcedStaff={false} />,
+    feature: "assignments",
+  },
   {
     path: "/student/menu/daily-python-challenges",
     element: <MenuGridPage forcedStaff={false} />,
+    feature: "compilers",
   },
-  { path: "/student/menu/resume-builder", element: <ResumeBuilderPage /> },
-  { path: "/student/menu/my-to-do-list", element: <StudentTodoListPage /> },
+  {
+    path: "/student/menu/resume-builder",
+    element: <ResumeBuilderPage />,
+    feature: "resume-builder",
+  },
+  {
+    path: "/student/menu/my-to-do-list",
+    element: <StudentTodoListPage />,
+    feature: "todo",
+  },
   {
     path: "/student/menu/marks-progress",
     element: <MarksProgressPage forcedRole="student" />,
+    feature: "marks",
   },
-  { path: "/student/menu/books", element: <BooksPage forcedRole="student" /> },
+  {
+    path: "/student/menu/books",
+    element: <BooksPage forcedRole="student" />,
+    feature: "books",
+  },
   {
     path: "/student/menu/books/:subjectId",
     element: <BookSubjectPage forcedRole="student" />,
+    feature: "books",
   },
   { path: "/student/code", element: <CodeLabPage />, feature: "compilers" },
   {
@@ -68,11 +87,19 @@ const STUDENT_PAGE_ROUTES = [
     feature: "compilers",
   },
   { path: "/student/ai", element: <AiChatPage />, feature: "ai-chat" },
-  { path: "/student/a3cad", element: <A3cadPage /> },
-  { path: "/student/exam-schedule", element: <ExamSchedulePage forcedRole="student" /> },
-  { path: "/student/test", element: <TestPage /> },
-  { path: "/student/results", element: <TestResultsPage /> },
-  { path: "/student/leave", element: <LeaveManagementPage forcedStaff={false} /> },
+  { path: "/student/a3cad", element: <A3cadPage />, feature: "a3cad" },
+  {
+    path: "/student/exam-schedule",
+    element: <ExamSchedulePage forcedRole="student" />,
+    feature: "exams",
+  },
+  { path: "/student/test", element: <TestPage />, feature: "tests" },
+  { path: "/student/results", element: <TestResultsPage />, feature: "tests" },
+  {
+    path: "/student/leave",
+    element: <LeaveManagementPage forcedStaff={false} />,
+    feature: "leave",
+  },
   { path: "/student/profile", element: <ProfilePage forcedRole="student" /> },
 ];
 
@@ -82,9 +109,21 @@ const STUDENT_REDIRECT_ROUTES = [
     to: "/student/menu/attendance",
     feature: "attendance",
   },
-  { path: "/student/resume-builder", to: "/student/menu/resume-builder" },
-  { path: "/menu/resume-builder", to: "/student/menu/resume-builder" },
-  { path: "/resume-builder", to: "/student/menu/resume-builder" },
+  {
+    path: "/student/resume-builder",
+    to: "/student/menu/resume-builder",
+    feature: "resume-builder",
+  },
+  {
+    path: "/menu/resume-builder",
+    to: "/student/menu/resume-builder",
+    feature: "resume-builder",
+  },
+  {
+    path: "/resume-builder",
+    to: "/student/menu/resume-builder",
+    feature: "resume-builder",
+  },
 ];
 
 function renderStudentRoleElement(element, withRouteLoader, feature) {

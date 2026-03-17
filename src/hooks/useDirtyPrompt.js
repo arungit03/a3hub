@@ -1,5 +1,9 @@
 import { unstable_usePrompt as usePrompt, useBeforeUnload } from "react-router-dom";
 
+/**
+ * @param {unknown} when
+ * @param {string} [message]
+ */
 export function useDirtyPrompt(
   when,
   message = "You have unsaved changes. Leave this page?"
@@ -20,4 +24,3 @@ export function useDirtyPrompt(
     message,
   });
 }
-

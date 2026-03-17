@@ -65,13 +65,13 @@ export default function Sidebar({
         }`}
         aria-label="Sidebar"
       >
-        <div className="mb-6 flex items-center justify-between">
-          <div>
+        <div className="relative mb-6 flex items-center justify-center">
+          <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight">A3 Hub</h1>
           </div>
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 lg:hidden"
+            className="absolute right-0 top-1/2 inline-flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl border border-white/15 bg-white/5 text-slate-200 transition hover:bg-white/10 lg:hidden"
             onClick={onClose}
             aria-label="Close sidebar"
           >

@@ -78,7 +78,6 @@ src/components/ToastProvider.jsx
 src/config/features.js
 src/data/departments.js
 src/data/menuItems.js
-src/data/mock.js
 src/hooks/useAutosaveDraft.js
 src/hooks/useDirtyPrompt.js
 src/hooks/useToast.js
@@ -87,6 +86,7 @@ src/lib/cloudinaryUpload.js
 src/lib/codeChallengeProgress.js
 src/lib/codeLearningChallenges.js
 src/lib/codingTools.js
+src/lib/faceApiLoader.js
 src/lib/firebase.js
 src/lib/geminiClient.js
 src/lib/nativeCodeRunner.js

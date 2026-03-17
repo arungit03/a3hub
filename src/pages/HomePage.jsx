@@ -15,6 +15,7 @@ import { useAuth } from "../state/auth";
 import StatCard from "../components/dashboard/StatCard";
 import ActivityItem from "../components/dashboard/ActivityItem";
 import { resolveScheduleEntryDateKey, toDateKey } from "../lib/scheduleDate";
+import { isFeatureEnabled } from "../config/features";
 
 const iconProps = {
   width: 18,
@@ -180,6 +181,12 @@ export default function HomePage({ forcedRole }) {
   const role = forcedRole || contextRole || "student";
   const isStaff = role === "staff";
   const basePath = role === "parent" ? "/parent" : "/student";
+  const attendanceEnabled = isFeatureEnabled("attendance");
+  const assignmentsEnabled = isFeatureEnabled("assignments");
+  const marksEnabled = isFeatureEnabled("marks");
+  const examsEnabled = isFeatureEnabled("exams");
+  const leaveEnabled = isFeatureEnabled("leave");
+  const notificationsEnabled = isFeatureEnabled("notifications");
   const todayKey = useMemo(() => toDateKey(new Date()), []);
   const roleLabel = ROLE_LABELS[role] || "Student";
   const userName = String(
@@ -221,6 +228,12 @@ export default function HomePage({ forcedRole }) {
   const [staffScanStatus, setStaffScanStatus] = useState("");
 
   useEffect(() => {
+    if (!attendanceEnabled) {
+      setAttendanceBreakdown({ present: 0, total: 0 });
+      setAttendancePercent(0);
+      return undefined;
+    }
+
     const attendanceQuery = query(collection(db, "attendance"), limit(60));
     const unsubscribe = onSnapshot(
       attendanceQuery,
@@ -268,9 +281,17 @@ export default function HomePage({ forcedRole }) {
     );
 
     return () => unsubscribe();
-  }, [role, user?.uid]);
+  }, [attendanceEnabled, role, user?.uid]);
 
   useEffect(() => {
+    if (!examsEnabled) {
+      setUpcomingExamCount(0);
+      setStaffExamItems([]);
+      setStaffExamsLoading(false);
+      setStaffExamsStatus("");
+      return undefined;
+    }
+
     setStaffExamsLoading(true);
     const examsQuery = query(
       collection(db, "examSchedules"),
@@ -308,7 +329,7 @@ export default function HomePage({ forcedRole }) {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [examsEnabled]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -424,6 +445,12 @@ export default function HomePage({ forcedRole }) {
       setStaffAssignmentsStatus("");
       return undefined;
     }
+    if (!assignmentsEnabled) {
+      setStaffAssignmentItems([]);
+      setStaffAssignmentsLoading(false);
+      setStaffAssignmentsStatus("");
+      return undefined;
+    }
 
     setStaffAssignmentsLoading(true);
     setStaffAssignmentsStatus("");
@@ -451,9 +478,14 @@ export default function HomePage({ forcedRole }) {
     );
 
     return () => unsubscribe();
-  }, [isStaff]);
+  }, [assignmentsEnabled, isStaff]);
 
   useEffect(() => {
+    if (!assignmentsEnabled) {
+      setPendingAssignmentCount(0);
+      return undefined;
+    }
+
     const assignmentsQuery = query(
       collection(db, "assignments"),
       orderBy("createdAt", "desc"),
@@ -477,9 +509,14 @@ export default function HomePage({ forcedRole }) {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [assignmentsEnabled]);
 
   useEffect(() => {
+    if (!notificationsEnabled) {
+      setActiveNoticeCount(0);
+      return undefined;
+    }
+
     const noticesQuery = query(
       collection(db, "notices"),
       orderBy("createdAt", "desc"),
@@ -503,161 +540,187 @@ export default function HomePage({ forcedRole }) {
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [notificationsEnabled]);
 
   useEffect(() => {
     const unsubscribers = [];
 
-    const assignmentsUnsubscribe = onSnapshot(
-      query(collection(db, "assignments"), orderBy("createdAt", "desc"), limit(1)),
-      (snapshot) => {
-        const firstItem = snapshot.docs[0]?.data();
-        if (!firstItem) {
-          setActivities((prev) => removeActivity(prev, "assignment"));
-          return;
-        }
-        setActivities((prev) => {
-          const nextActivity = {
-            id: "assignment",
-            title: "Assignment uploaded",
-            subtitle: firstItem?.title || "Subject assignment",
-            timeLabel: formatDateTimeLabel(firstItem?.createdAt),
-            status: "pending",
-          };
-          return upsertActivity(prev, nextActivity);
-        });
-      }
-    );
-    unsubscribers.push(assignmentsUnsubscribe);
-
-    const attendanceUnsubscribe = onSnapshot(
-      query(collection(db, "attendance"), limit(30)),
-      (snapshot) => {
-        if (snapshot.empty) {
-          setActivities((prev) => removeActivity(prev, "attendance"));
-          return;
-        }
-        let latest = null;
-
-        snapshot.docs.forEach((docItem) => {
-          const data = docItem.data() || {};
-          const candidateMillis =
-            toMillis(data.updatedAt) ||
-            toMillis(data.createdAt) ||
-            toMillis(data.date);
-          if (!latest || candidateMillis > latest.millis) {
-            latest = {
-              millis: candidateMillis,
-              data,
-            };
+    if (assignmentsEnabled) {
+      const assignmentsUnsubscribe = onSnapshot(
+        query(collection(db, "assignments"), orderBy("createdAt", "desc"), limit(1)),
+        (snapshot) => {
+          const firstItem = snapshot.docs[0]?.data();
+          if (!firstItem) {
+            setActivities((prev) => removeActivity(prev, "assignment"));
+            return;
           }
-        });
-
-        if (!latest) {
-          setActivities((prev) => removeActivity(prev, "attendance"));
-          return;
-        }
-        setActivities((prev) => {
-          const nextActivity = {
-            id: "attendance",
-            title: "Attendance marked",
-            subtitle: latest.data?.department || "Class attendance",
-            timeLabel: formatDateTimeLabel(latest.data?.updatedAt || latest.data?.createdAt),
-            status: "completed",
-          };
-          return upsertActivity(prev, nextActivity);
-        });
-      }
-    );
-    unsubscribers.push(attendanceUnsubscribe);
-
-    const marksUnsubscribe = onSnapshot(
-      query(collection(db, "internalMarks"), orderBy("createdAt", "desc"), limit(1)),
-      (snapshot) => {
-        const firstItem = snapshot.docs[0]?.data();
-        if (!firstItem) {
-          setActivities((prev) => removeActivity(prev, "marks"));
-          return;
-        }
-        setActivities((prev) => {
-          const nextActivity = {
-            id: "marks",
-            title: "Marks updated",
-            subtitle: firstItem?.examName || "Internal marks",
-            timeLabel: formatDateTimeLabel(firstItem?.createdAt),
-            status: "completed",
-          };
-          return upsertActivity(prev, nextActivity);
-        });
-      }
-    );
-    unsubscribers.push(marksUnsubscribe);
-
-    const leaveUnsubscribe = onSnapshot(
-      query(collection(db, "leaveRequests"), orderBy("createdAt", "desc"), limit(20)),
-      (snapshot) => {
-        const approvedItem = snapshot.docs
-          .map((docItem) => docItem.data())
-          .find((item) => {
-            const normalized = String(item?.status || "").toLowerCase();
-            return normalized === "approved" || normalized === "take";
+          setActivities((prev) => {
+            const nextActivity = {
+              id: "assignment",
+              title: "Assignment uploaded",
+              subtitle: firstItem?.title || "Subject assignment",
+              timeLabel: formatDateTimeLabel(firstItem?.createdAt),
+              status: "pending",
+            };
+            return upsertActivity(prev, nextActivity);
           });
-        if (!approvedItem) {
-          setActivities((prev) => removeActivity(prev, "leave"));
-          return;
         }
-        setActivities((prev) => {
-          const nextActivity = {
-            id: "leave",
-            title: "Leave approved",
-            subtitle: approvedItem?.fromDepartment || "Department leave",
-            timeLabel: formatDateTimeLabel(approvedItem?.updatedAt || approvedItem?.createdAt),
-            status: getLeaveStatus(approvedItem?.status),
-          };
-          return upsertActivity(prev, nextActivity);
-        });
-      }
-    );
-    unsubscribers.push(leaveUnsubscribe);
+      );
+      unsubscribers.push(assignmentsUnsubscribe);
+    } else {
+      setActivities((prev) => removeActivity(prev, "assignment"));
+    }
+
+    if (attendanceEnabled) {
+      const attendanceUnsubscribe = onSnapshot(
+        query(collection(db, "attendance"), limit(30)),
+        (snapshot) => {
+          if (snapshot.empty) {
+            setActivities((prev) => removeActivity(prev, "attendance"));
+            return;
+          }
+          let latest = null;
+
+          snapshot.docs.forEach((docItem) => {
+            const data = docItem.data() || {};
+            const candidateMillis =
+              toMillis(data.updatedAt) ||
+              toMillis(data.createdAt) ||
+              toMillis(data.date);
+            if (!latest || candidateMillis > latest.millis) {
+              latest = {
+                millis: candidateMillis,
+                data,
+              };
+            }
+          });
+
+          if (!latest) {
+            setActivities((prev) => removeActivity(prev, "attendance"));
+            return;
+          }
+          setActivities((prev) => {
+            const nextActivity = {
+              id: "attendance",
+              title: "Attendance marked",
+              subtitle: latest.data?.department || "Class attendance",
+              timeLabel: formatDateTimeLabel(latest.data?.updatedAt || latest.data?.createdAt),
+              status: "completed",
+            };
+            return upsertActivity(prev, nextActivity);
+          });
+        }
+      );
+      unsubscribers.push(attendanceUnsubscribe);
+    } else {
+      setActivities((prev) => removeActivity(prev, "attendance"));
+    }
+
+    if (marksEnabled) {
+      const marksUnsubscribe = onSnapshot(
+        query(collection(db, "internalMarks"), orderBy("createdAt", "desc"), limit(1)),
+        (snapshot) => {
+          const firstItem = snapshot.docs[0]?.data();
+          if (!firstItem) {
+            setActivities((prev) => removeActivity(prev, "marks"));
+            return;
+          }
+          setActivities((prev) => {
+            const nextActivity = {
+              id: "marks",
+              title: "Marks updated",
+              subtitle: firstItem?.examName || "Internal marks",
+              timeLabel: formatDateTimeLabel(firstItem?.createdAt),
+              status: "completed",
+            };
+            return upsertActivity(prev, nextActivity);
+          });
+        }
+      );
+      unsubscribers.push(marksUnsubscribe);
+    } else {
+      setActivities((prev) => removeActivity(prev, "marks"));
+    }
+
+    if (leaveEnabled) {
+      const leaveUnsubscribe = onSnapshot(
+        query(collection(db, "leaveRequests"), orderBy("createdAt", "desc"), limit(20)),
+        (snapshot) => {
+          const approvedItem = snapshot.docs
+            .map((docItem) => docItem.data())
+            .find((item) => {
+              const normalized = String(item?.status || "").toLowerCase();
+              return normalized === "approved" || normalized === "take";
+            });
+          if (!approvedItem) {
+            setActivities((prev) => removeActivity(prev, "leave"));
+            return;
+          }
+          setActivities((prev) => {
+            const nextActivity = {
+              id: "leave",
+              title: "Leave approved",
+              subtitle: approvedItem?.fromDepartment || "Department leave",
+              timeLabel: formatDateTimeLabel(approvedItem?.updatedAt || approvedItem?.createdAt),
+              status: getLeaveStatus(approvedItem?.status),
+            };
+            return upsertActivity(prev, nextActivity);
+          });
+        }
+      );
+      unsubscribers.push(leaveUnsubscribe);
+    } else {
+      setActivities((prev) => removeActivity(prev, "leave"));
+    }
 
     return () => {
       unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
-  }, []);
+  }, [assignmentsEnabled, attendanceEnabled, leaveEnabled, marksEnabled]);
 
   const statCards = useMemo(
-    () => [
-      {
-        id: "exams",
-        title: "Upcoming Exams",
-        value: String(upcomingExamCount),
-        badgeText: "This Week",
-        badgeTone: "blue",
-        icon: STAT_ICONS.exams,
-        to: `${basePath}/exam-schedule`,
-      },
-      {
-        id: "assignments",
-        title: "Pending Assignments",
-        value: String(pendingAssignmentCount),
-        badgeText: "Due Soon",
-        badgeTone: "orange",
-        icon: STAT_ICONS.assignments,
-        to: `${basePath}/menu/assignments`,
-      },
-      {
-        id: "notices",
-        title: "New Notices",
-        value: String(activeNoticeCount),
-        badgeText: "Active",
-        badgeTone: "purple",
-        icon: STAT_ICONS.notices,
-        to: role === "parent" ? `${basePath}/home` : `${basePath}/menu?open=notices`,
-      },
-    ],
+    () =>
+      [
+        examsEnabled
+          ? {
+              id: "exams",
+              title: "Upcoming Exams",
+              value: String(upcomingExamCount),
+              badgeText: "This Week",
+              badgeTone: "blue",
+              icon: STAT_ICONS.exams,
+              to: `${basePath}/exam-schedule`,
+            }
+          : null,
+        assignmentsEnabled
+          ? {
+              id: "assignments",
+              title: "Pending Assignments",
+              value: String(pendingAssignmentCount),
+              badgeText: "Due Soon",
+              badgeTone: "orange",
+              icon: STAT_ICONS.assignments,
+              to: `${basePath}/menu/assignments`,
+            }
+          : null,
+        notificationsEnabled
+          ? {
+              id: "notices",
+              title: "New Notices",
+              value: String(activeNoticeCount),
+              badgeText: "Active",
+              badgeTone: "purple",
+              icon: STAT_ICONS.notices,
+              to: role === "parent" ? `${basePath}/home` : `${basePath}/menu?open=notices`,
+            }
+          : null,
+      ].filter(Boolean),
     [
       activeNoticeCount,
+      assignmentsEnabled,
       basePath,
+      examsEnabled,
+      notificationsEnabled,
       pendingAssignmentCount,
       role,
       upcomingExamCount,

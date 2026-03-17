@@ -8,9 +8,17 @@ const toBoolean = (value) =>
   /^(1|true|yes|on)$/i.test(String(value || "").trim());
 
 const resolvePushClientConfig = () => {
+  const runtimeRoot =
+    typeof window !== "undefined" &&
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
   const runtimeConfig =
     typeof window !== "undefined" && window.__A3HUB_PUSH_CONFIG__
       ? window.__A3HUB_PUSH_CONFIG__
+      : runtimeRoot.push && typeof runtimeRoot.push === "object"
+      ? runtimeRoot.push
       : {};
 
   const enabledFromEnv = toBoolean(import.meta.env.VITE_PUSH_NOTIFY_ENABLED);

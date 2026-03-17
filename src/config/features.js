@@ -1,8 +1,10 @@
 /**
- * @typedef {"attendance" | "ai-chat" | "compilers" | "notifications" | "admin"} FeatureKey
+ * @typedef {"attendance" | "assignments" | "books" | "marks" | "exams" | "tests" | "leave" | "todo" | "ai-chat" | "compilers" | "resume-builder" | "a3cad" | "notifications" | "admin"} FeatureKey
+ * @typedef {"full" | "academic" | "learning" | "operations" | "lean"} DeployProfileKey
  * @typedef {{ label: string, description: string }} FeatureDefinition
- * @typedef {{ only?: string | readonly string[] | null, disabled?: string | readonly string[] | null }} FeatureToggleSource
- * @typedef {{ only: Set<FeatureKey>, disabled: Set<FeatureKey> }} FeatureToggleConfig
+ * @typedef {{ label: string, description: string, features: readonly FeatureKey[] }} DeployProfileDefinition
+ * @typedef {{ profile?: string | null, only?: string | readonly string[] | null, disabled?: string | readonly string[] | null }} FeatureToggleSource
+ * @typedef {{ profile: DeployProfileKey, only: Set<FeatureKey>, disabled: Set<FeatureKey>, enabled: Set<FeatureKey> }} FeatureToggleConfig
  */
 
 const FEATURE_DEFINITIONS = Object.freeze(
@@ -11,6 +13,34 @@ const FEATURE_DEFINITIONS = Object.freeze(
     label: "Attendance",
     description: "Attendance tracking and attendance views.",
   },
+  assignments: {
+    label: "Assignments",
+    description: "Assignment publishing, submissions, and related staff workflows.",
+  },
+  books: {
+    label: "Books",
+    description: "Library, books, and subject reading flows.",
+  },
+  marks: {
+    label: "Marks & Progress",
+    description: "Marks, progress reporting, and academic performance views.",
+  },
+  exams: {
+    label: "Exam Schedule",
+    description: "Exam schedule planning and student/staff exam views.",
+  },
+  tests: {
+    label: "Tests",
+    description: "Tests, results, and lightweight assessment flows.",
+  },
+  leave: {
+    label: "Leave",
+    description: "Leave request and leave approval workflows.",
+  },
+  todo: {
+    label: "To-Do",
+    description: "Personal student task tracking and daily to-do items.",
+  },
   "ai-chat": {
     label: "AI Chat",
     description: "AI assistant pages and AI-powered interactions.",
@@ -18,6 +48,14 @@ const FEATURE_DEFINITIONS = Object.freeze(
   compilers: {
     label: "Compilers",
     description: "Code lab and compiler/interpreter tooling.",
+  },
+  "resume-builder": {
+    label: "Resume Builder",
+    description: "Resume builder and AI-assisted resume generation.",
+  },
+  a3cad: {
+    label: "A3 CAD",
+    description: "A3 CAD logic simulator and circuit design tooling.",
   },
   notifications: {
     label: "Notifications",
@@ -35,6 +73,73 @@ export const FEATURE_KEYS = Object.freeze(
 );
 
 const KNOWN_FEATURES = new Set(FEATURE_KEYS);
+const DEFAULT_DEPLOY_PROFILE = "full";
+
+const DEPLOY_PROFILE_DEFINITIONS = Object.freeze(
+  /** @type {Record<DeployProfileKey, DeployProfileDefinition>} */ ({
+    full: {
+      label: "Full Suite",
+      description: "Every product module is enabled.",
+      features: FEATURE_KEYS,
+    },
+    academic: {
+      label: "Academic Core",
+      description: "Attendance and core academic workflows without AI/CAD extras.",
+      features: [
+        "attendance",
+        "assignments",
+        "books",
+        "marks",
+        "exams",
+        "tests",
+        "leave",
+        "notifications",
+      ],
+    },
+    learning: {
+      label: "Learning Lab",
+      description: "Learning-heavy deploy focused on coding, AI, CAD, and study tools.",
+      features: [
+        "books",
+        "tests",
+        "todo",
+        "ai-chat",
+        "compilers",
+        "resume-builder",
+        "a3cad",
+      ],
+    },
+    operations: {
+      label: "Operations",
+      description: "Staff/admin-focused operational workflows and notifications.",
+      features: [
+        "attendance",
+        "assignments",
+        "leave",
+        "notifications",
+        "admin",
+      ],
+    },
+    lean: {
+      label: "Lean Campus",
+      description: "Low-complexity deploy with only the most common student/staff flows.",
+      features: [
+        "attendance",
+        "assignments",
+        "books",
+        "marks",
+        "exams",
+        "leave",
+      ],
+    },
+  })
+);
+
+export const DEPLOY_PROFILE_KEYS = Object.freeze(
+  /** @type {DeployProfileKey[]} */ (Object.keys(DEPLOY_PROFILE_DEFINITIONS))
+);
+
+const KNOWN_DEPLOY_PROFILES = new Set(DEPLOY_PROFILE_KEYS);
 
 /**
  * @param {unknown} value
@@ -47,6 +152,12 @@ const toSafeText = (value) => (typeof value === "string" ? value.trim() : "");
  * @returns {string}
  */
 const normalizeFeatureKey = (value) => toSafeText(value).toLowerCase();
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+const normalizeDeployProfileKey = (value) => toSafeText(value).toLowerCase();
 
 /**
  * @param {unknown} value
@@ -80,6 +191,22 @@ const isKnownFeatureKey = (featureKey) =>
   KNOWN_FEATURES.has(/** @type {FeatureKey} */ (featureKey));
 
 /**
+ * @param {string} profileKey
+ * @returns {profileKey is DeployProfileKey}
+ */
+const isKnownDeployProfileKey = (profileKey) =>
+  KNOWN_DEPLOY_PROFILES.has(/** @type {DeployProfileKey} */ (profileKey));
+
+/**
+ * @param {unknown} value
+ * @returns {DeployProfileKey}
+ */
+const resolveDeployProfileKey = (value) => {
+  const normalized = normalizeDeployProfileKey(value);
+  return isKnownDeployProfileKey(normalized) ? normalized : DEFAULT_DEPLOY_PROFILE;
+};
+
+/**
  * @returns {FeatureToggleSource}
  */
 const readRuntimeFeatureConfig = () => {
@@ -103,6 +230,7 @@ const readBuildEnv = () => {
       : {}
   );
   return {
+    profile: env.VITE_DEPLOY_PROFILE,
     only: env.VITE_FEATURES_ONLY,
     disabled: env.VITE_FEATURES_DISABLED,
   };
@@ -119,6 +247,7 @@ const readNodeEnv = () => {
       ? maybeProcess.env
       : {};
   return {
+    profile: env.VITE_DEPLOY_PROFILE,
     only: env.VITE_FEATURES_ONLY,
     disabled: env.VITE_FEATURES_DISABLED,
   };
@@ -131,6 +260,10 @@ export function getFeatureToggleConfig() {
   const runtimeConfig = readRuntimeFeatureConfig();
   const buildEnv = readBuildEnv();
   const nodeEnv = readNodeEnv();
+  const profile = resolveDeployProfileKey(
+    runtimeConfig.profile ?? buildEnv.profile ?? nodeEnv.profile
+  );
+  const profileDefinition = DEPLOY_PROFILE_DEFINITIONS[profile];
 
   const onlyList = parseFeatureList(
     runtimeConfig.only ?? buildEnv.only ?? nodeEnv.only
@@ -140,9 +273,18 @@ export function getFeatureToggleConfig() {
     runtimeConfig.disabled ?? buildEnv.disabled ?? nodeEnv.disabled
   ).filter(isKnownFeatureKey);
 
+  const enabled = new Set(
+    onlyList.length > 0 ? onlyList : profileDefinition.features
+  );
+  disabledList.forEach((featureKey) => {
+    enabled.delete(featureKey);
+  });
+
   return {
+    profile,
     only: new Set(onlyList),
     disabled: new Set(disabledList),
+    enabled,
   };
 }
 
@@ -157,10 +299,7 @@ export function isFeatureEnabled(featureKey) {
   }
 
   const config = getFeatureToggleConfig();
-  if (config.only.size > 0) {
-    return config.only.has(normalized);
-  }
-  return !config.disabled.has(normalized);
+  return config.enabled.has(normalized);
 }
 
 /**
@@ -191,11 +330,14 @@ export function getFeatureDebugSummary() {
     key,
     label: FEATURE_DEFINITIONS[key]?.label || key,
     enabled: isFeatureEnabled(key),
+    profile: config.profile,
     mode:
       config.only.size > 0
         ? "only"
         : config.disabled.size > 0
         ? "disabled"
+        : config.profile !== DEFAULT_DEPLOY_PROFILE
+        ? "profile"
         : "default",
   }));
 }
@@ -208,4 +350,14 @@ export function getFeatureDefinition(featureKey) {
   const normalized = normalizeFeatureKey(featureKey);
   if (!isKnownFeatureKey(normalized)) return null;
   return FEATURE_DEFINITIONS[normalized] || null;
+}
+
+/**
+ * @param {unknown} profileKey
+ * @returns {DeployProfileDefinition | null}
+ */
+export function getDeployProfileDefinition(profileKey) {
+  const normalized = normalizeDeployProfileKey(profileKey);
+  if (!isKnownDeployProfileKey(normalized)) return null;
+  return DEPLOY_PROFILE_DEFINITIONS[normalized] || null;
 }

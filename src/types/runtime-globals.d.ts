@@ -1,6 +1,7 @@
 type FeatureToggleInput = string | readonly string[] | null | undefined;
 
 interface A3HubFeatureFlags {
+  profile?: string | null;
   only?: FeatureToggleInput;
   disabled?: FeatureToggleInput;
   [key: string]: unknown;
@@ -8,8 +9,10 @@ interface A3HubFeatureFlags {
 
 interface Window {
   __A3HUB_FEATURE_FLAGS__?: A3HubFeatureFlags;
+  __A3HUB_RUNTIME_CONFIG__?: Record<string, unknown>;
   __A3HUB_CLOUDINARY_CONFIG__?: Record<string, unknown>;
   __A3HUB_EMAIL_CONFIG__?: Record<string, unknown>;
+  __A3HUB_FIREBASE_CONFIG__?: Record<string, unknown>;
   __A3HUB_GEMINI_CONFIG__?: Record<string, unknown>;
   __A3HUB_OPENAI_CONFIG__?: Record<string, unknown>;
   __A3HUB_PUSH_CONFIG__?: Record<string, unknown>;
@@ -24,6 +27,7 @@ interface ServiceWorkerGlobalScope {
 }
 
 interface ImportMetaEnv {
+  readonly VITE_DEPLOY_PROFILE?: string;
   readonly VITE_FEATURES_ONLY?: string;
   readonly VITE_FEATURES_DISABLED?: string;
   readonly VITE_FIREBASE_API_KEY?: string;
@@ -50,3 +54,6 @@ interface ImportMetaEnv {
   readonly VITE_AI_PROXY_ENDPOINT?: string;
   readonly VITE_ALLOW_CLIENT_AI_KEY?: string;
 }
+
+declare const __CLOUDINARY_CLOUD_NAME__: string | undefined;
+declare const __CLOUDINARY_UPLOAD_PRESET__: string | undefined;

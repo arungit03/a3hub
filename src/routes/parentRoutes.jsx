@@ -20,9 +20,18 @@ const PARENT_PAGE_ROUTES = [
   {
     path: "/parent/menu/marks-progress",
     element: <MarksProgressPage forcedRole="parent" />,
+    feature: "marks",
   },
-  { path: "/parent/exam-schedule", element: <ExamSchedulePage forcedRole="parent" /> },
-  { path: "/parent/menu/assignments", element: <ParentAssignmentsPage /> },
+  {
+    path: "/parent/exam-schedule",
+    element: <ExamSchedulePage forcedRole="parent" />,
+    feature: "exams",
+  },
+  {
+    path: "/parent/menu/assignments",
+    element: <ParentAssignmentsPage />,
+    feature: "assignments",
+  },
 ];
 
 function renderParentRoleElement(element, withRouteLoader, feature) {
