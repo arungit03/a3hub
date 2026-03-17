@@ -61,36 +61,12 @@ const ROLE_LABELS = {
   parent: "Parent",
 };
 
-const DEFAULT_ACTIVITIES = [
-  {
-    id: "assignment",
-    title: "Assignment uploaded",
-    subtitle: "Data Structures - CSE A",
-    timeLabel: "Today, 9:30 AM",
-    status: "pending",
-  },
-  {
-    id: "attendance",
-    title: "Attendance marked",
-    subtitle: "III Year - Section B",
-    timeLabel: "Today, 10:15 AM",
-    status: "completed",
-  },
-  {
-    id: "marks",
-    title: "Marks updated",
-    subtitle: "Internal Assessment 2",
-    timeLabel: "Today, 11:20 AM",
-    status: "completed",
-  },
-  {
-    id: "leave",
-    title: "Leave approved",
-    subtitle: "Student leave request",
-    timeLabel: "Today, 12:05 PM",
-    status: "approved",
-  },
-];
+const ACTIVITY_ORDER = Object.freeze({
+  assignment: 0,
+  attendance: 1,
+  marks: 2,
+  leave: 3,
+});
 
 const toMillis = (value) => {
   if (!value) return 0;
@@ -188,6 +164,16 @@ const getLeaveStatus = (status) => {
   return "pending";
 };
 
+const upsertActivity = (items, nextItem) =>
+  [...items.filter((item) => item?.id !== nextItem.id), nextItem].sort(
+    (left, right) =>
+      (ACTIVITY_ORDER[left?.id] ?? Number.MAX_SAFE_INTEGER) -
+      (ACTIVITY_ORDER[right?.id] ?? Number.MAX_SAFE_INTEGER)
+  );
+
+const removeActivity = (items, activityId) =>
+  items.filter((item) => item?.id !== activityId);
+
 export default function HomePage({ forcedRole }) {
   const navigate = useNavigate();
   const { role: contextRole, profile, user } = useAuth();
@@ -203,11 +189,11 @@ export default function HomePage({ forcedRole }) {
     .replace(/@.*/, "");
   const dashboardName = userName || "Campus Member";
 
-  const [attendancePercent, setAttendancePercent] = useState(92);
-  const [upcomingExamCount, setUpcomingExamCount] = useState(5);
-  const [pendingAssignmentCount, setPendingAssignmentCount] = useState(3);
-  const [activeNoticeCount, setActiveNoticeCount] = useState(2);
-  const [activities, setActivities] = useState(DEFAULT_ACTIVITIES);
+  const [attendancePercent, setAttendancePercent] = useState(0);
+  const [upcomingExamCount, setUpcomingExamCount] = useState(0);
+  const [pendingAssignmentCount, setPendingAssignmentCount] = useState(0);
+  const [activeNoticeCount, setActiveNoticeCount] = useState(0);
+  const [activities, setActivities] = useState([]);
   const [attendanceBreakdown, setAttendanceBreakdown] = useState({
     present: 0,
     total: 0,
@@ -271,11 +257,13 @@ export default function HomePage({ forcedRole }) {
         if (total > 0) {
           const nextPercent = Math.max(0, Math.min(100, Math.round((present / total) * 100)));
           setAttendancePercent(nextPercent);
+        } else {
+          setAttendancePercent(0);
         }
       },
       () => {
-        // Keep fallback values when attendance query fails.
         setAttendanceBreakdown({ present: 0, total: 0 });
+        setAttendancePercent(0);
       }
     );
 
@@ -312,7 +300,7 @@ export default function HomePage({ forcedRole }) {
         setStaffExamsStatus("");
       },
       () => {
-        // Keep fallback values when exam query fails.
+        setUpcomingExamCount(0);
         setStaffExamItems([]);
         setStaffExamsLoading(false);
         setStaffExamsStatus("Unable to load exam schedule.");
@@ -484,7 +472,7 @@ export default function HomePage({ forcedRole }) {
         setPendingAssignmentCount(count || 0);
       },
       () => {
-        // Keep fallback values when assignment query fails.
+        setPendingAssignmentCount(0);
       }
     );
 
@@ -510,7 +498,7 @@ export default function HomePage({ forcedRole }) {
         setActiveNoticeCount(count || 0);
       },
       () => {
-        // Keep fallback values when notice query fails.
+        setActiveNoticeCount(0);
       }
     );
 
@@ -524,17 +512,19 @@ export default function HomePage({ forcedRole }) {
       query(collection(db, "assignments"), orderBy("createdAt", "desc"), limit(1)),
       (snapshot) => {
         const firstItem = snapshot.docs[0]?.data();
-        if (!firstItem) return;
+        if (!firstItem) {
+          setActivities((prev) => removeActivity(prev, "assignment"));
+          return;
+        }
         setActivities((prev) => {
-          const next = [...prev];
-          next[0] = {
+          const nextActivity = {
             id: "assignment",
             title: "Assignment uploaded",
             subtitle: firstItem?.title || "Subject assignment",
             timeLabel: formatDateTimeLabel(firstItem?.createdAt),
             status: "pending",
           };
-          return next;
+          return upsertActivity(prev, nextActivity);
         });
       }
     );
@@ -543,7 +533,10 @@ export default function HomePage({ forcedRole }) {
     const attendanceUnsubscribe = onSnapshot(
       query(collection(db, "attendance"), limit(30)),
       (snapshot) => {
-        if (snapshot.empty) return;
+        if (snapshot.empty) {
+          setActivities((prev) => removeActivity(prev, "attendance"));
+          return;
+        }
         let latest = null;
 
         snapshot.docs.forEach((docItem) => {
@@ -560,17 +553,19 @@ export default function HomePage({ forcedRole }) {
           }
         });
 
-        if (!latest) return;
+        if (!latest) {
+          setActivities((prev) => removeActivity(prev, "attendance"));
+          return;
+        }
         setActivities((prev) => {
-          const next = [...prev];
-          next[1] = {
+          const nextActivity = {
             id: "attendance",
             title: "Attendance marked",
             subtitle: latest.data?.department || "Class attendance",
             timeLabel: formatDateTimeLabel(latest.data?.updatedAt || latest.data?.createdAt),
             status: "completed",
           };
-          return next;
+          return upsertActivity(prev, nextActivity);
         });
       }
     );
@@ -580,17 +575,19 @@ export default function HomePage({ forcedRole }) {
       query(collection(db, "internalMarks"), orderBy("createdAt", "desc"), limit(1)),
       (snapshot) => {
         const firstItem = snapshot.docs[0]?.data();
-        if (!firstItem) return;
+        if (!firstItem) {
+          setActivities((prev) => removeActivity(prev, "marks"));
+          return;
+        }
         setActivities((prev) => {
-          const next = [...prev];
-          next[2] = {
+          const nextActivity = {
             id: "marks",
             title: "Marks updated",
             subtitle: firstItem?.examName || "Internal marks",
             timeLabel: formatDateTimeLabel(firstItem?.createdAt),
             status: "completed",
           };
-          return next;
+          return upsertActivity(prev, nextActivity);
         });
       }
     );
@@ -605,17 +602,19 @@ export default function HomePage({ forcedRole }) {
             const normalized = String(item?.status || "").toLowerCase();
             return normalized === "approved" || normalized === "take";
           });
-        if (!approvedItem) return;
+        if (!approvedItem) {
+          setActivities((prev) => removeActivity(prev, "leave"));
+          return;
+        }
         setActivities((prev) => {
-          const next = [...prev];
-          next[3] = {
+          const nextActivity = {
             id: "leave",
             title: "Leave approved",
             subtitle: approvedItem?.fromDepartment || "Department leave",
             timeLabel: formatDateTimeLabel(approvedItem?.updatedAt || approvedItem?.createdAt),
             status: getLeaveStatus(approvedItem?.status),
           };
-          return next;
+          return upsertActivity(prev, nextActivity);
         });
       }
     );
@@ -1182,17 +1181,21 @@ export default function HomePage({ forcedRole }) {
                 Live
               </span>
             </div>
-            <div className="space-y-3">
-              {activities.map((item) => (
-                <ActivityItem
-                  key={item.id}
-                  title={item.title}
-                  subtitle={item.subtitle}
-                  timeLabel={item.timeLabel}
-                  status={item.status}
-                />
-              ))}
-            </div>
+            {activities.length === 0 ? (
+              <p className="text-sm text-slate-500">No recent activity yet.</p>
+            ) : (
+              <div className="space-y-3">
+                {activities.map((item) => (
+                  <ActivityItem
+                    key={item.id}
+                    title={item.title}
+                    subtitle={item.subtitle}
+                    timeLabel={item.timeLabel}
+                    status={item.status}
+                  />
+                ))}
+              </div>
+            )}
           </article>
 
           <aside className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.35)]">

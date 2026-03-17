@@ -1,19 +1,24 @@
 import { auth } from "./firebase.js";
 
 const MODEL_PREFERENCE = [
-  "gemini-2.0-flash",
+  "gemini-2.5-flash",
   "gemini-2.0-flash-lite",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash",
+  "gemini-2.0-flash-001",
+  "gemini-2.0-flash-lite-001",
+  "gemini-2.5-pro",
 ];
-const FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
+const FALLBACK_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.0-flash-lite",
+  "gemini-2.0-flash",
+];
 const OPENAI_MODEL_PREFERENCE = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"];
 const OPENAI_FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o"];
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
 const DEFAULT_AI_PROXY_ENDPOINT = "/.netlify/functions/ai-generate";
 const SERVER_PROXY_API_KEY = "__A3HUB_SERVER_AI_PROXY__";
 const ENABLE_CLIENT_SIDE_AI_KEY =
-  Boolean(import.meta.env.DEV) &&
   String(import.meta.env.VITE_ALLOW_CLIENT_AI_KEY || "")
     .trim()
     .toLowerCase() === "true";
@@ -26,7 +31,12 @@ let discoveredModelsForKey = "";
 
 const isOpenAiKey = (apiKey) => String(apiKey || "").trim().startsWith("sk-");
 
-const getBuildTimeApiKey = () => "";
+const getBuildTimeApiKey = () =>
+  String(
+    import.meta.env.VITE_GEMINI_API_KEY ||
+      import.meta.env.VITE_OPENAI_API_KEY ||
+      ""
+  ).trim();
 
 const getRuntimeApiKey = () => {
   if (typeof window === "undefined") return "";
@@ -343,9 +353,10 @@ const requestOpenAiChatCompletion = async ({
 };
 
 export const getGeminiApiKey = () => {
-  const key = ENABLE_CLIENT_SIDE_AI_KEY
-    ? getBuildTimeApiKey() || getRuntimeApiKey()
-    : "";
+  const runtimeKey = getRuntimeApiKey();
+  if (runtimeKey) return runtimeKey;
+
+  const key = ENABLE_CLIENT_SIDE_AI_KEY ? getBuildTimeApiKey() : "";
   if (key) return key;
   return resolveAiProxyEndpoint() ? SERVER_PROXY_API_KEY : "";
 };

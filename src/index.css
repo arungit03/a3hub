@@ -134,6 +134,17 @@ body,
   opacity: 1;
 }
 
+.ai-chat-composer__textarea,
+.ai-chat-composer__textarea:focus,
+.ai-chat-composer__textarea:focus-visible,
+.ai-chat-composer__textarea:active {
+  outline: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 :where(button, input, select, textarea):disabled,
 :where([aria-disabled="true"]) {
   cursor: not-allowed;
