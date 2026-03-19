@@ -152,6 +152,17 @@ let storageInitPromise = null;
 export { app };
 
 /**
+ * Test helper for swapping the auth singleton without mutating Firebase Auth internals.
+ *
+ * @param {import("firebase/auth").Auth | { currentUser: null } | null | undefined} nextAuth
+ * @returns {import("firebase/auth").Auth | { currentUser: null }}
+ */
+export const setAuthForTesting = (nextAuth) => {
+  auth = nextAuth && typeof nextAuth === "object" ? nextAuth : DEFAULT_EMPTY_AUTH;
+  return auth;
+};
+
+/**
  * @returns {import("firebase/app").FirebaseApp | null}
  */
 export const ensureFirebaseApp = () =>

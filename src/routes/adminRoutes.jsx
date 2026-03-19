@@ -14,6 +14,7 @@ const AdminTestsPage = lazy(() => import("../admin/pages/AdminTestsPage"));
 const AdminNoticesPage = lazy(() => import("../admin/pages/AdminNoticesPage"));
 const AdminAnalyticsPage = lazy(() => import("../admin/pages/AdminAnalyticsPage"));
 const AdminSettingsPage = lazy(() => import("../admin/pages/AdminSettingsPage"));
+const AdminLearningPage = lazy(() => import("../admin/pages/AdminLearningPage.jsx"));
 const AdminStaffRequestsPage = lazy(() =>
   import("../admin/pages/AdminStaffRequestsPage")
 );
@@ -27,6 +28,7 @@ const ADMIN_CHILD_ROUTES = [
   { path: "notices", element: <AdminNoticesPage /> },
   { path: "staff-requests", element: <AdminStaffRequestsPage /> },
   { path: "analytics", element: <AdminAnalyticsPage /> },
+  { path: "learning", element: <AdminLearningPage /> },
   { path: "settings", element: <AdminSettingsPage /> },
   { path: "audit-logs", element: <AdminAuditLogsPage /> },
 ];

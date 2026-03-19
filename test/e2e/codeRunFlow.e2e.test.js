@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { auth } from "../../src/lib/firebase.js";
+import { auth, setAuthForTesting } from "../../src/lib/firebase.js";
 import { runNativeCode } from "../../src/lib/nativeCodeRunner.js";
 
 const require = createRequire(import.meta.url);
@@ -35,15 +35,17 @@ const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
 
 test("e2e flow: runNativeCode -> Netlify code-run -> provider mocks", async () => {
   const previousApiKey = process.env.FIREBASE_WEB_API_KEY;
-  const previousCurrentUser = auth.currentUser;
+  const previousAuth = auth;
   process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
 
   const token = createMockIdToken();
-  auth.currentUser = {
-    _stopProactiveRefresh: () => {},
-    _startProactiveRefresh: () => {},
-    getIdToken: async () => token,
-  };
+  setAuthForTesting({
+    currentUser: {
+      _stopProactiveRefresh: () => {},
+      _startProactiveRefresh: () => {},
+      getIdToken: async () => token,
+    },
+  });
 
   const originalFetch = globalThis.fetch;
   let sawAuthorizationHeader = false;
@@ -114,7 +116,7 @@ test("e2e flow: runNativeCode -> Netlify code-run -> provider mocks", async () =
     assert.equal(sawAuthorizationHeader, true);
   } finally {
     globalThis.fetch = originalFetch;
-    auth.currentUser = previousCurrentUser;
+    setAuthForTesting(previousAuth);
     if (previousApiKey === undefined) {
       delete process.env.FIREBASE_WEB_API_KEY;
     } else {

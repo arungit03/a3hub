@@ -3575,8 +3575,11 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     height: auto;
     margin: 0;
     border: 0;
+    appearance: none;
+    -webkit-appearance: none;
     resize: none;
     outline: none;
+    box-shadow: none;
     padding: 1.1rem 1.2rem;
     background: rgb(var(--mist) / 0.45);
     color: rgb(var(--ink));
@@ -3621,11 +3624,22 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     line-height: 1.6;
     background: transparent;
     border: 0;
+    appearance: none;
+    -webkit-appearance: none;
     resize: none;
     color: transparent;
     caret-color: rgb(var(--ink));
     outline: none;
+    box-shadow: none;
     -webkit-text-fill-color: transparent;
+  }
+
+  .c-editor-input:focus,
+  .c-editor-input:focus-visible,
+  .ide-input:focus,
+  .ide-input:focus-visible {
+    outline: none;
+    box-shadow: none;
   }
 
   .ide-input.ide-input-plain {
@@ -3906,130 +3920,124 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
 
   .c-compiler-shell--modern {
     position: relative;
-    padding: 0.35rem 0 1rem;
-    border-radius: 1.4rem;
-    background:
-      radial-gradient(1100px 540px at 0% 0%, rgb(39 96 214 / 0.22), transparent 64%),
-      radial-gradient(920px 420px at 100% 100%, rgb(163 63 234 / 0.2), transparent 62%),
-      linear-gradient(180deg, #061433 0%, #030b21 100%);
+    padding: 0.15rem 0 1rem;
+    border-radius: 0;
+    background: transparent;
   }
 
   .c-compiler-shell--modern .cc-topbar {
-    background:
-      linear-gradient(132deg, rgb(11 37 100 / 0.88) 0%, rgb(43 24 94 / 0.9) 52%, rgb(79 19 72 / 0.82) 100%),
-      rgb(8 18 45 / 0.86);
-    border: 1px solid rgb(120 150 220 / 0.34);
-    border-radius: 1.9rem;
+    background: #ffffff;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1.6rem;
     box-shadow:
-      0 26px 44px -26px rgb(7 16 43 / 0.88),
-      inset 0 1px 0 rgb(214 228 255 / 0.14);
-    padding: 1.65rem 1.8rem;
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 18px 34px -28px rgb(15 23 42 / 0.18);
+    padding: 1.55rem 1.6rem;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: 1rem;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+  }
+
+  .c-compiler-shell--modern .ide-brand {
+    align-items: flex-start;
   }
 
   .c-compiler-shell--modern .cc-brand-icon {
-    width: 72px;
-    height: 72px;
-    border-radius: 1.2rem;
-    background: linear-gradient(140deg, #4a94ff 0%, #8749ff 56%, #7c36ff 100%);
-    color: #f8fbff;
-    box-shadow:
-      0 20px 30px -20px rgb(101 82 255 / 0.88),
-      0 0 0 1px rgb(255 255 255 / 0.08),
-      inset 0 1px 0 rgb(255 255 255 / 0.26);
+    display: none;
+  }
+
+  .c-compiler-shell--modern .cc-kicker {
+    margin: 0;
+    color: rgb(100 116 139);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
   }
 
   .c-compiler-shell--modern .ide-brand-title {
-    font-size: clamp(1.7rem, 3.6vw, 2.65rem);
-    line-height: 1.05;
+    margin-top: 0.35rem;
+    font-size: clamp(1.85rem, 3.8vw, 2.35rem);
+    line-height: 1.08;
     font-weight: 800;
-    color: #7db4ff;
-    letter-spacing: 0.02em;
+    color: rgb(15 23 42);
+    letter-spacing: 0;
   }
 
   .c-compiler-shell--modern .ide-brand-subtitle {
-    margin-top: 0.32rem;
-    color: rgb(196 211 241 / 0.86);
-    font-size: clamp(1rem, 1.5vw, 1.08rem);
+    margin-top: 0.45rem;
+    color: rgb(71 85 105);
+    font-size: clamp(0.95rem, 1.5vw, 1.02rem);
+    max-width: 54rem;
   }
 
   .c-compiler-shell--modern .cc-actions {
     width: 100%;
     justify-content: flex-start;
-    gap: 0.72rem;
+    gap: 0.65rem;
   }
 
   .c-compiler-shell--modern .cc-actions .ide-run,
   .c-compiler-shell--modern .cc-actions .ide-ghost-btn {
     display: inline-flex;
     align-items: center;
-    gap: 0.46rem;
-    border-radius: 1rem;
+    justify-content: center;
+    gap: 0.48rem;
+    border-radius: 999px;
     font-size: 0.92rem;
-    padding: 0.68rem 1.15rem;
+    font-weight: 600;
+    padding: 0.72rem 1.2rem;
+    box-shadow: none;
   }
 
   .c-compiler-shell--modern .cc-actions .ide-run {
-    background: linear-gradient(145deg, #0dd66d 0%, #06c260 100%);
-    border: 1px solid rgb(89 230 157 / 0.78);
-    color: #f7fffa;
-    box-shadow:
-      0 18px 28px -20px rgb(22 221 118 / 0.92),
-      inset 0 1px 0 rgb(214 255 232 / 0.25);
+    background: rgb(15 23 42);
+    border: 1px solid rgb(15 23 42);
+    color: rgb(255 255 255);
   }
 
   .c-compiler-shell--modern .cc-actions .ide-run:hover:not(:disabled) {
-    border-color: rgb(103 250 174 / 0.95);
-    box-shadow:
-      0 22px 32px -22px rgb(22 221 118 / 0.96),
-      inset 0 1px 0 rgb(214 255 232 / 0.3);
+    background: rgb(30 41 59);
+    border-color: rgb(30 41 59);
   }
 
   .c-compiler-shell--modern .cc-actions .ide-ghost-btn {
-    border: 1px solid rgb(102 128 188 / 0.44);
-    background: rgb(20 37 76 / 0.72);
-    color: rgb(232 240 255 / 0.92);
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.08);
+    border: 1px solid rgb(203 213 225);
+    background: rgb(255 255 255);
+    color: rgb(51 65 85);
   }
 
   .c-compiler-shell--modern .cc-actions .ide-ghost-btn:hover:not(:disabled) {
-    border-color: rgb(132 163 233 / 0.66);
-    background: rgb(27 45 89 / 0.84);
-    box-shadow:
-      0 16px 24px -20px rgb(36 82 180 / 0.86),
-      inset 0 1px 0 rgb(255 255 255 / 0.12);
+    border-color: rgb(148 163 184);
+    background: rgb(248 250 252);
   }
 
   .c-compiler-shell--modern .cc-divider {
     width: 100%;
     height: 1px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgb(135 161 219 / 0.1), rgb(135 161 219 / 0.46), rgb(135 161 219 / 0.08));
+    background: rgb(226 232 240);
   }
 
   .c-compiler-shell--modern .cc-toolbar {
     width: 100%;
-    gap: 0.72rem;
+    gap: 0.65rem;
   }
 
   .c-compiler-shell--modern .cc-toolbar .ide-toolbar-chip {
-    border-color: rgb(106 137 197 / 0.46);
-    background: rgb(13 28 64 / 0.78);
-    color: rgb(210 224 252 / 0.92);
-    font-size: 0.89rem;
-    letter-spacing: 0.02em;
+    border-color: rgb(226 232 240);
+    background: rgb(248 250 252);
+    color: rgb(71 85 105);
+    font-size: 0.83rem;
+    letter-spacing: 0;
     text-transform: none;
     padding: 0.52rem 0.95rem;
   }
 
   .c-compiler-shell--modern .cc-autosave-chip {
-    border-color: rgb(39 214 140 / 0.56) !important;
-    background: linear-gradient(145deg, rgb(27 94 112 / 0.56), rgb(17 88 68 / 0.72)) !important;
-    color: rgb(116 255 181) !important;
+    border-color: rgb(187 247 208) !important;
+    background: rgb(240 253 244) !important;
+    color: rgb(21 128 61) !important;
     font-weight: 700;
     display: inline-flex;
     align-items: center;
@@ -4044,23 +4052,23 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
   }
 
   .c-compiler-shell--modern .ide-panel {
-    border: 1px solid rgb(84 115 176 / 0.36);
-    border-radius: 1.35rem;
-    background:
-      linear-gradient(180deg, rgb(15 27 59 / 0.88) 0%, rgb(8 19 45 / 0.9) 100%),
-      rgb(8 19 45 / 0.84);
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1.6rem;
+    background: rgb(255 255 255);
     box-shadow:
-      0 26px 38px -28px rgb(4 13 36 / 0.9),
-      inset 0 1px 0 rgb(255 255 255 / 0.08);
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 18px 34px -28px rgb(15 23 42 / 0.16);
     overflow: hidden;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
   }
 
   .c-compiler-shell--modern .cc-panel-header {
-    border-bottom-color: rgb(83 118 183 / 0.34);
-    background: linear-gradient(180deg, rgb(26 42 80 / 0.95), rgb(19 33 65 / 0.92));
-    color: rgb(202 219 249 / 0.86);
+    border-bottom-color: rgb(226 232 240);
+    background: rgb(255 255 255);
+    color: rgb(100 116 139);
+    font-size: 0.76rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
   }
 
   .c-compiler-shell--modern .cc-panel-meta {
@@ -4069,125 +4077,146 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     gap: 0.68rem;
   }
 
+  .c-compiler-shell--modern .cc-panel-meta strong {
+    color: rgb(15 23 42);
+    font-size: 0.94rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
   .c-compiler-shell--modern .cc-traffic {
     display: inline-flex;
     align-items: center;
-    gap: 0.44rem;
+    gap: 0.38rem;
   }
 
   .c-compiler-shell--modern .cc-dot {
-    width: 0.82rem;
-    height: 0.82rem;
+    width: 0.72rem;
+    height: 0.72rem;
     border-radius: 999px;
-    box-shadow: 0 0 0 1px rgb(255 255 255 / 0.08);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.6);
   }
 
   .c-compiler-shell--modern .cc-dot--red {
-    background: #ff4c55;
+    background: rgb(248 113 113);
   }
 
   .c-compiler-shell--modern .cc-dot--amber {
-    background: #fbc532;
+    background: rgb(251 191 36);
   }
 
   .c-compiler-shell--modern .cc-dot--green {
-    background: #22d86a;
+    background: rgb(74 222 128);
   }
 
   .c-compiler-shell--modern .cc-syntax-pill {
-    border: 1px solid rgb(70 149 255 / 0.4);
+    border: 1px solid rgb(203 213 225);
     border-radius: 999px;
-    padding: 0.34rem 0.82rem;
+    padding: 0.42rem 0.92rem;
     font-size: 0.78rem;
-    color: rgb(103 184 255);
-    background: rgb(14 39 84 / 0.72);
+    color: rgb(51 65 85);
+    background: rgb(248 250 252);
   }
 
   .c-compiler-shell--modern .cc-output-title {
     display: inline-flex;
     align-items: center;
     gap: 0.48rem;
-    color: rgb(96 240 174 / 0.95);
-    font-weight: 600;
+    color: rgb(15 23 42);
+    font-weight: 700;
   }
 
   .c-compiler-shell--modern .cc-inline-copy-btn {
-    padding: 0.46rem 0.84rem;
-    border-radius: 0.86rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.48rem;
+    padding: 0.48rem 0.9rem;
+    border-radius: 999px;
     font-size: 0.82rem;
+    border: 1px solid rgb(203 213 225);
+    background: rgb(255 255 255);
+    color: rgb(51 65 85);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: max-content;
   }
 
   .c-compiler-shell--modern .cc-editor-panel .c-editor-surface {
     height: clamp(360px, 62vh, 620px);
-    background: linear-gradient(180deg, rgb(4 16 43 / 0.92), rgb(5 15 40 / 0.9));
+    background: rgb(255 255 255);
   }
 
   .c-compiler-shell--modern .cc-editor-panel .ide-editor-surface {
     height: clamp(360px, 62vh, 620px);
-    background: linear-gradient(180deg, rgb(4 16 43 / 0.92), rgb(5 15 40 / 0.9));
+    background: rgb(255 255 255);
   }
 
   .c-compiler-shell--modern .editor-line-numbers {
-    background: rgb(4 12 32 / 0.95);
-    border-right-color: rgb(75 109 172 / 0.34);
-    color: rgb(133 158 206 / 0.56);
+    background: rgb(248 250 252);
+    border-right-color: rgb(226 232 240);
+    color: rgb(148 163 184);
   }
 
   .c-compiler-shell--modern .c-editor-input {
-    background: rgb(4 15 40 / 0.68);
-    color: rgb(232 240 255 / 0.94);
-    caret-color: rgb(114 206 255);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
+    caret-color: rgb(15 23 42);
   }
 
   .c-compiler-shell--modern .ide-highlight {
-    color: rgb(232 240 255 / 0.94);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
   }
 
   .c-compiler-shell--modern .ide-input {
-    caret-color: rgb(114 206 255);
+    caret-color: rgb(15 23 42);
   }
 
   .c-compiler-shell--modern .ide-input.ide-input-plain {
-    color: rgb(232 240 255 / 0.94);
+    color: rgb(15 23 42);
     -webkit-text-fill-color: currentColor;
   }
 
   .c-compiler-shell--modern .token-keyword {
-    color: #8fb8ff;
+    color: rgb(37 99 235);
     font-weight: 600;
   }
 
   .c-compiler-shell--modern .token-string {
-    color: #85f0d3;
+    color: rgb(5 150 105);
   }
 
   .c-compiler-shell--modern .token-number {
-    color: #ffc57b;
+    color: rgb(217 119 6);
   }
 
   .c-compiler-shell--modern .token-comment {
-    color: rgb(144 171 218 / 0.62);
+    color: rgb(148 163 184);
     font-style: italic;
   }
 
   .c-compiler-shell--modern .ide-suggestions {
-    background: rgb(8 24 58 / 0.96);
-    color: rgb(221 236 255 / 0.95);
-    border-color: rgb(95 129 196 / 0.5);
-    box-shadow: 0 22px 40px -28px rgb(4 11 30 / 0.9);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
+    border-color: rgb(226 232 240);
+    box-shadow:
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 18px 34px -28px rgb(15 23 42 / 0.18);
   }
 
   .c-compiler-shell--modern .ide-suggestion small {
-    color: rgb(174 198 242 / 0.68);
+    color: rgb(100 116 139);
   }
 
   .c-compiler-shell--modern .ide-suggestion.is-active {
-    background: rgb(42 85 169 / 0.75);
-    color: rgb(237 246 255 / 0.96);
+    background: rgb(241 245 249);
+    color: rgb(15 23 42);
   }
 
   .c-compiler-shell--modern .c-editor-input::selection {
-    background: rgb(84 124 214 / 0.34);
+    background: rgb(191 219 254);
   }
 
   .c-compiler-shell--modern .cc-output-panel {
@@ -4199,36 +4228,38 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     flex: 1;
     min-height: clamp(360px, 62vh, 620px);
     max-height: none;
-    background: linear-gradient(180deg, rgb(5 17 44 / 0.96), rgb(4 13 36 / 0.95));
-    color: rgb(67 250 176 / 0.96);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
     border-top: 0;
     font-size: 0.95rem;
   }
 
   .c-compiler-shell--modern .ide-console-input-row {
-    border-top-color: rgb(76 110 175 / 0.34);
-    background: rgb(9 24 56 / 0.92);
+    border-top-color: rgb(226 232 240);
+    background: rgb(255 255 255);
   }
 
   .c-compiler-shell--modern .ide-console-input-prompt {
-    color: rgb(102 218 255);
+    color: rgb(100 116 139);
   }
 
   .c-compiler-shell--modern .ide-console-input {
-    border-color: rgb(78 113 178 / 0.44);
-    background: rgb(13 30 67 / 0.88);
-    color: rgb(229 239 255 / 0.92);
+    border-color: rgb(203 213 225);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
+    border-radius: 1rem;
   }
 
   .c-compiler-shell--modern .ide-console-input:focus {
-    border-color: rgb(88 192 255 / 0.76);
-    box-shadow: 0 0 0 2px rgb(91 182 255 / 0.2);
+    border-color: rgb(15 23 42);
+    box-shadow: 0 0 0 2px rgb(15 23 42 / 0.08);
   }
 
   .c-compiler-shell--modern .ide-console-submit {
-    border-color: rgb(56 180 130 / 0.55);
-    color: rgb(227 255 243);
-    background: linear-gradient(145deg, rgb(16 151 89 / 0.92), rgb(10 122 70 / 0.96));
+    border-color: rgb(15 23 42);
+    color: rgb(255 255 255);
+    background: rgb(15 23 42);
+    border-radius: 999px;
   }
 
   .c-compiler-shell--modern .cc-basics-panel {
@@ -4236,35 +4267,112 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
   }
 
   .c-compiler-shell--modern .cc-basics-header {
-    border-bottom-color: rgb(80 114 178 / 0.35);
-    background: linear-gradient(180deg, rgb(28 45 82 / 0.95), rgb(19 33 63 / 0.92));
-    color: rgb(195 214 251 / 0.9);
+    border-bottom-color: rgb(226 232 240);
+    background: rgb(255 255 255);
+    color: rgb(100 116 139);
   }
 
   .c-compiler-shell--modern .cc-concept-card {
-    border: 1px solid rgb(82 114 173 / 0.34);
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1.25rem;
+    background: rgb(248 250 252);
+    padding: 0.95rem 1rem;
+    color: rgb(71 85 105);
+  }
+
+  .c-compiler-shell--modern .cc-concept-card * {
+    color: inherit;
+  }
+
+  .c-compiler-shell--modern .cc-concept-card h2,
+  .c-compiler-shell--modern .cc-concept-card .font-semibold,
+  .c-compiler-shell--modern .cc-concept-card strong {
+    color: rgb(15 23 42);
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .rounded-md {
+    border-color: rgb(226 232 240) !important;
+    background: rgb(255 255 255) !important;
+  }
+
+  .c-compiler-shell--modern .cc-concept-card select {
+    border-color: rgb(203 213 225) !important;
+    background: rgb(255 255 255) !important;
+    color: rgb(15 23 42) !important;
     border-radius: 1rem;
-    background: rgb(11 27 63 / 0.78);
-    padding: 0.85rem 0.92rem;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .text-emerald-300 {
+    color: rgb(21 128 61);
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .ide-run {
+    background: rgb(15 23 42);
+    border: 1px solid rgb(15 23 42);
+    color: rgb(255 255 255);
+    box-shadow: none;
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .ide-run:hover:not(:disabled) {
+    background: rgb(30 41 59);
+    border-color: rgb(30 41 59);
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .ide-ghost-btn {
+    border: 1px solid rgb(203 213 225);
+    background: rgb(255 255 255);
+    color: rgb(51 65 85);
+    box-shadow: none;
+  }
+
+  .c-compiler-shell--modern .cc-concept-card .ide-ghost-btn:hover:not(:disabled) {
+    border-color: rgb(148 163 184);
+    background: rgb(248 250 252);
+  }
+
+  .c-compiler-shell--modern .cc-review-card {
+    margin-top: 0.75rem;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 1rem;
+    background: rgb(255 255 255);
+    padding: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .c-compiler-shell--modern .cc-review-card--pass {
+    border-color: rgb(187 247 208);
+    background: rgb(240 253 244);
+    color: rgb(21 128 61);
+  }
+
+  .c-compiler-shell--modern .cc-review-card--fail {
+    border-color: rgb(253 230 138);
+    background: rgb(255 251 235);
+    color: rgb(180 83 9);
+  }
+
+  .c-compiler-shell--modern .cc-review-card--error {
+    border-color: rgb(254 205 211);
+    background: rgb(255 241 242);
+    color: rgb(190 24 93);
   }
 
   .c-compiler-shell--modern .cc-concept-pre {
     margin-top: 0.32rem;
     white-space: pre-wrap;
-    border: 1px solid rgb(79 114 179 / 0.32);
+    border: 1px solid rgb(226 232 240);
     border-radius: 0.78rem;
-    background: rgb(4 16 43 / 0.76);
+    background: rgb(255 255 255);
     padding: 0.58rem 0.68rem;
     font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
       Consolas, "Liberation Mono", "Courier New", monospace;
     font-size: 0.72rem;
-    color: rgb(208 225 255 / 0.94);
+    color: rgb(15 23 42);
   }
 
   .c-compiler-shell--modern .cc-concept-pre--output {
-    color: rgb(90 245 175 / 0.95);
-    background: rgb(3 20 40 / 0.88);
+    color: rgb(15 23 42);
+    background: rgb(255 255 255);
   }
 
   .cc-toast {
@@ -4272,38 +4380,36 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
     right: 1.15rem;
     bottom: 1rem;
     z-index: 85;
-    border: 1px solid rgb(124 149 205 / 0.44);
+    border: 1px solid rgb(203 213 225);
     border-radius: 0.88rem;
-    background: rgb(17 35 72 / 0.88);
-    color: rgb(224 235 255);
+    background: rgb(255 255 255);
+    color: rgb(15 23 42);
     padding: 0.64rem 0.92rem;
     font-size: 0.8rem;
     font-weight: 600;
     letter-spacing: 0.01em;
     box-shadow:
-      0 26px 40px -26px rgb(4 12 34 / 0.84),
-      inset 0 1px 0 rgb(255 255 255 / 0.1);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+      0 1px 2px rgb(15 23 42 / 0.05),
+      0 18px 34px -28px rgb(15 23 42 / 0.18);
     animation: ccToastIn 0.2s ease-out;
   }
 
   .cc-toast--success {
-    border-color: rgb(45 201 133 / 0.56);
-    color: rgb(133 253 198);
-    background: linear-gradient(145deg, rgb(11 76 63 / 0.88), rgb(11 57 50 / 0.94));
+    border-color: rgb(187 247 208);
+    color: rgb(21 128 61);
+    background: rgb(240 253 244);
   }
 
   .cc-toast--error {
-    border-color: rgb(247 97 130 / 0.6);
-    color: rgb(255 176 193);
-    background: linear-gradient(145deg, rgb(90 31 53 / 0.9), rgb(67 24 44 / 0.95));
+    border-color: rgb(254 205 211);
+    color: rgb(190 24 93);
+    background: rgb(255 241 242);
   }
 
   .cc-toast--info {
-    border-color: rgb(104 149 255 / 0.58);
-    color: rgb(174 208 255);
-    background: linear-gradient(145deg, rgb(24 48 95 / 0.9), rgb(17 37 78 / 0.95));
+    border-color: rgb(191 219 254);
+    color: rgb(29 78 216);
+    background: rgb(239 246 255);
   }
 
   @keyframes ccToastIn {

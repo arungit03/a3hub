@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import NotificationCenter from "../NotificationCenter";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { isFeatureEnabled } from "../../config/features";
+
+const loadNotificationCenter = () => import("../NotificationCenter");
+const LazyNotificationCenter = lazy(loadNotificationCenter);
 
 const iconProps = {
   width: 18,
@@ -28,6 +30,7 @@ export default function Navbar({
 }) {
   const notificationsEnabled = isFeatureEnabled("notifications");
   const [searchOpen, setSearchOpen] = useState(() => Boolean(searchTerm));
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const searchInputRef = useRef(null);
   const isSearchVisible = searchOpen || Boolean(searchTerm);
   const trimmedSearchTerm = String(searchTerm || "").trim();
@@ -40,6 +43,33 @@ export default function Navbar({
     });
     return () => window.cancelAnimationFrame(frameId);
   }, [isSearchVisible]);
+
+  useEffect(() => {
+    if (!notificationsEnabled || showNotificationCenter || typeof window === "undefined") {
+      return undefined;
+    }
+
+    const loadOnIdle = () => {
+      void loadNotificationCenter().then(() => {
+        setShowNotificationCenter(true);
+      });
+    };
+
+    if (typeof window.requestIdleCallback === "function") {
+      const idleId = window.requestIdleCallback(loadOnIdle, { timeout: 1600 });
+      return () => window.cancelIdleCallback?.(idleId);
+    }
+
+    const timeoutId = window.setTimeout(loadOnIdle, 1000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notificationsEnabled, showNotificationCenter]);
+
+  const handlePrimeNotificationCenter = () => {
+    if (showNotificationCenter) return;
+    void loadNotificationCenter().then(() => {
+      setShowNotificationCenter(true);
+    });
+  };
 
   const closeSearch = () => {
     onSearchChange?.("");
@@ -182,10 +212,43 @@ export default function Navbar({
         ) : null}
 
         {notificationsEnabled ? (
-          <NotificationCenter
-            inlineTrigger
-            triggerClassName="h-10 w-10 rounded-full shadow-sm sm:h-11 sm:w-11 sm:rounded-2xl"
-          />
+          showNotificationCenter ? (
+            <Suspense
+              fallback={
+                <button
+                  type="button"
+                  aria-label="Load notifications"
+                  onMouseEnter={handlePrimeNotificationCenter}
+                  onFocus={handlePrimeNotificationCenter}
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 sm:h-11 sm:w-11 sm:rounded-2xl"
+                >
+                  <svg {...iconProps}>
+                    <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0v3.8c0 .8.3 1.6.9 2.1l1.1 1H5l1.1-1c.6-.5.9-1.3.9-2.1z" />
+                    <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+                  </svg>
+                </button>
+              }
+            >
+              <LazyNotificationCenter
+                inlineTrigger
+                triggerClassName="h-10 w-10 rounded-full shadow-sm sm:h-11 sm:w-11 sm:rounded-2xl"
+              />
+            </Suspense>
+          ) : (
+            <button
+              type="button"
+              aria-label="Load notifications"
+              onClick={handlePrimeNotificationCenter}
+              onMouseEnter={handlePrimeNotificationCenter}
+              onFocus={handlePrimeNotificationCenter}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-900 sm:h-11 sm:w-11 sm:rounded-2xl"
+            >
+              <svg {...iconProps}>
+                <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0v3.8c0 .8.3 1.6.9 2.1l1.1 1H5l1.1-1c.6-.5.9-1.3.9-2.1z" />
+                <path d="M9.5 18a2.5 2.5 0 0 0 5 0" />
+              </svg>
+            </button>
+          )
         ) : null}
 
         <button

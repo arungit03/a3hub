@@ -19,6 +19,39 @@ const PythonInterpreterPage = lazy(() =>
 );
 const CCompilerPage = lazy(() => import("../pages/CCompilerPage"));
 const CppCompilerPage = lazy(() => import("../pages/CppCompilerPage"));
+const LearningHomePage = lazy(() =>
+  import("../features/learning/pages/LearningHomePage.jsx")
+);
+const LearningDashboardPage = lazy(() =>
+  import("../features/learning/pages/LearningDashboardPage.jsx")
+);
+const HtmlLearningDashboardPage = lazy(() =>
+  import("../features/learning/pages/HtmlLearningDashboardPage.jsx")
+);
+const CssLearningDashboardPage = lazy(() =>
+  import("../features/learning/pages/CssLearningDashboardPage.jsx")
+);
+const LearningCoursePage = lazy(() =>
+  import("../features/learning/pages/LearningCoursePage.jsx")
+);
+const LearningTopicPage = lazy(() =>
+  import("../features/learning/pages/LearningTopicPage.jsx")
+);
+const LearningQuizPage = lazy(() =>
+  import("../features/learning/pages/LearningQuizPage.jsx")
+);
+const LearningPracticePage = lazy(() =>
+  import("../features/learning/pages/LearningPracticePage.jsx")
+);
+const LearningProgressPage = lazy(() =>
+  import("../features/learning/pages/LearningProgressPage.jsx")
+);
+const CssLearningProgressPage = lazy(() =>
+  import("../features/learning/pages/CssLearningProgressPage.jsx")
+);
+const HtmlEditorPage = lazy(() =>
+  import("../features/html-editor/pages/HtmlEditorPage.jsx")
+);
 const AiChatPage = lazy(() => import("../pages/AiChatPage"));
 const A3cadPage = lazy(() => import("../pages/A3cadPage"));
 const ExamSchedulePage = lazy(() => import("../pages/ExamSchedulePage"));
@@ -75,6 +108,66 @@ const STUDENT_PAGE_ROUTES = [
     feature: "books",
   },
   { path: "/student/code", element: <CodeLabPage />, feature: "compilers" },
+  {
+    path: "/student/html-editor",
+    element: <HtmlEditorPage />,
+    feature: "compilers",
+  },
+  {
+    path: "/student/html-editor/:exampleId",
+    element: <HtmlEditorPage />,
+    feature: "compilers",
+  },
+  {
+    path: "/student/learning",
+    element: <LearningHomePage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/dashboard",
+    element: <LearningDashboardPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/html/dashboard",
+    element: <HtmlLearningDashboardPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/css/dashboard",
+    element: <CssLearningDashboardPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/progress",
+    element: <LearningProgressPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/css/progress",
+    element: <CssLearningProgressPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/:courseId/:topicSlug/quiz",
+    element: <LearningQuizPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/:courseId/:topicSlug/practice",
+    element: <LearningPracticePage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/:courseId/:topicSlug",
+    element: <LearningTopicPage />,
+    feature: "learning",
+  },
+  {
+    path: "/student/learning/:courseId",
+    element: <LearningCoursePage />,
+    feature: "learning",
+  },
   {
     path: "/student/code/python",
     element: <PythonInterpreterPage />,

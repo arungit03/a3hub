@@ -43,6 +43,9 @@ const resolveAuthErrorMessage = (err, fallback) => {
   if (err?.code === "auth/too-many-requests") {
     return TOO_MANY_REQUESTS_MESSAGE;
   }
+  if (err?.code === "auth/verification-send-busy") {
+    return "A fresh verification link could not be generated right now. Tap resend again in a moment.";
+  }
   if (err?.code === "auth/operation-not-allowed") {
     return "Email/Password sign-in is disabled in Firebase Authentication. Enable it in Firebase Console.";
   }
@@ -518,7 +521,7 @@ export default function AuthPage() {
           setAwaitingVerification(true);
           setMode("login");
           info(
-            "Check your verification email. If not received, use Resend Verification Email after a short wait."
+            "Check your verification email. If not received, use Resend Verification Email to generate a fresh link."
           );
           return;
         }
@@ -549,7 +552,7 @@ export default function AuthPage() {
       clearDraft();
       if (signupResult?.verificationEmailStatus === "cooldown") {
         const nextMessage =
-          "Account created, but Firebase could not send the verification email right now. Tap Resend Verification Email to try again.";
+          "Account created, but the verification email was not sent automatically. Tap Resend Verification Email to generate a fresh link.";
         setMessage(nextMessage);
         info(nextMessage);
       } else {
@@ -681,7 +684,7 @@ export default function AuthPage() {
 
   if (processingVerificationLink) {
     return (
-      <div className="relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto px-4 py-8 sm:items-center">
+      <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto px-4 py-8">
         <div
           className={authImageClassName}
           style={{ backgroundImage: `url(${AUTH_BACKGROUND_IMAGE})` }}
@@ -709,7 +712,7 @@ export default function AuthPage() {
 
   if (awaitingVerification) {
     return (
-      <div className="relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto px-4 py-8 sm:items-center">
+      <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto px-4 py-8">
         <div
           className={authImageClassName}
           style={{ backgroundImage: `url(${AUTH_BACKGROUND_IMAGE})` }}
@@ -772,7 +775,7 @@ export default function AuthPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-start justify-center overflow-x-hidden overflow-y-auto px-4 py-8 sm:items-center">
+    <div className="relative flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-auto px-4 py-8">
       <div
         className={authImageClassName}
         style={{ backgroundImage: `url(${AUTH_BACKGROUND_IMAGE})` }}

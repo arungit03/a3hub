@@ -38,7 +38,7 @@ const maybeRunFunctionProbe = () => {
     },
   });
 
-  const response = http.post(`${BASE_URL}/.netlify/functions/ai-generate`, payload, {
+  const response = http.post(`${BASE_URL}/api/ai-generate`, payload, {
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${AUTH_TOKEN}`,

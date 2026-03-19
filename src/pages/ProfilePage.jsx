@@ -15,14 +15,11 @@ import {
   TrendingUp,
   UserRound,
 } from "lucide-react";
-import Card from "../components/Card";
-import GradientHeader from "../components/GradientHeader";
 import { db } from "../lib/firebase";
 import { extractNumericQrValue } from "../lib/qr";
 import { useAuth } from "../state/auth";
 
 const EMPTY_VALUE = "-";
-const DEFAULT_PROFILE_IMAGE = "/avatars/default-user.svg";
 const DAILY_PYTHON_PROGRESS_COLLECTION = "dailyPythonProgress";
 
 const toDisplayValue = (value, fallback = EMPTY_VALUE) => {
@@ -552,6 +549,15 @@ export default function ProfilePage({ forcedRole }) {
     Math.max((dailyStats.solvedToday / solvedTodayTarget) * 100, 0),
     100
   );
+  const staffName = name || "Campus Member";
+  const staffDepartmentLabel =
+    department !== EMPTY_VALUE ? department : "Department";
+  const staffDesignationLabel =
+    designation !== EMPTY_VALUE ? designation : "Designation";
+  const staffIdentityLabel = rollNo !== EMPTY_VALUE ? "Staff ID:" : "Designation:";
+  const staffIdentityValue =
+    rollNo !== EMPTY_VALUE ? rollNo : subtitle || "Staff Member";
+  const accountRoleLabel = role ? formatDesignationLabel(role) : "Account";
 
   if (role === "student") {
     return (
@@ -1005,398 +1011,126 @@ export default function ProfilePage({ forcedRole }) {
 
   return (
     <>
-      <GradientHeader
-        title="Profile"
-        subtitle={role === "staff" ? "Staff account" : "Student account"}
-        rightSlot={
-          <div className="rounded-full border border-ocean/35 bg-ocean/10 px-3 py-1 text-xs font-semibold text-ocean">
-            {role === "staff" ? "Staff" : "Student"}
-          </div>
-        }
-      />
-
-      <Card className="mt-4 border-ocean/22 bg-gradient-to-br from-white/84 via-sand/76 to-ocean/8 p-5 sm:p-6">
-        <div className="grid grid-cols-[80px_minmax(0,1fr)] items-start gap-4 sm:grid-cols-[88px_minmax(0,1fr)] sm:items-center sm:gap-5">
-          <div className="h-20 w-20 shrink-0 justify-self-start overflow-hidden rounded-full border-2 border-ocean/40 bg-white/90 shadow-sm sm:h-[88px] sm:w-[88px]">
-            <img
-              src={DEFAULT_PROFILE_IMAGE}
-              alt="Default profile"
-              className="h-full w-full object-cover"
-            />
-          </div>
-          <div className="min-w-0">
-            <p className="truncate text-2xl font-semibold leading-tight text-ink">{name}</p>
-            <p className="mt-1 text-sm leading-tight text-ink/80">{subtitle}</p>
-            <div className="mt-3 grid max-w-xs grid-cols-2 gap-2">
-              <span className="rounded-full border border-ocean/30 bg-ocean/10 px-2.5 py-1 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-ocean">
-                {department !== EMPTY_VALUE ? department : "Department"}
-              </span>
-              {role === "staff" ? (
-                <span className="rounded-full border border-cocoa/30 bg-cocoa/10 px-2.5 py-1 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/85">
-                  {designation !== EMPTY_VALUE ? designation : "Designation"}
-                </span>
-              ) : (
-                <span className="rounded-full border border-cocoa/30 bg-cocoa/10 px-2.5 py-1 text-center text-[11px] font-semibold uppercase tracking-[0.08em] text-ink/85">
-                  {year !== EMPTY_VALUE ? `Year ${year}` : "Year"}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="mt-4 border-ocean/20 bg-gradient-to-br from-white/84 via-sand/78 to-clay/8 p-5 sm:p-6">
-        {role === "student" ? (
-          <>
-            <button
-              type="button"
-              onClick={handleOpenStudentDetailsModal}
-              className="w-full rounded-xl border border-ocean/30 bg-gradient-to-r from-ocean to-cocoa px-4 py-2 text-sm font-semibold text-white shadow-sm"
-            >
-              Student's Details
-            </button>
-            {studentDetailsError ? (
-              <p
-                className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
-                aria-live="polite"
-              >
-                {studentDetailsError}
-              </p>
-            ) : null}
-            {studentDetailsStatus ? (
-              <p
-                className="mt-3 rounded-xl border border-ink/10 bg-sand/80 px-3 py-2 text-xs font-medium text-ink/80"
-                aria-live="polite"
-              >
-                {studentDetailsStatus}
-              </p>
-            ) : null}
-          </>
-        ) : (
-          <>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean/85">
-              Account Details
-            </p>
-            <dl className="mt-2 divide-y divide-clay/20">
-              {profileRows.map((row) => (
-                <div
-                  key={row.label}
-                  className="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-[124px_minmax(0,1fr)] sm:items-center sm:gap-3"
-                >
-                  <dt className="text-sm text-ink/70">{row.label}</dt>
-                  <dd
-                    className={`break-words text-left text-sm font-semibold leading-tight text-ink sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
-                  >
-                    {row.value}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          </>
-        )}
-      </Card>
-
-      {role === "student" ? (
-        <Card className="mt-4 border-ocean/20 bg-gradient-to-br from-white/84 via-sand/78 to-ocean/8 p-5 sm:p-6">
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ocean/85">
-            Daily Python Progress
-          </p>
-          {dailyStatsLoading ? (
-            <p className="mt-3 text-sm text-ink/75">Loading challenge stats...</p>
-          ) : (
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-              <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/70 px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-[0.08em] text-emerald-700">Solved Today</p>
-                <p className="text-sm font-semibold text-emerald-800">{dailyStats.solvedToday}/3</p>
-              </div>
-              <div className="rounded-xl border border-ocean/25 bg-ocean/10 px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-[0.08em] text-ocean">Current Streak</p>
-                <p className="text-sm font-semibold text-ink">{dailyStats.dailyStreak}</p>
-              </div>
-              <div className="rounded-xl border border-cocoa/25 bg-cocoa/10 px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-[0.08em] text-ink/75">Best Streak</p>
-                <p className="text-sm font-semibold text-ink">{dailyStats.bestStreak}</p>
-              </div>
-              <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/75 px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-[0.08em] text-indigo-700">Total Solved</p>
-                <p className="text-sm font-semibold text-indigo-900">{dailyStats.totalSolved}</p>
-              </div>
-              <div className="rounded-xl border border-sky-200/80 bg-sky-50/75 px-3 py-2 text-center">
-                <p className="text-[10px] uppercase tracking-[0.08em] text-sky-700">Active Days</p>
-                <p className="text-sm font-semibold text-sky-900">{dailyStats.activeDays}</p>
-              </div>
-            </div>
-          )}
-          {dailyStatsError ? (
-            <p className="mt-3 text-xs font-semibold text-ink/80">{dailyStatsError}</p>
-          ) : null}
-        </Card>
-      ) : null}
-
-      {role === "student" && isStudentDetailsModalOpen ? (
+      <section className="relative overflow-hidden rounded-3xl border border-white/50 bg-white/30 px-5 py-4 shadow-soft backdrop-blur-xl">
         <div
-          className="ui-modal ui-modal--compact"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Student details"
-        >
-          <button
-            type="button"
-            onClick={handleCloseStudentDetailsModal}
-            aria-label="Close student details editor"
-            className="ui-modal__scrim"
-            tabIndex={-1}
-          />
-          <div tabIndex={-1} className="ui-modal__panel w-full max-w-xl">
-            <div className="ui-modal__body pb-[calc(11rem+env(safe-area-inset-bottom))]">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink/75">
-                    Student's Details
-                  </p>
-                  <h3 className="text-xl font-semibold text-ink">
-                    {isStudentDetailsEditMode ? "Edit Details" : "View Details"}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCloseStudentDetailsModal}
-                  className="ui-modal__close"
-                  disabled={isSavingStudentDetails}
-                >
-                  Close
-                </button>
-              </div>
+          className="absolute inset-0 bg-gradient-to-r from-blue-500/8 via-indigo-500/7 to-transparent"
+          aria-hidden="true"
+        />
+        <div className="relative flex items-center justify-between gap-3">
+          <p className="text-lg font-semibold uppercase tracking-[0.1em] text-blue-700 sm:text-xl">
+            Campus Hub
+          </p>
+          <span className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm sm:text-base">
+            {accountRoleLabel}
+          </span>
+        </div>
+      </section>
 
-              {isStudentDetailsEditMode ? (
-                <form className="mt-4 grid gap-3" onSubmit={handleSaveStudentDetails}>
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Roll No
-                    </span>
-                    <input
-                      type="text"
-                      value={studentDetailsForm.rollNo}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("rollNo", event.target.value)
-                      }
-                      placeholder="Enter roll number"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Department
-                    </span>
-                    <input
-                      type="text"
-                      value={studentDetailsForm.department}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("department", event.target.value)
-                      }
-                      placeholder="Enter department"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Email ID
-                    </span>
-                    <input
-                      type="email"
-                      value={studentDetailsForm.email}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("email", event.target.value)
-                      }
-                      placeholder="Enter email address"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Student's Mobile Number
-                    </span>
-                    <input
-                      type="tel"
-                      value={studentDetailsForm.studentMobile}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("studentMobile", event.target.value)
-                      }
-                      placeholder="Enter student mobile number"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Blood Group
-                    </span>
-                    <input
-                      type="text"
-                      value={studentDetailsForm.bloodGroup}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("bloodGroup", event.target.value)
-                      }
-                      placeholder="Enter blood group"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Father's Name
-                    </span>
-                    <input
-                      type="text"
-                      value={studentDetailsForm.fatherName}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("fatherName", event.target.value)
-                      }
-                      placeholder="Enter father's name"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Mother's Name
-                    </span>
-                    <input
-                      type="text"
-                      value={studentDetailsForm.motherName}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("motherName", event.target.value)
-                      }
-                      placeholder="Enter mother's name"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/65">
-                      Father or Mother Mobile Number
-                    </span>
-                    <input
-                      type="tel"
-                      value={studentDetailsForm.parentMobile}
-                      onChange={(event) =>
-                        handleChangeStudentDetail("parentMobile", event.target.value)
-                      }
-                      placeholder="Enter parent mobile number"
-                      className="mt-1 w-full rounded-xl border border-clay/30 bg-white px-3 py-2 text-sm placeholder:text-ink/50"
-                    />
-                  </label>
-
-                  {studentDetailsError ? (
-                    <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                      {studentDetailsError}
-                    </p>
-                  ) : null}
-
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={handleCancelStudentDetailsEdit}
-                      disabled={isSavingStudentDetails}
-                      className="w-full rounded-xl border border-clay/25 bg-white px-4 py-2 text-sm font-semibold text-ink/80 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={isSavingStudentDetails}
-                      className="w-full rounded-xl bg-clay px-4 py-2 text-sm font-semibold text-ink shadow disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      {isSavingStudentDetails ? "Saving..." : "Save"}
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="mt-4">
-                  <dl className="divide-y divide-clay/20">
-                    {profileRows.map((row) => (
-                      <div
-                        key={row.label}
-                        className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[144px_minmax(0,1fr)] sm:items-center sm:gap-3"
-                      >
-                        <dt className="text-sm text-ink/70">{row.label}</dt>
-                        <dd
-                          className={`break-words text-left text-sm font-semibold leading-tight text-ink sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
-                        >
-                          {row.value}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                  {studentDetailsStatus ? (
-                    <p className="mt-3 rounded-xl border border-ink/10 bg-sand/80 px-3 py-2 text-xs font-medium text-ink/80">
-                      {studentDetailsStatus}
-                    </p>
-                  ) : null}
-                  {studentDetailsError ? (
-                    <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                      {studentDetailsError}
-                    </p>
-                  ) : null}
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    <button
-                      type="button"
-                      onClick={handleCloseStudentDetailsModal}
-                      className="w-full rounded-xl border border-clay/25 bg-white px-4 py-2 text-sm font-semibold text-ink/80"
-                    >
-                      Close
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleStartStudentDetailsEdit}
-                      className="w-full rounded-xl bg-clay px-4 py-2 text-sm font-semibold text-ink shadow"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              )}
+      <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-8">
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-white/30 via-blue-100/24 to-indigo-200/14"
+          aria-hidden="true"
+        />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
+          <div className="relative w-fit">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-float sm:h-24 sm:w-24">
+              <UserRound size={42} strokeWidth={2.1} />
             </div>
+            <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-[3px] border-white bg-emerald-500 shadow-sm" />
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-2xl font-bold text-slate-900 sm:text-3xl">
+                {staffName}
+              </h2>
+              <span className="rounded-xl border border-blue-300/55 bg-blue-100/48 px-2.5 py-0.5 text-xs font-semibold text-blue-700 sm:px-3 sm:py-1">
+                {staffDepartmentLabel}
+              </span>
+              <span className="rounded-xl border border-indigo-300/55 bg-indigo-100/48 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 sm:px-3 sm:py-1">
+                {staffDesignationLabel}
+              </span>
+            </div>
+            <p className="mt-3 text-base text-slate-600 sm:text-xl">
+              <span className="font-medium text-slate-500">{staffIdentityLabel}</span>{" "}
+              <span className="font-semibold text-slate-800">{staffIdentityValue}</span>
+            </p>
           </div>
         </div>
-      ) : null}
+      </section>
 
-      <Card className="mt-4 border-ocean/25 bg-gradient-to-br from-white/95 via-sand/90 to-ocean/10 p-4 sm:p-5">
+      <section className="relative mt-4 overflow-hidden rounded-3xl border border-blue-400/45 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 px-4 py-5 text-center text-xl font-semibold text-white shadow-float sm:py-6 sm:text-2xl">
+        <div
+          className="absolute inset-0 bg-white/10"
+          aria-hidden="true"
+        />
+        <span className="relative inline-flex items-center">Staff&apos;s Details</span>
+      </section>
+
+      <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-6">
+        <div
+          className="absolute inset-0 bg-gradient-to-br from-white/28 via-blue-100/20 to-indigo-100/14"
+          aria-hidden="true"
+        />
+        <div className="relative">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700/85">
+            Account Details
+          </p>
+          <dl className="mt-4 divide-y divide-slate-200/55 overflow-hidden rounded-2xl border border-white/55 bg-white/58 backdrop-blur-sm">
+            {profileRows.map((row) => (
+              <div
+                key={row.label}
+                className="grid grid-cols-1 gap-1 px-4 py-4 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-4 sm:px-5"
+              >
+                <dt className="text-sm font-medium text-slate-500">{row.label}</dt>
+                <dd
+                  className={`break-words text-left text-sm font-semibold leading-tight text-slate-900 sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={handlePasswordChange}
           disabled={isSendingReset || !accountEmail}
-          className="w-full rounded-xl border border-ocean/20 bg-white/68 px-4 py-2 text-sm font-semibold text-ink/85 shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-slate-200/60 bg-white/58 px-4 py-4 text-lg font-semibold text-slate-800 shadow-soft backdrop-blur-md transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[70px] sm:text-xl"
         >
+          <LockKeyhole size={20} strokeWidth={2} />
           {isSendingReset ? "Sending reset link..." : "Change Password"}
         </button>
-        {resetError ? (
-          <p
-            className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700"
-            aria-live="polite"
-          >
-            {resetError}
-          </p>
-        ) : null}
-        {resetMessage ? (
-          <p
-            className="mt-3 rounded-xl border border-ink/10 bg-sand/80 px-3 py-2 text-xs font-medium text-ink/80"
-            aria-live="polite"
-          >
-            {resetMessage}
-          </p>
-        ) : null}
+
         <button
           type="button"
           onClick={logout}
-          className="mt-3 w-full rounded-xl bg-gradient-to-r from-ocean to-cocoa px-4 py-2 text-sm font-semibold text-white shadow"
+          className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-indigo-400/45 bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-4 text-lg font-semibold text-white shadow-float transition-transform hover:-translate-y-0.5 sm:min-h-[70px] sm:text-xl"
         >
+          <LogOut size={20} strokeWidth={2} />
           Logout
         </button>
-      </Card>
+      </div>
+
+      {resetError ? (
+        <p
+          className="mt-3 rounded-xl border border-red-200 bg-red-50/90 px-3 py-2 text-xs font-semibold text-red-700"
+          aria-live="polite"
+        >
+          {resetError}
+        </p>
+      ) : null}
+      {resetMessage ? (
+        <p
+          className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/90 px-3 py-2 text-xs font-semibold text-emerald-700"
+          aria-live="polite"
+        >
+          {resetMessage}
+        </p>
+      ) : null}
     </>
   );
 }

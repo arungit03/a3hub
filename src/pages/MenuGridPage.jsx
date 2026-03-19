@@ -571,12 +571,15 @@ export default function MenuGridPage({ forcedStaff }) {
       openValue === "student-details" ||
       hashValue === "student-details" ||
       isStudentDetailsPageRoute;
+    if (shouldOpenCodeLearning) {
+      navigate(`${basePath}/learning`, { replace: true });
+      return;
+    }
     if (
       !shouldOpenFees &&
       !shouldOpenAssignments &&
       !shouldOpenDailyPython &&
       !shouldOpenCirculars &&
-      !shouldOpenCodeLearning &&
       !shouldOpenStudentDetails
     ) {
       setAssignmentsOpen(false);
@@ -592,7 +595,7 @@ export default function MenuGridPage({ forcedStaff }) {
     setCircularsOpen(false);
     setAssignmentsOpen(shouldOpenAssignments);
     setCircularsOpen(shouldOpenCirculars);
-    setCodeLearningOpen(shouldOpenCodeLearning);
+    setCodeLearningOpen(false);
     setDailyPythonOpen(shouldOpenDailyPython);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(shouldOpenStudentDetails);
@@ -603,12 +606,14 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsStatus("");
     setAssignmentsError("");
   }, [
+    basePath,
     isAssignmentsPageRoute,
     isDailyPythonPageRoute,
     isStaff,
     isStudentDetailsPageRoute,
     location.hash,
     location.search,
+    navigate,
   ]);
 
   useEffect(() => {
@@ -2082,15 +2087,7 @@ export default function MenuGridPage({ forcedStaff }) {
   };
 
   const openCodeLearningModal = () => {
-    setActiveModule(null);
-    setCalendarOpen(false);
-    setCircularsOpen(false);
-    setAssignmentsOpen(false);
-    setFeesOpen(false);
-    setDailyPythonOpen(false);
-    setInterviewQuizOpen(false);
-    setStudentDetailsOpen(false);
-    setCodeLearningOpen(true);
+    navigate(`${basePath}/learning`);
   };
 
   const closeCodeLearningModal = () => {

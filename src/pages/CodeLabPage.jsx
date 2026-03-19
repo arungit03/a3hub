@@ -1,10 +1,12 @@
 import { useNavigate } from "react-router-dom";
+import { isFeatureEnabled } from "../config/features";
 import { useAuth } from "../state/auth";
 
 export default function CodeLabPage() {
   const { role } = useAuth();
   const base = role === "staff" ? "/staff" : "/student";
   const navigate = useNavigate();
+  const learningEnabled = isFeatureEnabled("learning");
 
   return (
     <div className="code-lab-shell">
@@ -15,11 +17,12 @@ export default function CodeLabPage() {
           </span>
           <div>
             <p className="code-lab-kicker">Code Studio</p>
-            <h1 className="code-lab-heading">Code</h1>
+            <h1 className="code-lab-heading">Code Studio</h1>
             <p className="code-lab-subtitle">
-              Practice and learn Python, C, and C++ programming fundamentals.
+              Open the learning portal or jump directly into the HTML editor, Python interpreter, CSS lessons, and C or C++ compiler pages.
             </p>
             <div className="code-lab-meta">
+              <span className="code-lab-pill">Learning Module</span>
               <span className="code-lab-pill">Browser Based</span>
               <span className="code-lab-pill">No Setup</span>
               <span className="code-lab-pill">Beginner Friendly</span>
@@ -29,6 +32,42 @@ export default function CodeLabPage() {
       </div>
 
       <div className="code-lab-grid">
+        {learningEnabled ? (
+          <button
+            type="button"
+            className="code-lab-tile"
+            onClick={() => navigate(`${base}/learning`)}
+            aria-label="Open Learning Module"
+          >
+            <div>
+              <h2 className="code-lab-tile-title">Programming Learning Module</h2>
+              <p className="code-lab-tile-subtitle">
+                W3Schools-style lessons, quizzes, CSS and HTML preview practice, and progress tracking.
+              </p>
+            </div>
+            <span className="code-lab-tile-arrow" aria-hidden="true">
+              {"\u25B6"}
+            </span>
+          </button>
+        ) : null}
+
+        <button
+          type="button"
+          className="code-lab-tile"
+          onClick={() => navigate(`${base}/html-editor`)}
+          aria-label="Open HTML Editor"
+        >
+          <div>
+            <h2 className="code-lab-tile-title">HTML Editor</h2>
+            <p className="code-lab-tile-subtitle">
+              Try HTML instantly with live preview, example loading, downloads, and snippet saving.
+            </p>
+          </div>
+          <span className="code-lab-tile-arrow" aria-hidden="true">
+            {"\u25B6"}
+          </span>
+        </button>
+
         <button
           type="button"
           className="code-lab-tile"

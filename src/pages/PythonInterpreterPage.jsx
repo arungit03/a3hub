@@ -690,9 +690,10 @@ export default function PythonInterpreterPage() {
             <Code2 size={32} strokeWidth={2.2} />
           </span>
           <div>
-            <h1 className="ide-brand-title">Python Interpreter</h1>
+            <p className="cc-kicker">Try It Yourself</p>
+            <h1 className="ide-brand-title">Python Try It Yourself</h1>
             <p className="ide-brand-subtitle">
-              Learn Python with topic-wise definitions, syntax, examples, and output.
+              Write Python on the left, run it instantly, and review the output on the right.
             </p>
           </div>
         </div>

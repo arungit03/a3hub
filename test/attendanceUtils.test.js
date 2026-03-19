@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  buildFaceRegistrationProfile,
+  getRequiredFaceConfirmationCount,
   rankStudentFaceMatches,
   resolveReliableFaceMatches,
 } from "../src/features/attendance/attendanceUtils.js";
@@ -90,4 +92,35 @@ test("resolveReliableFaceMatches keeps only the strongest detection per student"
     ["alice", "bob"]
   );
   assert.ok(result.rejected.some((item) => item.status === "duplicate_student"));
+});
+
+test("buildFaceRegistrationProfile summarizes multiple consistent samples", () => {
+  const profile = buildFaceRegistrationProfile([
+    buildUnitVector(0),
+    buildBlendVector(0, 1, 1, 0.05),
+    buildBlendVector(0, 2, 1, 0.04),
+  ]);
+
+  assert.equal(profile.sampleCount, 3);
+  assert.equal(profile.sampleVectors.length, 3);
+  assert.equal(profile.vectorLength, 64);
+  assert.ok(profile.sampleConsistency > 0.99);
+  assert.ok(profile.sampleMinSimilarity > 0.99);
+});
+
+test("buildFaceRegistrationProfile removes duplicate samples", () => {
+  const vector = buildUnitVector(0);
+  const profile = buildFaceRegistrationProfile([
+    vector,
+    [...vector],
+    buildUnitVector(1),
+  ]);
+
+  assert.equal(profile.sampleCount, 2);
+  assert.equal(profile.sampleVectors.length, 2);
+});
+
+test("getRequiredFaceConfirmationCount fast-tracks strong matches", () => {
+  assert.equal(getRequiredFaceConfirmationCount(0.9), 1);
+  assert.equal(getRequiredFaceConfirmationCount(0.8), 2);
 });

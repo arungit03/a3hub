@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import { useAuth } from "../state/auth";
+import { ensureFaceApiReady } from "../lib/faceApiLoader";
 import { db } from "../lib/firebase";
 import { resolveScheduleEntryDateKey, toDateKey } from "../lib/scheduleDate";
 import {
@@ -23,16 +24,21 @@ import {
   where,
 } from "firebase/firestore";
 import {
-  collectFaceSampleVectors,
+  buildFaceRegistrationProfile,
+  cosineSimilarity,
   FACE_MATCH_CONFIRMATION_COUNT,
   FACE_MATCH_CONFIRMATION_WINDOW_MS,
   FACE_MATCH_COOLDOWN_MS,
+  FACE_MATCH_FAST_TRACK_THRESHOLD,
   FACE_MATCH_THRESHOLD,
   FACE_MIN_VECTOR_LENGTH,
+  FACE_REGISTRATION_MIN_SAMPLE_SIMILARITY,
+  FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT,
   formatDateLabel,
   formatDateTimeLabel,
   formatTimeLabel,
   getCreatedAtMillis,
+  getRequiredFaceConfirmationCount,
   getPeriodNumber,
   getStudentFaceTemplates,
   getStudentFaceVector,
@@ -49,7 +55,6 @@ import {
   resolveStudentEmail,
   SCAN_QUEUE_DATE_PATTERN,
   SCAN_QUEUE_TOKEN_PATTERN,
-  serializeFaceSampleVectors,
   statusChipClassMap,
   statusLabelMap,
   toSimilarityPercentLabel,
@@ -230,6 +235,23 @@ export default function AttendancePage({ forcedStaff }) {
     : enrolledFaceCount === 0
     ? "Register at least one student face profile"
     : `${enrolledFaceCount}/${students.length} face profiles ready`;
+  useEffect(() => {
+    if (!isStaff || !canOpenFaceScan || typeof window === "undefined") {
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    void import("../components/FaceAttendanceModal");
+    void ensureFaceApiReady().catch(() => {
+      if (cancelled) return;
+      // Warm model assets silently so the first scan opens faster.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canOpenFaceScan, isStaff]);
   const dailyQrScans = useMemo(() => {
     const faceValue = attendanceData?.dailyFaceScans;
     if (faceValue && typeof faceValue === "object") return faceValue;
@@ -354,12 +376,12 @@ export default function AttendancePage({ forcedStaff }) {
   const hasCurrentStudentFaceProfile =
     currentStudentFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
   useEffect(() => {
-    if (!isStudent) {
+    if (!isStudent || !isFaceRegisterModalOpen) {
       registrationSamplesRef.current = [];
       return;
     }
-    registrationSamplesRef.current = collectFaceSampleVectors(profile || {});
-  }, [isStudent, profile]);
+    registrationSamplesRef.current = [];
+  }, [isFaceRegisterModalOpen, isStudent]);
   const absenceReasonSubmittedAtLabel = formatDateTimeLabel(
     absenceReason?.submittedAt || absenceReason?.updatedAt || absenceReason?.createdAt
   );
@@ -1311,33 +1333,75 @@ export default function AttendancePage({ forcedStaff }) {
       setFaceProfileError("");
 
       try {
-        const serializedFaceSamples = serializeFaceSampleVectors([normalizedVector]);
+        const existingSamples = Array.isArray(registrationSamplesRef.current)
+          ? registrationSamplesRef.current
+              .map((sample) => normalizeFaceVector(sample))
+              .filter((sample) => sample.length >= FACE_MIN_VECTOR_LENGTH)
+          : [];
+        const bestExistingSimilarity =
+          existingSamples.length > 0
+            ? existingSamples.reduce(
+                (bestSimilarity, sample) =>
+                  Math.max(bestSimilarity, cosineSimilarity(normalizedVector, sample)),
+                0
+              )
+            : 1;
+
+        if (
+          existingSamples.length > 0 &&
+          bestExistingSimilarity < FACE_REGISTRATION_MIN_SAMPLE_SIMILARITY
+        ) {
+          registrationSamplesRef.current = [normalizedVector];
+          return {
+            tone: "info",
+            message: `Capture restarted because the face changed too much. Sample 1/${FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT} captured.`,
+          };
+        }
+
+        const registrationProfile = buildFaceRegistrationProfile([
+          ...existingSamples,
+          normalizedVector,
+        ]);
+        registrationSamplesRef.current = registrationProfile.vectors;
+
+        if (
+          registrationProfile.sampleCount < FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT
+        ) {
+          const remainingSamples =
+            FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT -
+            registrationProfile.sampleCount;
+          return {
+            tone: "info",
+            message: `Sample ${registrationProfile.sampleCount}/${FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT} captured. Hold steady for ${remainingSamples} more clear frame${
+              remainingSamples === 1 ? "" : "s"
+            }.`,
+          };
+        }
+
         await setDoc(
           doc(db, "users", user.uid),
           {
             faceAttendance: {
-              vector: normalizedVector,
+              vector: registrationProfile.vector,
               vectorLength: Number.isFinite(vectorLength)
                 ? Number(vectorLength)
-                : normalizedVector.length,
-              sampleVectors: serializedFaceSamples,
-              sampleCount: serializedFaceSamples.length,
+                : registrationProfile.vectorLength,
+              sampleVectors: registrationProfile.sampleVectors,
+              sampleCount: registrationProfile.sampleCount,
               algorithm: "face-api-128d",
               matchThreshold: FACE_MATCH_THRESHOLD,
               detectionScore: Number.isFinite(detectionScore)
                 ? Number(detectionScore.toFixed(4))
                 : null,
-              sampleConsistency: 1,
-              sampleMinSimilarity: 1,
+              sampleConsistency: registrationProfile.sampleConsistency,
+              sampleMinSimilarity: registrationProfile.sampleMinSimilarity,
               updatedAt: serverTimestamp(),
             },
           },
           { merge: true }
         );
 
-        registrationSamplesRef.current = [normalizedVector];
-        const successMessage =
-          "Face profile saved. Front-facing auto capture completed.";
+        const successMessage = `Face profile saved with ${registrationProfile.sampleCount} verified samples.`;
 
         setFaceProfileStatus(successMessage);
         setFaceProfileError("");
@@ -1497,6 +1561,9 @@ export default function AttendancePage({ forcedStaff }) {
       accepted.forEach((match) => {
         const studentId = String(match?.student?.id || "").trim();
         if (!studentId) return;
+        const requiredConfirmationCount = getRequiredFaceConfirmationCount(
+          match.similarity
+        );
 
         const previousPending = pendingMatches[studentId];
         const nextPending =
@@ -1511,17 +1578,21 @@ export default function AttendancePage({ forcedStaff }) {
                 at: now,
               };
 
-        if (nextPending.count < FACE_MATCH_CONFIRMATION_COUNT) {
+        if (nextPending.count < requiredConfirmationCount) {
           pendingMatches[studentId] = nextPending;
           confirmingMatches.push({
             ...match,
             confirmationCount: nextPending.count,
+            requiredConfirmationCount,
           });
           return;
         }
 
         delete pendingMatches[studentId];
-        readyMatches.push(match);
+        readyMatches.push({
+          ...match,
+          requiredConfirmationCount,
+        });
       });
 
       pendingFaceMatchRef.current = pendingMatches;
@@ -1694,7 +1765,7 @@ export default function AttendancePage({ forcedStaff }) {
           `Hold steady: ${summarizeFaceScanItems(
             confirmingMatches,
             (item) =>
-              `${getFaceScanStudentLabel(item.student)} (${item.confirmationCount}/${FACE_MATCH_CONFIRMATION_COUNT})`
+              `${getFaceScanStudentLabel(item.student)} (${item.confirmationCount}/${item.requiredConfirmationCount})`
           )}.`
         );
       }
@@ -1996,6 +2067,12 @@ export default function AttendancePage({ forcedStaff }) {
               <p className="text-sm text-ink/78">
                 Keep one student face in camera. Match above{" "}
                 {toSimilarityPercentLabel(FACE_MATCH_THRESHOLD)} marks daily attendance.
+              </p>
+              <p className="text-[11px] text-ink/65">
+                Strong matches above{" "}
+                {toSimilarityPercentLabel(FACE_MATCH_FAST_TRACK_THRESHOLD)} mark
+                instantly. Other matches need {FACE_MATCH_CONFIRMATION_COUNT} steady
+                detections.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -2522,7 +2599,7 @@ export default function AttendancePage({ forcedStaff }) {
             open={isFaceRegisterModalOpen}
             mode="register"
             title="Register Student Face"
-            description="Look straight at the camera. A single front-facing face profile will be captured automatically."
+            description="Look straight at the camera. Multiple clear front-facing samples will be captured automatically for a stronger face profile."
             thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
             onClose={() => setIsFaceRegisterModalOpen(false)}
             onDescriptor={handleStudentFaceRegistration}

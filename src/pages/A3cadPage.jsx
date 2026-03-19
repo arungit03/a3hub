@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Copy,
   Info,
+  Power,
   Redo2,
   RotateCcw,
   Save,

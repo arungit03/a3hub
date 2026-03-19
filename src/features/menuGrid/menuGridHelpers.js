@@ -60,6 +60,14 @@ export const SERVICE_CARD_META = Object.freeze({
     icon: Code2,
     description: "Practice daily coding with guided challenges.",
   },
+  learning: {
+    icon: BookOpen,
+    description: "Learn Python, C, C++, HTML, and CSS with lessons, quizzes, practice, previews, and progress tracking.",
+  },
+  "html-editor": {
+    icon: Code2,
+    description: "Write HTML, run live preview, load examples, and save snippets instantly.",
+  },
   "interview-quiz-contact": {
     icon: Bot,
     description: "Prepare with AI-driven interview support.",

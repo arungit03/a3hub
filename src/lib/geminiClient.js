@@ -21,7 +21,7 @@ const FALLBACK_MODELS = [
 const OPENAI_MODEL_PREFERENCE = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"];
 const OPENAI_FALLBACK_MODELS = ["gpt-4o-mini", "gpt-4o"];
 const OPENAI_CHAT_ENDPOINT = "https://api.openai.com/v1/chat/completions";
-const DEFAULT_AI_PROXY_ENDPOINT = "/.netlify/functions/ai-generate";
+const DEFAULT_AI_PROXY_ENDPOINT = "/api/ai-generate";
 const SERVER_PROXY_API_KEY = "__A3HUB_SERVER_AI_PROXY__";
 const CHAT_MAX_OUTPUT_TOKENS = 4096;
 const CHAT_MAX_CONTINUATION_ROUNDS = 2;
@@ -46,7 +46,6 @@ const isLocalDevelopmentRuntime = () => {
 };
 
 const getRuntimeApiKey = () => {
-  if (!isLocalDevelopmentRuntime()) return "";
   if (typeof window === "undefined") return "";
   const runtimeRoot =
     window.__A3HUB_RUNTIME_CONFIG__ &&
@@ -102,6 +101,59 @@ const resolveAiProxyEndpoint = () => {
   return endpointFromRuntime || endpointFromBuild || DEFAULT_AI_PROXY_ENDPOINT;
 };
 
+const getFirebaseProjectId = () => {
+  const projectIdFromBuild = String(
+    import.meta.env.VITE_FIREBASE_PROJECT_ID || ""
+  ).trim();
+
+  if (typeof window === "undefined") {
+    return projectIdFromBuild;
+  }
+
+  const runtimeRoot =
+    window.__A3HUB_RUNTIME_CONFIG__ &&
+    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
+      ? window.__A3HUB_RUNTIME_CONFIG__
+      : {};
+  const runtimeFirebaseConfig =
+    window.__A3HUB_FIREBASE_CONFIG__ &&
+    typeof window.__A3HUB_FIREBASE_CONFIG__ === "object"
+      ? window.__A3HUB_FIREBASE_CONFIG__
+      : runtimeRoot.firebase && typeof runtimeRoot.firebase === "object"
+        ? runtimeRoot.firebase
+        : {};
+  const projectIdFromRuntime = String(
+    runtimeFirebaseConfig.projectId || runtimeRoot.projectId || ""
+  ).trim();
+
+  return projectIdFromRuntime || projectIdFromBuild;
+};
+
+const getAiProxyCandidateEndpoints = () => {
+  const configuredEndpoint = resolveAiProxyEndpoint();
+  const projectId = getFirebaseProjectId();
+  const isRelativeConfiguredEndpoint = /^\/(?!\/)/.test(configuredEndpoint);
+  const candidates = [];
+
+  const addCandidate = (value) => {
+    const nextValue = String(value || "").trim();
+    if (!nextValue || candidates.includes(nextValue)) return;
+    candidates.push(nextValue);
+  };
+
+  addCandidate(configuredEndpoint);
+
+  if (projectId && isRelativeConfiguredEndpoint && isLocalDevelopmentRuntime()) {
+    addCandidate(`http://127.0.0.1:5001/${projectId}/us-central1/aiGenerate`);
+  }
+
+  if (projectId && isRelativeConfiguredEndpoint) {
+    addCandidate(`https://us-central1-${projectId}.cloudfunctions.net/aiGenerate`);
+  }
+
+  return candidates;
+};
+
 const normalizeApiKeyValue = (apiKey) => {
   const trimmedKey = String(apiKey || "").trim();
   if (!trimmedKey) return "";
@@ -127,34 +179,46 @@ const getAiProxyAuthHeaders = async () => {
 };
 
 const requestAiProxyAction = async ({ action, payload = {} }) => {
-  const endpoint = resolveAiProxyEndpoint();
-  if (!endpoint) {
+  const endpoints = getAiProxyCandidateEndpoints();
+  if (endpoints.length === 0) {
     const error = new Error("AI proxy endpoint is not configured.");
     error.code = "ai/proxy-missing";
     throw error;
   }
 
-  let response;
-  let responsePayload = {};
-  try {
-    response = await fetch(endpoint, {
-      method: "POST",
-      headers: await getAiProxyAuthHeaders(),
-      body: JSON.stringify({
-        action,
-        payload,
-      }),
-    });
-    responsePayload = await response.json().catch(() => ({}));
-  } catch {
-    const error = new Error("Network error while contacting AI server.");
-    error.code = "ai/proxy-network-error";
-    error.userMessage =
-      "Unable to reach AI server right now. Please try again in a moment.";
-    throw error;
-  }
+  const headers = await getAiProxyAuthHeaders();
+  let lastError = null;
 
-  if (!response.ok || responsePayload?.ok === false) {
+  for (let index = 0; index < endpoints.length; index += 1) {
+    const endpoint = endpoints[index];
+    const isLastEndpoint = index === endpoints.length - 1;
+    let response;
+    let responsePayload = {};
+
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action,
+          payload,
+        }),
+      });
+      responsePayload = await response.json().catch(() => ({}));
+    } catch {
+      const error = new Error("Network error while contacting AI server.");
+      error.code = "ai/proxy-network-error";
+      error.userMessage =
+        "Unable to reach AI server right now. Please try again in a moment.";
+      lastError = error;
+      if (!isLastEndpoint) continue;
+      throw error;
+    }
+
+    if (response.ok && responsePayload?.ok !== false) {
+      return responsePayload;
+    }
+
     const detailsMessage =
       String(
         responsePayload?.error ||
@@ -166,6 +230,8 @@ const requestAiProxyAction = async ({ action, payload = {} }) => {
     const error = new Error(detailsMessage);
     error.code = String(responsePayload?.code || "ai/proxy-request-failed");
     error.status = response.status || 500;
+    lastError = error;
+
     if (response.status === 401) {
       error.userMessage = "Please sign in again to use AI features.";
       throw error;
@@ -175,21 +241,29 @@ const requestAiProxyAction = async ({ action, payload = {} }) => {
         "Your account is not allowed to use AI features. Contact admin.";
       throw error;
     }
-    if (
+
+    const looksLikeMissingFirebaseRoute =
       [404, 405].includes(response.status) &&
-      endpoint.includes("/.netlify/functions/")
-    ) {
+      (/^\/(?!\/)/.test(endpoint) ||
+        /cloudfunctions\.net\/aiGenerate(?:\/)?$/i.test(endpoint));
+
+    if (looksLikeMissingFirebaseRoute && !isLastEndpoint) {
+      continue;
+    }
+
+    if (looksLikeMissingFirebaseRoute) {
       error.userMessage =
-        "This deploy cannot reach the AI function. Rebuild locally and upload the dist folder, or deploy with Netlify Functions enabled.";
+        "This deploy cannot reach the AI backend. Deploy the Firebase aiGenerate function and keep the /api/ai-generate Hosting rewrite in place.";
       throw error;
     }
+
     error.userMessage =
       responsePayload?.userMessage ||
       "AI service is temporarily unavailable. Please try again.";
     throw error;
   }
 
-  return responsePayload;
+  throw lastError || new Error("AI server request failed.");
 };
 
 const extractTextFromResponse = (payload) => {
@@ -325,6 +399,27 @@ const buildOpenAiHttpError = ({ status, payload, message }) => {
   }
 
   return error;
+};
+
+const buildGeminiGenerationConfig = ({
+  model,
+  temperature = 0.35,
+  topP = 0.9,
+  maxOutputTokens = 2048,
+}) => {
+  const config = {
+    temperature,
+    topP,
+    maxOutputTokens,
+  };
+
+  if (/^gemini-2\.5/i.test(normalizeModelName(model))) {
+    config.thinkingConfig = {
+      thinkingBudget: 0,
+    };
+  }
+
+  return config;
 };
 
 const toConversationMessages = (messages) =>
@@ -1033,11 +1128,12 @@ export async function requestGeminiTopTechnicalNews({
               },
             ],
           },
-          generationConfig: {
+          generationConfig: buildGeminiGenerationConfig({
+            model,
             temperature: 0.35,
             topP: 0.9,
             maxOutputTokens: 1800,
-          },
+          }),
         }),
       });
       payload = await response.json();
@@ -1179,11 +1275,12 @@ export async function requestGeminiInterviewQuizAndContactPlaces({
               },
             ],
           },
-          generationConfig: {
+          generationConfig: buildGeminiGenerationConfig({
+            model,
             temperature: 0.35,
             topP: 0.9,
             maxOutputTokens: 2600,
-          },
+          }),
         }),
       });
       payload = await response.json();
@@ -1334,11 +1431,12 @@ export async function requestGeminiDailyPythonChallenges({
               },
             ],
           },
-          generationConfig: {
+          generationConfig: buildGeminiGenerationConfig({
+            model,
             temperature: 0.55,
             topP: 0.9,
             maxOutputTokens: 2200,
-          },
+          }),
         }),
       });
       payload = await response.json();
@@ -1493,11 +1591,12 @@ export async function requestGeminiDailyPythonSolution({
               },
             ],
           },
-          generationConfig: {
+          generationConfig: buildGeminiGenerationConfig({
+            model,
             temperature: 0.25,
             topP: 0.9,
             maxOutputTokens: 1400,
-          },
+          }),
         }),
       });
       payload = await response.json();
@@ -1585,7 +1684,12 @@ export async function requestGeminiChat({ apiKey, messages }) {
   const systemInstructionText =
     "You are A3 Hub AI assistant for an in-app modal chat. Follow these strict rules: (1) Answer only what the user asked. Do not add unrelated sections, extra notes, or long introductions. (2) If the user asks for quiz/MCQ/test questions, return only the quiz questions; do not include answers, hints, or explanations unless the user explicitly asks. (3) If the user asks for code, return clean GitHub-flavored Markdown with a valid fenced code block; include explanation only when requested. (4) For code generation, always return complete runnable code with all required closing tags/braces/backticks and never a partial snippet unless the user explicitly asks for a partial snippet. (5) Keep output clear and well-formatted without malformed markdown.";
 
-  const requestChatChunk = async (endpoint, requestContents, temperature = 0.35) => {
+  const requestChatChunk = async (
+    endpoint,
+    requestContents,
+    model,
+    temperature = 0.35
+  ) => {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -1600,11 +1704,12 @@ export async function requestGeminiChat({ apiKey, messages }) {
             },
           ],
         },
-        generationConfig: {
+        generationConfig: buildGeminiGenerationConfig({
+          model,
           temperature,
           topP: 0.9,
           maxOutputTokens: CHAT_MAX_OUTPUT_TOKENS,
-        },
+        }),
       }),
     });
     const payload = await response.json();
@@ -1621,7 +1726,12 @@ export async function requestGeminiChat({ apiKey, messages }) {
     let payload = null;
 
     try {
-      ({ response, payload } = await requestChatChunk(endpoint, contents, 0.35));
+      ({ response, payload } = await requestChatChunk(
+        endpoint,
+        contents,
+        model,
+        0.35
+      ));
     } catch {
       const error = new Error("Network error while contacting Gemini API.");
       error.code = "gemini/network-error";
@@ -1633,6 +1743,10 @@ export async function requestGeminiChat({ apiKey, messages }) {
       if (!text) {
         const error = new Error("Gemini returned an empty answer.");
         error.code = "gemini/empty-response";
+        if (index < modelCandidates.length - 1) {
+          lastRecoverableError = error;
+          continue;
+        }
         throw error;
       }
 
@@ -1659,6 +1773,7 @@ export async function requestGeminiChat({ apiKey, messages }) {
           const continuationResult = await requestChatChunk(
             endpoint,
             continuationContents,
+            model,
             0.2
           );
 

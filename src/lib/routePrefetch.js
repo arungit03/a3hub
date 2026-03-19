@@ -77,6 +77,66 @@ const ROUTE_PREFETCH_ENTRIES = [
     feature: "compilers",
   },
   {
+    key: "student-learning",
+    match: isExact("/student/learning"),
+    load: () => import("../features/learning/pages/LearningHomePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-dashboard",
+    match: isExact("/student/learning/dashboard"),
+    load: () => import("../features/learning/pages/LearningDashboardPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-html-dashboard",
+    match: isExact("/student/learning/html/dashboard"),
+    load: () => import("../features/learning/pages/HtmlLearningDashboardPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-progress",
+    match: isExact("/student/learning/progress"),
+    load: () => import("../features/learning/pages/LearningProgressPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-topic",
+    match: (path) =>
+      path.startsWith("/student/learning/") &&
+      path.split("/").length >= 5 &&
+      !path.endsWith("/quiz") &&
+      !path.endsWith("/practice"),
+    load: () => import("../features/learning/pages/LearningTopicPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-quiz",
+    match: (path) => path.startsWith("/student/learning/") && path.endsWith("/quiz"),
+    load: () => import("../features/learning/pages/LearningQuizPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-practice",
+    match: (path) =>
+      path.startsWith("/student/learning/") && path.endsWith("/practice"),
+    load: () => import("../features/learning/pages/LearningPracticePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-learning-course",
+    match: (path) =>
+      path.startsWith("/student/learning/") && path.split("/").length === 4,
+    load: () => import("../features/learning/pages/LearningCoursePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "student-html-editor",
+    match: (path) => path === "/student/html-editor" || path.startsWith("/student/html-editor/"),
+    load: () => import("../features/html-editor/pages/HtmlEditorPage.jsx"),
+    feature: "compilers",
+  },
+  {
     key: "student-code-python",
     match: isExact("/student/code/python"),
     load: () => import("../pages/PythonInterpreterPage"),
@@ -185,6 +245,66 @@ const ROUTE_PREFETCH_ENTRIES = [
     key: "staff-code",
     match: isExact("/staff/code"),
     load: () => import("../pages/CodeLabPage"),
+    feature: "compilers",
+  },
+  {
+    key: "staff-learning",
+    match: isExact("/staff/learning"),
+    load: () => import("../features/learning/pages/LearningHomePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-dashboard",
+    match: isExact("/staff/learning/dashboard"),
+    load: () => import("../features/learning/pages/LearningDashboardPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-html-dashboard",
+    match: isExact("/staff/learning/html/dashboard"),
+    load: () => import("../features/learning/pages/HtmlLearningDashboardPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-progress",
+    match: isExact("/staff/learning/progress"),
+    load: () => import("../features/learning/pages/LearningProgressPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-topic",
+    match: (path) =>
+      path.startsWith("/staff/learning/") &&
+      path.split("/").length >= 5 &&
+      !path.endsWith("/quiz") &&
+      !path.endsWith("/practice"),
+    load: () => import("../features/learning/pages/LearningTopicPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-quiz",
+    match: (path) => path.startsWith("/staff/learning/") && path.endsWith("/quiz"),
+    load: () => import("../features/learning/pages/LearningQuizPage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-practice",
+    match: (path) =>
+      path.startsWith("/staff/learning/") && path.endsWith("/practice"),
+    load: () => import("../features/learning/pages/LearningPracticePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-learning-course",
+    match: (path) =>
+      path.startsWith("/staff/learning/") && path.split("/").length === 4,
+    load: () => import("../features/learning/pages/LearningCoursePage.jsx"),
+    feature: "learning",
+  },
+  {
+    key: "staff-html-editor",
+    match: (path) => path === "/staff/html-editor" || path.startsWith("/staff/html-editor/"),
+    load: () => import("../features/html-editor/pages/HtmlEditorPage.jsx"),
     feature: "compilers",
   },
   {

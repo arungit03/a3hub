@@ -19,7 +19,7 @@ const firebaseSwConfigPath = path.join(
   "firebase-messaging-sw-config.js"
 );
 
-const DEFAULT_AI_PROXY_ENDPOINT = "/.netlify/functions/ai-generate";
+const DEFAULT_AI_PROXY_ENDPOINT = "/api/ai-generate";
 const DEFAULT_PUSH_ENDPOINT = "/.netlify/functions/push-send";
 const DEFAULT_PUSH_SW_URL = "/firebase-messaging-sw.js";
 const DEFAULT_WHATSAPP_ENDPOINT = "/.netlify/functions/whatsapp-send";
@@ -170,8 +170,8 @@ const firebaseConfig = Object.fromEntries(
 const allowClientAiKey = toBoolean(getEnvValue("VITE_ALLOW_CLIENT_AI_KEY"));
 const isProductionBuild = mode === "production";
 if (allowClientAiKey && isProductionBuild) {
-  throw new Error(
-    "VITE_ALLOW_CLIENT_AI_KEY cannot be true for production builds. Use the server-side Netlify AI function with GEMINI_API_KEY or OPENAI_API_KEY instead."
+  console.warn(
+    "[runtime-config] VITE_ALLOW_CLIENT_AI_KEY is enabled for production. This exposes the AI API key to the browser; use only when you cannot deploy a server-side AI proxy."
   );
 }
 

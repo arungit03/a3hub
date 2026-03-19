@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { matchPath, Outlet, useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./dashboard/Sidebar";
 import Navbar from "./dashboard/Navbar";
@@ -146,6 +146,8 @@ const SIDEBAR_ITEM_FEATURES = Object.freeze({
   students: "assignments",
   staff: "assignments",
   coding: "compilers",
+  learning: "learning",
+  "html-editor": "compilers",
   ai: "ai-chat",
   a3cad: "a3cad",
   resume: "resume-builder",
@@ -170,6 +172,20 @@ const SEARCH_ALIASES = Object.freeze({
   "student-assignments": ["student assignments", "submission review", "student submissions"],
   "parent-replies": ["parent replies", "parent reply", "parent responses"],
   coding: ["code", "coding", "compiler", "practice"],
+  learning: [
+    "learning",
+    "courses",
+    "programming",
+    "python course",
+    "c course",
+    "c++ course",
+    "html course",
+    "html learning",
+    "css course",
+    "css learning",
+  ],
+  "html-course": ["html course", "html learning", "html lessons", "html practice"],
+  "html-editor": ["html editor", "try html", "html preview", "html practice editor"],
   python: ["python", "python compiler"],
   c: ["c language", "c compiler"],
   cpp: ["cpp", "c++", "c plus plus"],
@@ -285,6 +301,8 @@ const mapRoute = ({ base, role, key }) => {
   if (key === "students") return role === "staff" ? `${base}/menu/student-assignments` : `${base}/home`;
   if (key === "staff") return role === "staff" ? `${base}/menu/parent-replies` : `${base}/home`;
   if (key === "coding") return role === "parent" ? `${base}/home` : `${base}/code`;
+  if (key === "learning") return role === "parent" ? `${base}/home` : `${base}/learning`;
+  if (key === "html-editor") return role === "parent" ? `${base}/home` : `${base}/html-editor`;
   if (key === "ai") return role === "parent" ? `${base}/home` : `${base}/ai`;
   if (key === "a3cad") return role === "parent" ? `${base}/home` : `${base}/a3cad`;
   if (key === "resume") {
@@ -316,26 +334,18 @@ function buildSidebarConfig(role) {
     icon: ICONS.assignments,
     to: mapRoute({ base, role, key: "assignments" }),
   };
-  const codingItem =
-    role === "parent"
-      ? {
-          id: "coding",
-          label: "Coding Practice",
-          icon: ICONS.coding,
-          to: mapRoute({ base, role, key: "coding" }),
-        }
-      : {
-          id: "coding",
-          label: "Coding Practice",
-          icon: ICONS.coding,
-          to: `${base}/menu`,
-          search: "?open=code-learning",
-        };
   const toolsItems = [
     { id: "ai", label: "AI Assistant", icon: ICONS.ai, to: mapRoute({ base, role, key: "ai" }) },
     { id: "a3cad", label: "A3cad", icon: ICONS.a3cad, to: mapRoute({ base, role, key: "a3cad" }) },
-    codingItem,
   ];
+  if (role !== "parent") {
+    toolsItems.push({
+      id: "learning",
+      label: "Code learning",
+      icon: ICONS.coding,
+      to: mapRoute({ base, role, key: "learning" }),
+    });
+  }
   if (role === "student") {
     toolsItems.push({
       id: "resume",
@@ -492,6 +502,47 @@ const buildQuickSearchEntries = ({ base, role, sections, bottomItems }) => {
     );
   }
 
+  if (isFeatureEnabled("learning")) {
+    extraEntries.push(
+      {
+        id: "learning",
+        label: "Code learning",
+        to: `${base}/learning`,
+        aliases: SEARCH_ALIASES.learning,
+      },
+      {
+        id: "python-course",
+        label: "Python Course",
+        to: `${base}/learning/python`,
+        aliases: ["python learning", "python course", "python lessons"],
+      },
+      {
+        id: "c-course",
+        label: "C Course",
+        to: `${base}/learning/c`,
+        aliases: ["c course", "c learning", "c lessons"],
+      },
+      {
+        id: "cpp-course",
+        label: "C++ Course",
+        to: `${base}/learning/cpp`,
+        aliases: ["cpp course", "c++ course", "c plus plus course"],
+      },
+      {
+        id: "html-course",
+        label: "HTML Course",
+        to: `${base}/learning/html`,
+        aliases: SEARCH_ALIASES["html-course"],
+      },
+      {
+        id: "html-dashboard",
+        label: "HTML Dashboard",
+        to: `${base}/learning/html/dashboard`,
+        aliases: ["html dashboard", "html progress", "html report"],
+      }
+    );
+  }
+
   if (isFeatureEnabled("compilers")) {
     extraEntries.push(
       {
@@ -511,6 +562,12 @@ const buildQuickSearchEntries = ({ base, role, sections, bottomItems }) => {
         label: "C++ Compiler",
         to: `${base}/code/cpp`,
         aliases: SEARCH_ALIASES.cpp,
+      },
+      {
+        id: "html-editor",
+        label: "HTML Editor",
+        to: `${base}/html-editor`,
+        aliases: SEARCH_ALIASES["html-editor"],
       }
     );
   }
@@ -567,6 +624,7 @@ export default function AppShell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const deferredSearchTerm = useDeferredValue(searchTerm);
   const safeRole = role === "staff" || role === "parent" ? role : "student";
   const roleLabel = getRoleLabel(safeRole);
   const { base, sections, bottomItems } = useMemo(
@@ -586,19 +644,19 @@ export default function AppShell() {
     [base, bottomItems, safeRole, sections]
   );
   const rankedSearchEntries = useMemo(() => {
-    if (!normalizeSearchText(searchTerm)) return [];
+    if (!normalizeSearchText(deferredSearchTerm)) return [];
 
     return quickSearchEntries
       .map((entry) => ({
         entry,
-        score: getQuickSearchScore(entry, searchTerm),
+        score: getQuickSearchScore(entry, deferredSearchTerm),
       }))
       .filter((item) => item.score >= 0)
       .sort((left, right) => {
         if (right.score !== left.score) return right.score - left.score;
         return left.entry.label.length - right.entry.label.length;
       });
-  }, [quickSearchEntries, searchTerm]);
+  }, [deferredSearchTerm, quickSearchEntries]);
   const searchSuggestions = useMemo(
     () => rankedSearchEntries.slice(0, 6).map((item) => item.entry),
     [rankedSearchEntries]

@@ -83,6 +83,22 @@ const rawMenuItems = [
     feature: "compilers",
   },
   {
+    id: "learning",
+    label: "Code learning",
+    icon: "\uD83D\uDCBB",
+    staffEditable: false,
+    path: "/learning",
+    feature: "learning",
+  },
+  {
+    id: "html-editor",
+    label: "HTML Editor",
+    icon: "\uD83C\uDF10",
+    staffEditable: false,
+    path: "/html-editor",
+    feature: "compilers",
+  },
+  {
     id: "interview-quiz-contact",
     label: "Interview Quiz",
     icon: "\uD83C\uDFA4",

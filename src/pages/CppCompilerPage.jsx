@@ -385,9 +385,10 @@ export default function CppCompilerPage() {
             <Code2 size={32} strokeWidth={2.2} />
           </span>
           <div>
-            <h1 className="ide-brand-title">C++ Compiler</h1>
+            <p className="cc-kicker">Try It Yourself</p>
+            <h1 className="ide-brand-title">C++ Try It Yourself</h1>
             <p className="ide-brand-subtitle">
-              Native G++ sandbox runtime with C++17-compatible behavior.
+              Write C++ on the left, compile it instantly, and review the output or challenge results.
             </p>
           </div>
         </div>
@@ -600,13 +601,7 @@ export default function CppCompilerPage() {
 
               {challengeReview ? (
                 <div
-                  className={`mt-3 rounded-md border p-2 text-xs ${
-                    challengeReview.status === "pass"
-                      ? "border-emerald-300/60 bg-emerald-50/10 text-emerald-100"
-                      : challengeReview.status === "fail"
-                      ? "border-amber-300/60 bg-amber-50/10 text-amber-100"
-                      : "border-rose-300/60 bg-rose-50/10 text-rose-100"
-                  }`}
+                  className={`cc-review-card cc-review-card--${challengeReview.status}`}
                 >
                   <p className="font-semibold">{challengeReview.message}</p>
                   {challengeReview.expectedOutput !== undefined ? (

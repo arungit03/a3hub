@@ -1,12 +1,10 @@
 import { Camera, ScanFace, Shield, UserRound, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadFaceApi } from "../lib/faceApiLoader";
+import { ensureFaceApiReady } from "../lib/faceApiLoader";
 
-const FACE_MODEL_BASE_URI =
-  "https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model";
-const AUTO_SCAN_INTERVAL_MS = 420;
+const AUTO_SCAN_INTERVAL_MS = 260;
 const MIN_FACE_VECTOR_LENGTH = 64;
-const SCAN_FACE_DETECTION_INPUT_SIZE = 416;
+const SCAN_FACE_DETECTION_INPUT_SIZE = 352;
 const REGISTER_FACE_DETECTION_INPUT_SIZE = 512;
 const FACE_DETECTION_SCORE_THRESHOLD = 0.3;
 const FACE_CAPTURE_MIN_SCORE = 0.78;
@@ -14,7 +12,12 @@ const FACE_CAPTURE_MIN_WIDTH_RATIO = 0.16;
 const FACE_CAPTURE_MIN_HEIGHT_RATIO = 0.2;
 const FACE_CAPTURE_MIN_AREA_RATIO = 0.04;
 const FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO = 0.34;
-const AUTO_REGISTER_CAPTURE_INTERVAL_MS = 520;
+const REGISTER_FACE_CAPTURE_MIN_SCORE = 0.82;
+const REGISTER_FACE_CAPTURE_MIN_WIDTH_RATIO = 0.2;
+const REGISTER_FACE_CAPTURE_MIN_HEIGHT_RATIO = 0.24;
+const REGISTER_FACE_CAPTURE_MIN_AREA_RATIO = 0.055;
+const REGISTER_FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO = 0.28;
+const AUTO_REGISTER_CAPTURE_INTERVAL_MS = 780;
 const AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT = 95;
 const AUTO_REGISTER_FRONT_FACE_CAPTURE_SCORE =
   AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT / 100;
@@ -22,8 +25,6 @@ const FRONT_FACE_MAX_EYE_LEVEL_DELTA_RATIO = 0.12;
 const FRONT_FACE_MAX_NOSE_OFFSET_RATIO = 0.18;
 const FRONT_FACE_MAX_EYE_DISTANCE_DELTA_RATIO = 0.18;
 const FRONT_FACE_MAX_MOUTH_OFFSET_RATIO = 0.2;
-
-let loadedFaceApiPromise = null;
 
 const buildTinyFaceDetectorOptions = (faceapi, inputSize) =>
   new faceapi.TinyFaceDetectorOptions({
@@ -73,6 +74,23 @@ const clampNumber = (value, min, max) =>
   Math.min(max, Math.max(min, Number(value) || 0));
 
 const buildPercentValue = (score) => Math.round(clampNumber(score, 0, 1) * 100);
+
+const getFaceCaptureThresholds = ({ requireFrontFacing = false } = {}) =>
+  requireFrontFacing
+    ? {
+        minScore: REGISTER_FACE_CAPTURE_MIN_SCORE,
+        minWidthRatio: REGISTER_FACE_CAPTURE_MIN_WIDTH_RATIO,
+        minHeightRatio: REGISTER_FACE_CAPTURE_MIN_HEIGHT_RATIO,
+        minAreaRatio: REGISTER_FACE_CAPTURE_MIN_AREA_RATIO,
+        maxCenterOffsetRatio: REGISTER_FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO,
+      }
+    : {
+        minScore: FACE_CAPTURE_MIN_SCORE,
+        minWidthRatio: FACE_CAPTURE_MIN_WIDTH_RATIO,
+        minHeightRatio: FACE_CAPTURE_MIN_HEIGHT_RATIO,
+        minAreaRatio: FACE_CAPTURE_MIN_AREA_RATIO,
+        maxCenterOffsetRatio: FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO,
+      };
 
 const scorePoseMetric = (ratio, maxRatio) => {
   const safeRatio = Math.abs(Number(ratio) || 0);
@@ -205,6 +223,7 @@ const evaluateFaceFrameQuality = ({
   requireFrontFacing = false,
   requireCentered = true,
 }) => {
+  const captureThresholds = getFaceCaptureThresholds({ requireFrontFacing });
   if (!videoElement || !box) {
     return {
       ok: false,
@@ -230,7 +249,7 @@ const evaluateFaceFrameQuality = ({
   const centerYOffset = Math.abs(centerYRatio - 0.5);
   const frontFacing = requireFrontFacing ? evaluateFrontFacingPose(landmarks) : null;
 
-  if (Number(detectionScore) < FACE_CAPTURE_MIN_SCORE) {
+  if (Number(detectionScore) < captureThresholds.minScore) {
     return {
       ok: false,
       reason: "low_detection_score",
@@ -240,9 +259,9 @@ const evaluateFaceFrameQuality = ({
   }
 
   if (
-    widthRatio < FACE_CAPTURE_MIN_WIDTH_RATIO ||
-    heightRatio < FACE_CAPTURE_MIN_HEIGHT_RATIO ||
-    areaRatio < FACE_CAPTURE_MIN_AREA_RATIO
+    widthRatio < captureThresholds.minWidthRatio ||
+    heightRatio < captureThresholds.minHeightRatio ||
+    areaRatio < captureThresholds.minAreaRatio
   ) {
     return {
       ok: false,
@@ -256,8 +275,8 @@ const evaluateFaceFrameQuality = ({
 
   if (
     requireCentered &&
-    (centerXOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO ||
-      centerYOffset > FACE_CAPTURE_MAX_CENTER_OFFSET_RATIO)
+    (centerXOffset > captureThresholds.maxCenterOffsetRatio ||
+      centerYOffset > captureThresholds.maxCenterOffsetRatio)
   ) {
     return {
       ok: false,
@@ -334,7 +353,7 @@ const buildLowQualityMessage = (quality = {}) => {
     return `Face confidence is low (${toPercentLabel(quality.detectionScore)}). Improve light and face the camera.`;
   }
   if (quality.reason === "face_too_small") {
-    return "Face appears too small. Move closer to the camera.";
+    return "Face appears too small. Move closer so your face fills more of the guide.";
   }
   if (quality.reason === "face_off_center") {
     return "Center your face inside the guide for a stable capture.";
@@ -352,37 +371,6 @@ const buildLowQualityMessage = (quality = {}) => {
     return "Camera is warming up. Try again.";
   }
   return "Face quality is low. Adjust position and lighting, then retry.";
-};
-
-const ensureFaceApiLoaded = async () => {
-  if (loadedFaceApiPromise) {
-    return loadedFaceApiPromise;
-  }
-
-  loadedFaceApiPromise = (async () => {
-    const faceapi = await loadFaceApi();
-
-    if (faceapi?.tf?.ready) {
-      await faceapi.tf.ready();
-      try {
-        if (typeof faceapi.tf.findBackend === "function" && faceapi.tf.findBackend("webgl")) {
-          await faceapi.tf.setBackend("webgl");
-        }
-      } catch {
-        // Keep default backend when switching fails.
-      }
-    }
-
-    await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_BASE_URI),
-      faceapi.nets.faceLandmark68TinyNet.loadFromUri(FACE_MODEL_BASE_URI),
-      faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_BASE_URI),
-    ]);
-
-    return faceapi;
-  })();
-
-  return loadedFaceApiPromise;
 };
 
 const detectSingleFaceDescriptor = async (
@@ -640,7 +628,7 @@ export default function FaceAttendanceModal({
           if (isRegistrationMode) {
             setStatusTone("info");
             setStatusText(
-              `Keep one front-facing face inside the guide. Auto capture starts above ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
+              `Keep one front-facing face inside the guide. Auto capture collects clear samples above ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
             );
           } else {
             setStatusTone("info");
@@ -736,7 +724,7 @@ export default function FaceAttendanceModal({
       setCameraError("");
 
       try {
-        const faceapi = await ensureFaceApiLoaded();
+        const faceapi = await ensureFaceApiReady();
         if (isCancelled) return;
         faceApiRef.current = faceapi;
       } catch {
@@ -757,9 +745,9 @@ export default function FaceAttendanceModal({
         const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: { ideal: "user" },
-            width: { ideal: isRegistrationMode ? 1280 : 960 },
-            height: { ideal: isRegistrationMode ? 720 : 540 },
-            frameRate: { ideal: 30, max: 30 },
+            width: { ideal: isRegistrationMode ? 1280 : 800 },
+            height: { ideal: isRegistrationMode ? 720 : 450 },
+            frameRate: { ideal: isRegistrationMode ? 30 : 24, max: 30 },
           },
           audio: false,
         });
@@ -792,7 +780,7 @@ export default function FaceAttendanceModal({
         if (isRegistrationMode) {
           setStatusTone("info");
           setStatusText(
-            `Auto capture is active. Look straight at the camera until front-facing alignment reaches ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.`
+            `Auto capture is active. Look straight at the camera while we collect clear front-facing samples at ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%+.`
           );
         }
 
@@ -907,7 +895,7 @@ export default function FaceAttendanceModal({
                 <div className="flex items-start gap-2.5">
                   <ScanFace className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sky-300" />
                   <p className="leading-snug">
-                    Keep one front-facing face inside the oval guide. Auto capture happens when your front-facing alignment goes above {AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.
+                    Keep one front-facing face inside the oval guide. Auto capture collects multiple clear samples when your front-facing alignment goes above {AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%.
                   </p>
                 </div>
               </div>
@@ -967,7 +955,7 @@ export default function FaceAttendanceModal({
                   </div>
                   <p className="mt-2 text-[11px] text-[#8fa8c8]">
                     {cameraOn
-                      ? `Auto capture starts at ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%+ front alignment.`
+                      ? `Auto capture starts at ${AUTO_REGISTER_FRONT_FACE_CAPTURE_PERCENT}%+ front alignment and gathers several samples.`
                       : "Start the camera to measure front alignment."}
                   </p>
                 </div>

@@ -22,6 +22,7 @@ export default function BottomNav() {
   const attendanceEnabled = isFeatureEnabled("attendance");
   const marksEnabled = isFeatureEnabled("marks");
   const compilersEnabled = isFeatureEnabled("compilers");
+  const learningEnabled = isFeatureEnabled("learning");
   const aiChatEnabled = isFeatureEnabled("ai-chat");
 
   const navItems = role === "parent"
@@ -91,8 +92,8 @@ export default function BottomNav() {
           ),
         },
         {
-          to: `${base}/code`,
-          label: "Code",
+          to: learningEnabled ? `${base}/learning` : `${base}/code`,
+          label: learningEnabled ? "Code learning" : "Code",
           icon: (
             <svg {...iconProps}>
               <path d="M8.5 8 4.5 12l4 4" />
@@ -125,7 +126,8 @@ export default function BottomNav() {
   const filteredNavItems = navItems.filter((item) => {
     if (!attendanceEnabled && item.to.endsWith("/attendance")) return false;
     if (!marksEnabled && item.to.includes("/marks-progress")) return false;
-    if (!compilersEnabled && item.to.endsWith("/code")) return false;
+    if (!compilersEnabled && !learningEnabled && item.to.endsWith("/code")) return false;
+    if (!learningEnabled && item.to.endsWith("/learning")) return false;
     if (!aiChatEnabled && item.to.endsWith("/ai")) return false;
     return true;
   });

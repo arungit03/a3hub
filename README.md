@@ -89,6 +89,22 @@ Use `.env.example` as the template for local setup.
 For Gmail `Primary` vs `Spam` behavior and Firebase setup steps, see:
 - `docs/email-deliverability.md`
 
+## Immediate Verification Resend
+
+Fresh verification links can now be generated server-side and sent through the app email provider, so resend does not have to depend on Firebase's built-in email cooldown.
+
+Set these Netlify server environment variables to enable that path:
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_SERVICE_ACCOUNT_JSON`
+  or use `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`
+
+Notes:
+- `FIREBASE_SERVICE_ACCOUNT_JSON` should contain a service account with `firebaseauth.users.sendEmail` permission on the Firebase project.
+- If these server variables are missing, the app falls back to Firebase's default verification sender.
+- With Resend test sender (`onboarding@resend.dev`), delivery is limited; use a verified sender domain for real student inbox delivery.
+
 ## Schedule Auto-Delete (24h)
 
 Schedule docs now include an `expiresAt` timestamp.
@@ -153,17 +169,18 @@ AI chat is available at:
 - `/staff/ai`
 
 Configuration options:
-1. Set Netlify environment key:
+1. Set server environment key:
    - `GEMINI_API_KEY` (preferred) or `OPENAI_API_KEY`
 2. Deploy with server function:
-   - `netlify/functions/ai-generate.cjs`
+   - Netlify: `netlify/functions/ai-generate.cjs`
+   - Firebase: `functions/index.js` exposing `/api/ai-generate`
 3. Browser runtime config is generated into `public/runtime-config.js`:
    - `window.__A3HUB_GEMINI_CONFIG__.apiKey = ""`
-   - `window.__A3HUB_GEMINI_CONFIG__.endpoint = "/.netlify/functions/ai-generate"`
+   - `window.__A3HUB_GEMINI_CONFIG__.endpoint = "/api/ai-generate"`
 4. Client-side AI keys are development-only:
    - keep `VITE_ALLOW_CLIENT_AI_KEY=false` for production
    - production builds now fail if `VITE_ALLOW_CLIENT_AI_KEY=true`
-   - use Netlify server environment variables instead of exposing AI keys to the browser
+   - use server environment variables instead of exposing AI keys to the browser
 
 ## Student Mobile WhatsApp Notification (on in-app notification)
 

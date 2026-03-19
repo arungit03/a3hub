@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = {
   NOTICE_REJECTED: "notice_rejected",
   SETTINGS_UPDATED: "settings_updated",
   ACADEMICS_UPDATED: "academics_updated",
+  LEARNING_UPDATED: "learning_updated",
 };
 
 export const createAuditPayload = ({

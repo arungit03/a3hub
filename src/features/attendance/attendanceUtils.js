@@ -29,7 +29,11 @@ export const FACE_MATCH_MIN_MARGIN = 0.035;
 export const FACE_MATCH_CONFIRMATION_COUNT = 2;
 export const FACE_MATCH_CONFIRMATION_WINDOW_MS = 2600;
 export const FACE_MATCH_COOLDOWN_MS = 4200;
+export const FACE_MATCH_FAST_TRACK_THRESHOLD = 0.84;
 export const FACE_MIN_VECTOR_LENGTH = 64;
+export const FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT = 3;
+export const FACE_REGISTRATION_MIN_SAMPLE_SIMILARITY = 0.88;
+export const FACE_REGISTRATION_DUPLICATE_SIMILARITY = 0.9995;
 const OFFLINE_SCAN_QUEUE_KEY = "a3hub_attendance_scan_queue_v1";
 const MAX_OFFLINE_SCAN_QUEUE_ITEMS = 240;
 export const SCAN_QUEUE_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -435,6 +439,11 @@ export const dedupeFaceVectors = (vectors, duplicateSimilarity = 0.998) => {
   return next;
 };
 
+export const getRequiredFaceConfirmationCount = (similarity) =>
+  Number(similarity) >= FACE_MATCH_FAST_TRACK_THRESHOLD
+    ? 1
+    : FACE_MATCH_CONFIRMATION_COUNT;
+
 const averageFaceVector = (vectors) => {
   if (!Array.isArray(vectors) || vectors.length === 0) return [];
   const dimensions = vectors.reduce(
@@ -465,6 +474,55 @@ const averageFaceVector = (vectors) => {
   return normalizeFaceVector(averaged);
 };
 
+const getFaceVectorSimilarityStats = (vectors) => {
+  const safeVectors = Array.isArray(vectors)
+    ? vectors.filter((vector) => vector.length >= FACE_MIN_VECTOR_LENGTH)
+    : [];
+
+  if (safeVectors.length <= 1) {
+    return {
+      averageSimilarity: safeVectors.length === 1 ? 1 : 0,
+      minSimilarity: safeVectors.length === 1 ? 1 : 0,
+      pairCount: 0,
+    };
+  }
+
+  let similaritySum = 0;
+  let pairCount = 0;
+  let minSimilarity = 1;
+
+  for (let leftIndex = 0; leftIndex < safeVectors.length; leftIndex += 1) {
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < safeVectors.length;
+      rightIndex += 1
+    ) {
+      const similarity = cosineSimilarity(
+        safeVectors[leftIndex],
+        safeVectors[rightIndex]
+      );
+      if (!Number.isFinite(similarity)) continue;
+      similaritySum += similarity;
+      pairCount += 1;
+      minSimilarity = Math.min(minSimilarity, similarity);
+    }
+  }
+
+  if (pairCount === 0) {
+    return {
+      averageSimilarity: 1,
+      minSimilarity: 1,
+      pairCount: 0,
+    };
+  }
+
+  return {
+    averageSimilarity: similaritySum / pairCount,
+    minSimilarity,
+    pairCount,
+  };
+};
+
 export const serializeFaceSampleVectors = (vectors) =>
   (Array.isArray(vectors) ? vectors : [])
     .map((vector, index) => {
@@ -477,6 +535,44 @@ export const serializeFaceSampleVectors = (vectors) =>
       };
     })
     .filter(Boolean);
+
+export const buildFaceRegistrationProfile = (
+  vectors,
+  {
+    duplicateSimilarity = FACE_REGISTRATION_DUPLICATE_SIMILARITY,
+  } = {}
+) => {
+  const normalizedVectors = dedupeFaceVectors(
+    (Array.isArray(vectors) ? vectors : [])
+      .map((vector) => normalizeFaceVector(vector))
+      .filter((vector) => vector.length >= FACE_MIN_VECTOR_LENGTH),
+    duplicateSimilarity
+  );
+  const centroidVector = averageFaceVector(normalizedVectors);
+  const { averageSimilarity, minSimilarity } =
+    getFaceVectorSimilarityStats(normalizedVectors);
+  const serializedSampleVectors = serializeFaceSampleVectors(normalizedVectors);
+  const profileVector =
+    centroidVector.length >= FACE_MIN_VECTOR_LENGTH
+      ? centroidVector
+      : normalizedVectors[0] || [];
+
+  return {
+    vectors: normalizedVectors,
+    vector: profileVector,
+    vectorLength: profileVector.length,
+    sampleVectors: serializedSampleVectors,
+    sampleCount: serializedSampleVectors.length,
+    sampleConsistency:
+      normalizedVectors.length > 0
+        ? Number(averageSimilarity.toFixed(4))
+        : 0,
+    sampleMinSimilarity:
+      normalizedVectors.length > 0
+        ? Number(minSimilarity.toFixed(4))
+        : 0,
+  };
+};
 
 export const collectFaceSampleVectors = (student) => {
   const faceAttendance = student?.faceAttendance;

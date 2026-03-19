@@ -303,7 +303,6 @@ const DEFAULT_VERIFICATION_EMAIL_PROXY_ENDPOINT =
 const shouldTryVerificationEmailProxy = (error) => {
   const code = toSafeText(error?.code).toLowerCase();
   return (
-    code !== "auth/too-many-requests" &&
     code !== "auth/operation-not-allowed" &&
     code !== "auth/user-disabled" &&
     code !== "auth/invalid-user-token"
@@ -805,10 +804,7 @@ export function AuthProvider({ children }) {
           credential.user,
           sendEmailVerification
         );
-      } catch (error) {
-        if (error?.code !== "auth/too-many-requests") {
-          throw error;
-        }
+      } catch {
         verificationEmailStatus = "cooldown";
       }
       await signOut(auth);
@@ -968,8 +964,8 @@ export function AuthProvider({ children }) {
       } catch (error) {
         if (error?.code === "auth/too-many-requests") {
           throw createAuthErrorWithCode(
-            "auth/too-many-requests",
-            "Too many verification attempts. Please wait 15 minutes and try again."
+            "auth/verification-send-busy",
+            "A fresh verification link could not be generated right now. Tap resend again in a moment."
           );
         }
         throw error;

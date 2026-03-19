@@ -417,6 +417,86 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    match /learningCourses/{courseId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /learningTopics/{topicId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /learningQuizzes/{topicId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /learningProblems/{topicId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /userLearningProgress/{userId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || isStaff() || isAdmin());
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.topicStates is map
+        && request.resource.data.courseProgress is map
+        && request.resource.data.overallProgress is number
+        && request.resource.data.completedLessonsCount is int
+        && request.resource.data.passedQuizzesCount is int
+        && request.resource.data.solvedProblemsCount is int
+        && request.resource.data.lastTopicId is string
+        && request.resource.data.recommendedTopicId is string
+        && (
+          !("recentTopicIds" in request.resource.data)
+          || request.resource.data.recentTopicIds is list
+        )
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
+    match /savedHtmlSnippets/{snippetId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.code is string;
+      allow delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+    }
+
+    match /editorHistory/{userId} {
+      allow read: if isSignedIn()
+        && (request.auth.uid == userId || isAdmin());
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.lastSnippetId is string
+        && request.resource.data.lastExampleId is string
+        && request.resource.data.recentExampleIds is list
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
+    match /practiceEditorProgress/{progressId} {
+      allow read: if isSignedIn()
+        && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create, update: if isSignedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.id is string
+        && request.resource.data.topicId is string
+        && request.resource.data.problemId is string
+        && request.resource.data.snippetId is string
+        && request.resource.data.completed is bool
+        && request.resource.data.updatedAt is timestamp;
+      allow delete: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
