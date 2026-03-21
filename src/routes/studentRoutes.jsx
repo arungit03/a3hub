@@ -10,6 +10,8 @@ const ResumeBuilderPage = lazy(() => import("../pages/ResumeBuilderPage"));
 const StudentTodoListPage = lazy(() =>
   import("../pages/student/StudentTodoListPage")
 );
+const EventsPage = lazy(() => import("../pages/EventsPage"));
+const FoodPage = lazy(() => import("../pages/FoodPage"));
 const MarksProgressPage = lazy(() => import("../pages/MarksProgressPage"));
 const BooksPage = lazy(() => import("../pages/BooksPage"));
 const BookSubjectPage = lazy(() => import("../pages/BookSubjectPage"));
@@ -93,6 +95,10 @@ const STUDENT_PAGE_ROUTES = [
     feature: "todo",
   },
   {
+    path: "/student/menu/event",
+    element: <EventsPage forcedRole="student" />,
+  },
+  {
     path: "/student/menu/marks-progress",
     element: <MarksProgressPage forcedRole="student" />,
     feature: "marks",
@@ -106,6 +112,10 @@ const STUDENT_PAGE_ROUTES = [
     path: "/student/menu/books/:subjectId",
     element: <BookSubjectPage forcedRole="student" />,
     feature: "books",
+  },
+  {
+    path: "/student/menu/food",
+    element: <FoodPage forcedRole="student" />,
   },
   { path: "/student/code", element: <CodeLabPage />, feature: "compilers" },
   {

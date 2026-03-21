@@ -19,8 +19,18 @@ const TOO_MANY_REQUESTS_MESSAGE =
   "Too many requests right now. Please wait 15 minutes and try again.";
 const PARENT_SIGNUP_DISABLED_MESSAGE =
   "Parent signup is disabled. Use login with student credentials.";
+const CANTEEN_LOGIN_ONLY_MESSAGE =
+  "Food console accounts are created by admin. Use login with a canteen staff or admin account.";
 const FACE_MATCH_THRESHOLD = 0.74;
 const FACE_MIN_VECTOR_LENGTH = 64;
+
+const resolveAuthTargetPath = (role) => {
+  if (role === "canteen") return "/canteen/dashboard";
+  if (role === "admin") return "/admin/dashboard";
+  if (role === "staff") return "/staff/home";
+  if (role === "parent") return "/parent/home";
+  return "/student/home";
+};
 
 const normalizeFaceVector = (value) => {
   if (!Array.isArray(value)) return [];
@@ -287,7 +297,10 @@ export default function AuthPage() {
     const draftMode = draftValue.mode === "signup" ? "signup" : "login";
     const rawRole = String(draftValue.selectedRole || "").toLowerCase();
     const draftRole =
-      rawRole === "staff" || rawRole === "parent" || rawRole === "admin"
+      rawRole === "staff" ||
+      rawRole === "parent" ||
+      rawRole === "admin" ||
+      rawRole === "canteen"
         ? rawRole
         : "student";
     const draftForm =
@@ -296,7 +309,10 @@ export default function AuthPage() {
         : {};
 
     setMode(
-      draftRole === "parent" && draftMode === "signup" ? "login" : draftMode
+      (draftRole === "parent" || draftRole === "canteen") &&
+        draftMode === "signup"
+        ? "login"
+        : draftMode
     );
     setSelectedRole(draftRole);
     sessionStorage.setItem("roleSelection", draftRole);
@@ -367,8 +383,12 @@ export default function AuthPage() {
   const handleRoleSelect = (value) => {
     setSelectedRole(value);
     sessionStorage.setItem("roleSelection", value);
-    if (value === "parent" && mode === "signup") {
+    if (mode === "signup" && value === "parent") {
       switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
+      return;
+    }
+    if (mode === "signup" && value === "canteen") {
+      switchToLogin(CANTEEN_LOGIN_ONLY_MESSAGE, { announce: true });
       return;
     }
     resetAuthFeedback();
@@ -377,6 +397,10 @@ export default function AuthPage() {
   const handleToggleMode = () => {
     if (selectedRole === "parent") {
       switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
+      return;
+    }
+    if (selectedRole === "canteen") {
+      switchToLogin(CANTEEN_LOGIN_ONLY_MESSAGE, { announce: true });
       return;
     }
     setMode((prev) => (prev === "login" ? "signup" : "login"));
@@ -389,6 +413,8 @@ export default function AuthPage() {
   const roleLabel =
     selectedRole === "staff"
       ? "Staff"
+      : selectedRole === "canteen"
+      ? "Food"
       : selectedRole === "parent"
       ? "Parent"
       : selectedRole === "admin"
@@ -396,6 +422,7 @@ export default function AuthPage() {
       : "Student";
   const isLoginMode = mode === "login";
   const isParentRole = selectedRole === "parent";
+  const isCanteenRole = selectedRole === "canteen";
   const isAdminRole = selectedRole === "admin";
   const hasRegisteredFace = registeredFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
   const isDirty = useMemo(() => {
@@ -467,14 +494,7 @@ export default function AuthPage() {
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
-    const targetPath =
-      selectedRole === "staff"
-        ? "/staff/home"
-        : selectedRole === "parent"
-        ? "/parent/home"
-        : selectedRole === "admin"
-        ? "/admin/dashboard"
-        : "/student/home";
+    const targetPath = resolveAuthTargetPath(selectedRole);
 
     const runPrefetch = () => {
       void prefetchRoute(targetPath);
@@ -513,6 +533,10 @@ export default function AuthPage() {
         switchToLogin(PARENT_SIGNUP_DISABLED_MESSAGE, { announce: true });
         return;
       }
+      if (mode !== "login" && selectedRole === "canteen") {
+        switchToLogin(CANTEEN_LOGIN_ONLY_MESSAGE, { announce: true });
+        return;
+      }
       if (mode === "login") {
         sessionStorage.setItem("roleSelection", selectedRole);
         const credential = await login(form.email, form.password);
@@ -528,7 +552,7 @@ export default function AuthPage() {
 
         sessionStorage.setItem("roleSelection", selectedRole);
         clearDraft();
-        navigate("/home");
+        navigate(resolveAuthTargetPath(selectedRole));
         return;
       }
 
@@ -810,10 +834,11 @@ export default function AuthPage() {
             <label className="text-xs font-semibold uppercase tracking-[0.2em] text-ink/72">
               Role
             </label>
-            <div className="grid grid-cols-4 rounded-full border border-ocean/45 bg-white/86 p-1.5">
+            <div className="grid grid-cols-5 rounded-full border border-ocean/45 bg-white/86 p-1.5">
               {[
                 { label: "Student", value: "student" },
                 { label: "Staff", value: "staff" },
+                { label: "Food", value: "canteen" },
                 { label: "Parent", value: "parent" },
                 { label: "Admin", value: "admin" },
               ].map((item) => (
@@ -1027,7 +1052,9 @@ export default function AuthPage() {
             {loading
               ? "Securing access..."
               : mode === "login"
-              ? "Log in"
+              ? isCanteenRole
+                ? "Enter Food Console"
+                : "Log in"
               : "Create Account"}
           </button>
         </form>
@@ -1035,6 +1062,10 @@ export default function AuthPage() {
         {isParentRole && isLoginMode ? (
           <div className="mt-6 text-center text-sm text-ink/84">
             Parent signup is disabled. Use student email and password to login.
+          </div>
+        ) : isCanteenRole && isLoginMode ? (
+          <div className="mt-6 text-center text-sm text-ink/84">
+            Food console login is for canteen staff and admin accounts only.
           </div>
         ) : (
           <div className="mt-6 text-center text-sm text-ink/84">

@@ -1,5 +1,14 @@
 # a3hub
 
+## Canteen Ordering
+
+The repo now includes a shared canteen ordering system fully inside the main A3 Hub app:
+
+- main A3 Hub app: student/staff/admin campus services include the `Food` ordering page
+- main login page: includes a `Food` portal option for `canteen_staff` and `admin`
+- integrated canteen console: available at `/canteen/dashboard`, `/canteen/menu`, `/canteen/orders`, and `/canteen/analytics`
+- shared backend: menu items, orders, roles, and canteen helpers still use the same Firebase project and Firestore database
+
 ## Feature Scope Isolation
 
 For onboarding and debugging in this multi-feature app (attendance, AI chat, compilers, notifications, admin), use the feature-module guide:

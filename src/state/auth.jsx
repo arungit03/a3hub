@@ -153,6 +153,14 @@ const normalizeAccountRole = (value) => {
   const normalized = toSafeText(value).toLowerCase();
   if (!normalized) return "";
 
+  if (
+    normalized === "canteen_staff" ||
+    normalized === "canteen staff" ||
+    normalized.includes("canteen")
+  ) {
+    return "canteen_staff";
+  }
+
   if (normalized === "admin" || normalized.includes("admin")) {
     return "admin";
   }
@@ -182,6 +190,13 @@ const normalizeAccountRole = (value) => {
 
 const normalizeSessionRole = (value) => {
   const normalized = String(value || "").trim().toLowerCase();
+  if (
+    normalized === "canteen" ||
+    normalized === "canteen_staff" ||
+    normalized === "food"
+  ) {
+    return "canteen";
+  }
   if (normalized === "admin") return "admin";
   if (normalized === "staff") return "staff";
   if (normalized === "parent") return "parent";
@@ -235,6 +250,17 @@ const inferAccountRoleFromProfile = (profile = {}, selectedRole = "student") => 
 const resolveEffectiveRole = ({ accountRole, selectedRole }) => {
   const safeAccountRole = normalizeAccountRole(accountRole);
   const safeSelectedRole = normalizeSessionRole(selectedRole);
+
+  if (
+    safeSelectedRole === "canteen" &&
+    (safeAccountRole === "admin" || safeAccountRole === "canteen_staff")
+  ) {
+    return "canteen";
+  }
+
+  if (safeAccountRole === "canteen_staff") {
+    return "canteen";
+  }
 
   if (safeAccountRole === "admin") {
     return "admin";
@@ -884,14 +910,36 @@ export function AuthProvider({ children }) {
           "This account does not have admin access. Login with an existing admin account."
         );
       }
+      if (
+        selectedRole === "canteen" &&
+        !["admin", "canteen_staff"].includes(accountRole)
+      ) {
+        await signOut(auth);
+        throw new Error(
+          "This account does not have food console access. Login with a canteen staff or admin account."
+        );
+      }
     } catch (error) {
       if (
         error?.message === BLOCKED_ACCOUNT_MESSAGE ||
         error?.message === STAFF_PENDING_APPROVAL_MESSAGE ||
         error?.message ===
-          "This account does not have admin access. Login with an existing admin account."
+          "This account does not have admin access. Login with an existing admin account." ||
+        error?.message ===
+          "This account does not have food console access. Login with a canteen staff or admin account."
       ) {
         throw error;
+      }
+      if (selectedRole === "canteen") {
+        await signOut(auth).catch(() => {});
+        if (isPermissionDeniedError(error)) {
+          throw new Error(
+            "Food console access could not be verified. This signed-in account is not recognized as an active canteen staff member or admin by Firestore."
+          );
+        }
+        throw new Error(
+          "Unable to verify food console access right now. Please try again."
+        );
       }
       if (selectedRole === "admin") {
         await signOut(auth).catch(() => {});

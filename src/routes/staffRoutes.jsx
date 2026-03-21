@@ -15,6 +15,8 @@ const StaffStudentAssignmentsPage = lazy(() =>
 const StaffParentRepliesPage = lazy(() =>
   import("../pages/staff/StaffParentRepliesPage")
 );
+const EventsPage = lazy(() => import("../pages/EventsPage"));
+const FoodPage = lazy(() => import("../pages/FoodPage"));
 const CodeLabPage = lazy(() => import("../pages/CodeLabPage"));
 const PythonInterpreterPage = lazy(() =>
   import("../pages/PythonInterpreterPage")
@@ -96,6 +98,10 @@ const STAFF_PAGE_ROUTES = [
     feature: "assignments",
   },
   {
+    path: "/staff/menu/event",
+    element: <EventsPage forcedRole="staff" />,
+  },
+  {
     path: "/staff/menu/parent-replies",
     element: <StaffParentRepliesPage />,
     feature: "assignments",
@@ -104,6 +110,10 @@ const STAFF_PAGE_ROUTES = [
     path: "/staff/menu/books/:subjectId",
     element: <BookSubjectPage forcedRole="staff" />,
     feature: "books",
+  },
+  {
+    path: "/staff/menu/food",
+    element: <FoodPage forcedRole="staff" />,
   },
   { path: "/staff/code", element: <CodeLabPage />, feature: "compilers" },
   {

@@ -215,7 +215,7 @@ export default function AdminTestsPage() {
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
           Test Control
         </p>
-        <h2 className="text-2xl font-bold text-slate-900">Manage Tests and Analytics</h2>
+        <h2 className="text-2xl font-bold text-slate-900">Manage Tests</h2>
       </header>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

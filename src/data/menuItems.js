@@ -9,6 +9,13 @@ const rawMenuItems = [
     feature: "exams",
   },
   {
+    id: "event",
+    label: "Event",
+    icon: "\uD83C\uDF89",
+    staffEditable: false,
+    path: "/menu/event",
+  },
+  {
     id: "test",
     label: "Test",
     icon: "\u2705",
@@ -46,6 +53,13 @@ const rawMenuItems = [
     staffEditable: false,
     path: "/menu/books",
     feature: "books",
+  },
+  {
+    id: "food",
+    label: "Food",
+    icon: "\uD83C\uDF5C",
+    staffEditable: false,
+    path: "/menu/food",
   },
   {
     id: "leave",

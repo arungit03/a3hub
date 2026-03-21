@@ -13,12 +13,17 @@ import {
   Megaphone,
   NotebookPen,
   Sparkles,
+  UtensilsCrossed,
 } from "lucide-react";
 
 export const SERVICE_CARD_META = Object.freeze({
   calendar: {
     icon: CalendarDays,
     description: "Track events, holidays, and academic milestones.",
+  },
+  event: {
+    icon: CalendarDays,
+    description: "Browse campus events and review event registrations.",
   },
   test: {
     icon: ClipboardCheck,
@@ -39,6 +44,10 @@ export const SERVICE_CARD_META = Object.freeze({
   books: {
     icon: BookOpen,
     description: "Open subject resources and digital books.",
+  },
+  food: {
+    icon: UtensilsCrossed,
+    description: "Browse ready-made food, place orders, and track pickup tokens.",
   },
   leave: {
     icon: BadgeCheck,
@@ -448,6 +457,9 @@ export const getAssignmentUploadErrorMessage = (error) => {
       return "Firebase Storage CORS/bucket issue. Configure Cloudinary runtime config in public/runtime-config.js or fix Storage bucket/CORS.";
     }
     return "Firebase Storage error occurred. Please verify bucket and rules.";
+  }
+  if (code === "storage/upload-timeout" || code === "storage/download-url-timeout") {
+    return "Upload is taking too long. Please try again.";
   }
   if (
     code === "storage/bucket-not-found" ||

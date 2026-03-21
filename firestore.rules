@@ -1,4 +1,4 @@
-﻿
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -10,18 +10,31 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function hasUserProfile() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
     function userRole() {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid))
+      return hasUserProfile()
         ? userDoc().data.role
         : null;
     }
 
+    function userStatus() {
+      return hasUserProfile() && ("status" in userDoc().data)
+        ? userDoc().data.status
+        : "active";
+    }
+
+    function isUserActive() {
+      return hasUserProfile()
+        && !(userStatus() in ["blocked", "pending", "pending_approval"]);
+    }
+
     function isPrivilegedAccountActive() {
       return userRole() != null
-        && userDoc().data.status != "blocked"
-        && userDoc().data.status != "pending"
-        && userDoc().data.status != "pending_approval";
+        && isUserActive();
     }
 
     function isStudent() {
@@ -34,6 +47,19 @@ service cloud.firestore {
 
     function isAdmin() {
       return userRole() == "admin" && isPrivilegedAccountActive();
+    }
+
+    function isCanteenStaff() {
+      return userRole() == "canteen_staff" && isPrivilegedAccountActive();
+    }
+
+    function canManageCanteen() {
+      return isCanteenStaff() || isAdmin();
+    }
+
+    function canUseCanteenOrdering() {
+      return isUserActive()
+        && userRole() in ["student", "staff", "admin"];
     }
 
     function authBootstrapExists() {
@@ -100,11 +126,170 @@ service cloud.firestore {
         && canReadUploadedFileData(uploadedFileDoc(fileId).data);
     }
 
+    function isValidMenuItemStatus(status) {
+      return status in ["available", "limited", "sold_out", "hidden"];
+    }
+
+    function isValidOrderStatus(status) {
+      return status in ["placed", "collected", "cancelled"];
+    }
+
+    function deriveMenuItemStatus(quantity, visible, status) {
+      return (!visible || status == "hidden")
+        ? "hidden"
+        : quantity <= 0
+          ? "sold_out"
+          : status == "sold_out"
+            ? "sold_out"
+            : (status == "limited" || quantity <= 5)
+              ? "limited"
+              : "available";
+    }
+
+    function isValidMenuItemPayload(data) {
+      return data.keys().hasOnly([
+          "name",
+          "description",
+          "image",
+          "price",
+          "category",
+          "quantity",
+          "status",
+          "visible",
+          "createdBy",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.name is string
+        && data.name.size() > 0
+        && data.description is string
+        && data.image is string
+        && data.price is number
+        && data.price >= 0
+        && data.category is string
+        && data.category.size() > 0
+        && data.quantity is int
+        && data.quantity >= 0
+        && data.visible is bool
+        && isValidMenuItemStatus(data.status)
+        && data.createdBy is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCanteenOrderCounterPayload(data) {
+      return data.keys().hasOnly([
+          "dateKey",
+          "lastSequence",
+          "lastOrderId",
+          "lastOrderUserId",
+          "updatedAt"
+        ])
+        && data.dateKey is string
+        && data.dateKey.size() > 0
+        && data.lastSequence is int
+        && data.lastSequence > 0
+        && data.lastOrderId is string
+        && data.lastOrderId.size() > 0
+        && data.lastOrderUserId is string
+        && data.lastOrderUserId.size() > 0
+        && data.updatedAt is timestamp;
+    }
+
+    function canReadCanteenOrderCounterAfter() {
+      return existsAfter(/databases/$(database)/documents/systemSettings/canteenOrderCounter);
+    }
+
+    function canteenOrderCounterAfter() {
+      return getAfter(/databases/$(database)/documents/systemSettings/canteenOrderCounter).data;
+    }
+
+    function isClientCanteenOrderCounterWrite() {
+      return canUseCanteenOrdering()
+        && isValidCanteenOrderCounterPayload(request.resource.data)
+        && request.resource.data.lastOrderUserId == request.auth.uid;
+    }
+
+    function isClientPlacedOrderCreate(orderId) {
+      return canUseCanteenOrdering()
+        && isValidOrderPayload(request.resource.data)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == "placed"
+        && canReadCanteenOrderCounterAfter()
+        && canteenOrderCounterAfter().dateKey == request.resource.data.createdDateKey
+        && canteenOrderCounterAfter().lastOrderUserId == request.auth.uid
+        && canteenOrderCounterAfter().lastOrderId == orderId;
+    }
+
+    function isClientInventoryAdjustment() {
+      return canUseCanteenOrdering()
+        && resource.data.visible == true
+        && isValidMenuItemPayload(request.resource.data)
+        && request.resource.data.name == resource.data.name
+        && request.resource.data.description == resource.data.description
+        && request.resource.data.image == resource.data.image
+        && request.resource.data.price == resource.data.price
+        && request.resource.data.category == resource.data.category
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.visible == resource.data.visible
+        && request.resource.data.quantity is int
+        && request.resource.data.quantity >= 0
+        && request.resource.data.quantity <= resource.data.quantity
+        && request.resource.data.status == deriveMenuItemStatus(
+          request.resource.data.quantity,
+          request.resource.data.visible,
+          resource.data.status
+        )
+        && canReadCanteenOrderCounterAfter()
+        && canteenOrderCounterAfter().lastOrderUserId == request.auth.uid
+        && existsAfter(
+          /databases/$(database)/documents/orders/$(canteenOrderCounterAfter().lastOrderId)
+        )
+        && getAfter(
+          /databases/$(database)/documents/orders/$(canteenOrderCounterAfter().lastOrderId)
+        ).data.userId == request.auth.uid;
+    }
+
+    function isValidOrderPayload(data) {
+      return data.keys().hasOnly([
+          "userId",
+          "userName",
+          "userEmail",
+          "items",
+          "totalAmount",
+          "itemCount",
+          "status",
+          "tokenNumber",
+          "createdDateKey",
+          "createdAt",
+          "updatedAt"
+        ])
+        && data.userId is string
+        && data.userId.size() > 0
+        && data.userName is string
+        && data.userName.size() > 0
+        && data.userEmail is string
+        && data.items is list
+        && data.items.size() > 0
+        && data.totalAmount is number
+        && data.totalAmount >= 0
+        && data.itemCount is int
+        && data.itemCount > 0
+        && isValidOrderStatus(data.status)
+        && data.tokenNumber is string
+        && data.tokenNumber.size() > 0
+        && data.createdDateKey is string
+        && data.createdDateKey.size() > 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
     match /users/{userId} {
       allow read: if isSignedIn() && (request.auth.uid == userId || isStaff() || isAdmin());
       allow create: if (
           isAdmin()
-          && request.resource.data.role in ["student", "staff", "parent", "admin"]
+          && request.resource.data.role in ["student", "staff", "parent", "admin", "canteen_staff"]
         )
         || isSelfServiceStudentSignup(userId)
         || isSelfServiceStaffSignup(userId)
@@ -156,7 +341,13 @@ service cloud.firestore {
     }
 
     match /systemSettings/{settingId} {
-      allow read: if isSignedIn();
+      allow read: if (
+          settingId != "canteenOrderCounter"
+          && isSignedIn()
+        ) || (
+          settingId == "canteenOrderCounter"
+          && (canManageCanteen() || canUseCanteenOrdering())
+        );
       allow create: if isAdmin() || (
         settingId == "authBootstrap"
         && isSignedIn()
@@ -165,6 +356,9 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
         && request.resource.data.adminUid is string
         && request.resource.data.adminUid == request.auth.uid
+      ) || (
+        settingId == "canteenOrderCounter"
+        && isClientCanteenOrderCounterWrite()
       );
       allow update: if isAdmin() || (
         settingId == "authBootstrap"
@@ -174,6 +368,9 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin"
         && request.resource.data.adminUid is string
         && request.resource.data.adminUid == request.auth.uid
+      ) || (
+        settingId == "canteenOrderCounter"
+        && isClientCanteenOrderCounterWrite()
       );
       allow delete: if isAdmin();
     }
@@ -200,6 +397,30 @@ service cloud.firestore {
     match /notices/{noticeId} {
       allow read: if isSignedIn();
       allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /eventSubmissions/{submissionId} {
+      allow read: if isSignedIn()
+        && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.eventId is string
+        && request.resource.data.eventId.size() > 0
+        && submissionId == request.resource.data.eventId + "_" + request.auth.uid;
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.studentId == request.auth.uid
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.eventId == resource.data.eventId
+          && submissionId == resource.data.eventId + "_" + request.auth.uid
+        );
+      allow delete: if isAdmin();
     }
 
     match /schedules/{scheduleId} {
@@ -383,6 +604,40 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && (isStaff() || isAdmin() || resource.data.studentId == request.auth.uid);
       allow create, update, delete: if isStaff() || isAdmin();
+    }
+
+    match /menuItems/{itemId} {
+      allow read: if canManageCanteen()
+        || (canUseCanteenOrdering() && resource.data.visible == true);
+      allow create: if canManageCanteen()
+        && isValidMenuItemPayload(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if (canManageCanteen()
+        && isValidMenuItemPayload(request.resource.data)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.createdAt == resource.data.createdAt)
+        || isClientInventoryAdjustment();
+      allow delete: if canManageCanteen();
+    }
+
+    match /orders/{orderId} {
+      allow read: if canManageCanteen()
+        || (canUseCanteenOrdering() && resource.data.userId == request.auth.uid);
+      allow create: if (canManageCanteen()
+        && isValidOrderPayload(request.resource.data))
+        || isClientPlacedOrderCreate(orderId);
+      allow update: if canManageCanteen()
+        && isValidOrderPayload(request.resource.data)
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.userName == resource.data.userName
+        && request.resource.data.userEmail == resource.data.userEmail
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.totalAmount == resource.data.totalAmount
+        && request.resource.data.itemCount == resource.data.itemCount
+        && request.resource.data.tokenNumber == resource.data.tokenNumber
+        && request.resource.data.createdDateKey == resource.data.createdDateKey
+        && request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAdmin();
     }
 
     match /dailyPythonChallenges/{challengeId} {

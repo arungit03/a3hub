@@ -4,6 +4,7 @@ import { useAuth } from "../state/auth";
 
 const resolveRoleHomePath = (role) => {
   if (role === "admin") return "/admin/dashboard";
+  if (role === "canteen") return "/canteen/dashboard";
   if (role === "staff") return "/staff/home";
   if (role === "parent") return "/parent/home";
   return "/student/home";

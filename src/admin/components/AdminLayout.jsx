@@ -1,15 +1,12 @@
 import { useMemo, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Activity,
   BookOpen,
+  CalendarDays,
   ClipboardCheck,
   LayoutDashboard,
-  ListChecks,
-  MonitorPlay,
   Megaphone,
   Menu,
-  Settings,
   UserCheck,
   Users,
   X,
@@ -21,12 +18,9 @@ const NAV_ITEMS = [
   { to: "/admin/users", label: "Users", icon: Users },
   { to: "/admin/academics", label: "Academics", icon: BookOpen },
   { to: "/admin/tests", label: "Tests", icon: ClipboardCheck },
-  { to: "/admin/learning", label: "Code learning", icon: MonitorPlay },
   { to: "/admin/notices", label: "Notices", icon: Megaphone },
+  { to: "/admin/events", label: "Events", icon: CalendarDays },
   { to: "/admin/staff-requests", label: "Staff Requests", icon: UserCheck },
-  { to: "/admin/analytics", label: "Analytics", icon: Activity },
-  { to: "/admin/settings", label: "Settings", icon: Settings },
-  { to: "/admin/audit-logs", label: "Audit Logs", icon: ListChecks },
 ];
 
 const getNavClassName = ({ isActive }) =>

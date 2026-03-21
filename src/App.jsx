@@ -1,6 +1,7 @@
 import { Routes } from "react-router-dom";
 import { renderAdminRoutes } from "./routes/adminRoutes";
 import { renderAppShellRoutes } from "./routes/appShellRoutes";
+import { renderCanteenRoutes } from "./routes/canteenRoutes";
 import { renderPublicRoutes } from "./routes/publicRoutes";
 import { RouteLoader } from "./routes/routeLoader";
 
@@ -11,6 +12,7 @@ function App() {
     <Routes>
       {renderPublicRoutes(withRouteLoader)}
       {renderAppShellRoutes(withRouteLoader)}
+      {renderCanteenRoutes(withRouteLoader)}
       {renderAdminRoutes(withRouteLoader)}
     </Routes>
   );

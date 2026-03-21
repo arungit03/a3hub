@@ -38,7 +38,7 @@ import {
   getStudentRecipientIds,
   notificationTypes,
 } from "../lib/notifications";
-import { uploadFileToCloudinary } from "../lib/cloudinaryUpload";
+import { uploadFileWithFallbacks } from "../lib/mediaUpload";
 import {
   getGeminiApiKey,
   requestGeminiDailyPythonChallenges,
@@ -1775,7 +1775,7 @@ export default function MenuGridPage({ forcedStaff }) {
 
     try {
       const assignmentRef = doc(collection(db, "assignments"));
-      const uploaded = await uploadFileToCloudinary({
+      const uploaded = await uploadFileWithFallbacks({
         file: assignmentFile,
         folder: `a3hub/assignments/${assignmentRef.id}/question`,
       });
@@ -1871,7 +1871,7 @@ export default function MenuGridPage({ forcedStaff }) {
     }));
 
     try {
-      const uploaded = await uploadFileToCloudinary({
+      const uploaded = await uploadFileWithFallbacks({
         file,
         folder: `a3hub/assignments/${assignmentId}/answers/${user.uid}`,
       });

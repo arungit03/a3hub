@@ -1,5 +1,6 @@
-const { onRequest } = require("firebase-functions/v2/https");
+const { onCall, onRequest } = require("firebase-functions/v2/https");
 const { handler: aiGenerateHandler } = require("./netlify/functions/ai-generate.cjs");
+const { createOrderHandler } = require("./canteen/placeOrder");
 
 const toHeaderValue = (value) => {
   if (Array.isArray(value)) return value.join(", ");
@@ -72,4 +73,11 @@ exports.aiGenerate = onRequest(
     const response = await aiGenerateHandler(event);
     applyNetlifyResponse(res, response);
   }
+);
+
+exports.placeCanteenOrder = onCall(
+  {
+    region: "us-central1",
+  },
+  createOrderHandler
 );

@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { collection, limit, query } from "firebase/firestore";
 import AdminLineChart from "../components/AdminLineChart";
 import AdminMetricCard from "../components/AdminMetricCard";
@@ -254,6 +255,28 @@ export default function AdminDashboardPage() {
           {errors[0]}
         </div>
       ) : null}
+
+      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+              Event Module
+            </p>
+            <h3 className="mt-1 text-xl font-semibold text-slate-900">
+              Open the event console for campus registrations
+            </h3>
+            <p className="mt-2 text-sm text-slate-600">
+              Create event posters, accept student forms, and let staff review who submitted.
+            </p>
+          </div>
+          <Link
+            to="/admin/events"
+            className="inline-flex items-center justify-center rounded-full bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+          >
+            Enter Event Console
+          </Link>
+        </div>
+      </section>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <AdminMetricCard title="Total Students" value={summary.totalStudents} />

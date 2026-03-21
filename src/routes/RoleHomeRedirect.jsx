@@ -4,6 +4,9 @@ import { useAuth } from "../state/auth";
 export function RoleHomeRedirect() {
   const { role } = useAuth();
 
+  if (role === "canteen") {
+    return <Navigate to="/canteen/dashboard" replace />;
+  }
   if (role === "admin") {
     return <Navigate to="/admin/dashboard" replace />;
   }
