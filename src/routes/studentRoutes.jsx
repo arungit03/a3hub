@@ -6,7 +6,6 @@ const HomePage = lazy(() => import("../pages/HomePage"));
 const TodaysSchedulePage = lazy(() => import("../pages/TodaysSchedulePage"));
 const AttendancePage = lazy(() => import("../pages/AttendancePage"));
 const MenuGridPage = lazy(() => import("../pages/MenuGridPage"));
-const ResumeBuilderPage = lazy(() => import("../pages/ResumeBuilderPage"));
 const StudentTodoListPage = lazy(() =>
   import("../pages/student/StudentTodoListPage")
 );
@@ -83,11 +82,6 @@ const STUDENT_PAGE_ROUTES = [
     path: "/student/menu/daily-python-challenges",
     element: <MenuGridPage forcedStaff={false} />,
     feature: "compilers",
-  },
-  {
-    path: "/student/menu/resume-builder",
-    element: <ResumeBuilderPage />,
-    feature: "resume-builder",
   },
   {
     path: "/student/menu/my-to-do-list",
@@ -211,21 +205,6 @@ const STUDENT_REDIRECT_ROUTES = [
     path: "/student/attendance",
     to: "/student/menu/attendance",
     feature: "attendance",
-  },
-  {
-    path: "/student/resume-builder",
-    to: "/student/menu/resume-builder",
-    feature: "resume-builder",
-  },
-  {
-    path: "/menu/resume-builder",
-    to: "/student/menu/resume-builder",
-    feature: "resume-builder",
-  },
-  {
-    path: "/resume-builder",
-    to: "/student/menu/resume-builder",
-    feature: "resume-builder",
   },
 ];
 

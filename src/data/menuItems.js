@@ -128,14 +128,6 @@ const rawMenuItems = [
     feature: "todo",
   },
   {
-    id: "resume-builder",
-    label: "Resume Builder AI",
-    icon: "\uD83E\uDDFE",
-    staffEditable: false,
-    path: "/menu/resume-builder",
-    feature: "resume-builder",
-  },
-  {
     id: "fees",
     label: "Fees",
     icon: "\uD83D\uDCB0",

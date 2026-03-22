@@ -1,5 +1,5 @@
 /**
- * @typedef {"attendance" | "assignments" | "books" | "marks" | "exams" | "tests" | "leave" | "todo" | "ai-chat" | "compilers" | "learning" | "resume-builder" | "a3cad" | "notifications" | "admin"} FeatureKey
+ * @typedef {"attendance" | "assignments" | "books" | "marks" | "exams" | "tests" | "leave" | "todo" | "ai-chat" | "compilers" | "learning" | "a3cad" | "notifications" | "admin"} FeatureKey
  * @typedef {"full" | "academic" | "learning" | "operations" | "lean"} DeployProfileKey
  * @typedef {{ label: string, description: string }} FeatureDefinition
  * @typedef {{ label: string, description: string, features: readonly FeatureKey[] }} DeployProfileDefinition
@@ -52,10 +52,6 @@ const FEATURE_DEFINITIONS = Object.freeze(
   learning: {
     label: "Code learning",
     description: "Programming learning portal with lessons, quizzes, practice, and progress tracking.",
-  },
-  "resume-builder": {
-    label: "Resume Builder",
-    description: "Resume builder and AI-assisted resume generation.",
   },
   a3cad: {
     label: "A3 CAD",
@@ -111,7 +107,6 @@ const DEPLOY_PROFILE_DEFINITIONS = Object.freeze(
         "ai-chat",
         "compilers",
         "learning",
-        "resume-builder",
         "a3cad",
       ],
     },

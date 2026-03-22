@@ -3067,14 +3067,12 @@ export default function MenuGridPage({ forcedStaff }) {
             const isDailyPythonChallenges = item.id === "daily-python-challenges";
             const isInterviewQuizContact = item.id === "interview-quiz-contact";
             const isMyTodoList = item.id === "my-todo-list";
-            const isResumeBuilder = item.id === "resume-builder";
             const isStudentDetails = item.id === "student-details";
             const isStudentAssignments = item.id === "student-assignments";
             const isParentReplies = item.id === "parent-replies";
             if (isStaff && isDailyPythonChallenges) return null;
             if (isStaff && isInterviewQuizContact) return null;
             if (isStaff && isMyTodoList) return null;
-            if (isStaff && isResumeBuilder) return null;
             if (!isStudent && isInterviewQuizContact) return null;
             if (!isStaff && isStudentDetails) return null;
             if (isStudentAssignments) return null;

@@ -12,7 +12,6 @@ import {
   Landmark,
   Megaphone,
   NotebookPen,
-  Sparkles,
   UtensilsCrossed,
 } from "lucide-react";
 
@@ -84,10 +83,6 @@ export const SERVICE_CARD_META = Object.freeze({
   "my-todo-list": {
     icon: CheckCircle2,
     description: "Organize tasks and track daily productivity.",
-  },
-  "resume-builder": {
-    icon: Sparkles,
-    description: "Generate resumes with structured AI guidance.",
   },
   fees: {
     icon: Landmark,

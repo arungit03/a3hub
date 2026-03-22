@@ -90,12 +90,6 @@ const ICONS = {
       <path d="m11 6 2 12" />
     </svg>
   ),
-  resume: (
-    <svg {...iconProps}>
-      <rect x="5" y="3.5" width="14" height="17" rx="2" />
-      <path d="M8.5 8.5h7M8.5 12h7M8.5 15.5h5" />
-    </svg>
-  ),
   ai: (
     <svg {...iconProps}>
       <path d="M12 4.5 13.7 8l3.8.5-2.8 2.7.7 3.8-3.4-1.8-3.4 1.8.7-3.8L6.5 8.5 10.3 8 12 4.5Z" />
@@ -150,7 +144,6 @@ const SIDEBAR_ITEM_FEATURES = Object.freeze({
   "html-editor": "compilers",
   ai: "ai-chat",
   a3cad: "a3cad",
-  resume: "resume-builder",
 });
 
 const SEARCH_ALIASES = Object.freeze({
@@ -191,7 +184,6 @@ const SEARCH_ALIASES = Object.freeze({
   cpp: ["cpp", "c++", "c plus plus"],
   ai: ["ai", "assistant", "chatbot"],
   a3cad: ["cad", "circuit", "logic simulator"],
-  resume: ["resume", "cv", "resume builder"],
   todo: ["todo", "to do", "tasks", "task list"],
   help: ["support", "help desk"],
   profile: ["profile", "account", "settings"],
@@ -305,10 +297,6 @@ const mapRoute = ({ base, role, key }) => {
   if (key === "html-editor") return role === "parent" ? `${base}/home` : `${base}/html-editor`;
   if (key === "ai") return role === "parent" ? `${base}/home` : `${base}/ai`;
   if (key === "a3cad") return role === "parent" ? `${base}/home` : `${base}/a3cad`;
-  if (key === "resume") {
-    if (role === "student") return `${base}/menu/resume-builder`;
-    return `${base}/home`;
-  }
   if (key === "profile") return role === "parent" ? `${base}/home` : `${base}/profile`;
   if (key === "settings") return role === "parent" ? `${base}/home` : `${base}/profile`;
   return `${base}/home`;
@@ -344,14 +332,6 @@ function buildSidebarConfig(role) {
       label: "Code learning",
       icon: ICONS.coding,
       to: mapRoute({ base, role, key: "learning" }),
-    });
-  }
-  if (role === "student") {
-    toolsItems.push({
-      id: "resume",
-      label: "Resume Builder",
-      icon: ICONS.resume,
-      to: mapRoute({ base, role, key: "resume" }),
     });
   }
 

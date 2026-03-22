@@ -14,7 +14,6 @@ This project includes multiple product areas in one codebase. To reduce onboardi
 - `todo`
 - `ai-chat`
 - `compilers`
-- `resume-builder`
 - `a3cad`
 - `notifications`
 - `admin`
@@ -47,8 +46,6 @@ Implementation source:
 - `compilers`:
   - Student/staff code lab + compilers/interpreter routes
   - Coding quick navigation entries
-- `resume-builder`:
-  - Resume builder routes and related menu/sidebar entries
 - `a3cad`:
   - Student/staff A3 CAD routes and related sidebar entry
 - `notifications`:

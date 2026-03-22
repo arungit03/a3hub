@@ -30,12 +30,6 @@ const ROUTE_PREFETCH_ENTRIES = [
     feature: "attendance",
   },
   {
-    key: "student-menu-resume-builder",
-    match: isExact("/student/menu/resume-builder"),
-    load: () => import("../pages/ResumeBuilderPage"),
-    feature: "resume-builder",
-  },
-  {
     key: "student-menu-todo",
     match: isExact("/student/menu/my-to-do-list"),
     load: () => import("../pages/student/StudentTodoListPage"),

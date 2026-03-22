@@ -53,7 +53,7 @@ Primary goal:
 - Make it suitable for viva, seminar, project expo, or final review.
 
 Project summary:
-A3 Hub is an all-in-one smart campus web application that centralizes academic, administrative, and student-support workflows into one platform. It includes attendance tracking, assignments, books and study resources, marks and progress reporting, exam and test views, leave management, notifications, admin features, AI chat, coding compilers, resume builder, to-do support, and A3CAD for digital logic circuit simulation. It is designed to reduce fragmented campus systems and provide a scalable, user-friendly, role-based digital campus solution.
+A3 Hub is an all-in-one smart campus web application that centralizes academic, administrative, and student-support workflows into one platform. It includes attendance tracking, assignments, books and study resources, marks and progress reporting, exam and test views, leave management, notifications, admin features, AI chat, coding compilers, to-do support, and A3CAD for digital logic circuit simulation. It is designed to reduce fragmented campus systems and provide a scalable, user-friendly, role-based digital campus solution.
 
 Core users:
 - Students
@@ -213,7 +213,6 @@ Slide 8: Smart Learning and Productivity Modules
 Include:
 - AI chat assistant
 - coding compiler tools
-- resume builder
 - to-do support
 - A3CAD logic simulator
 Visual suggestion:
@@ -398,4 +397,3 @@ For the best result, ask the AI tool for:
 - slide-by-slide content first
 - then "convert this into a visually modern PPT"
 - then "shorten text where needed without losing meaning"
-

@@ -15,7 +15,7 @@ Implementation sources:
 - `academic`
   - `attendance, assignments, books, marks, exams, tests, leave, notifications`
 - `learning`
-  - `books, tests, todo, ai-chat, compilers, resume-builder, a3cad`
+  - `books, tests, todo, ai-chat, compilers, a3cad`
 - `operations`
   - `attendance, assignments, leave, notifications, admin`
 - `lean`
