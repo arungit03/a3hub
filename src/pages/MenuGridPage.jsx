@@ -432,6 +432,9 @@ export default function MenuGridPage({ forcedStaff }) {
   const [loadingCirculars, setLoadingCirculars] = useState(false);
   const [circularsError, setCircularsError] = useState("");
   const [assignmentsOpen, setAssignmentsOpen] = useState(false);
+  const [assignmentsFeed, setAssignmentsFeed] = useState([]);
+  const [loadingAssignmentsFeed, setLoadingAssignmentsFeed] = useState(true);
+  const [assignmentsFeedError, setAssignmentsFeedError] = useState("");
   const [assignmentEntries, setAssignmentEntries] = useState([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
   const [assignmentsError, setAssignmentsError] = useState("");
@@ -457,6 +460,11 @@ export default function MenuGridPage({ forcedStaff }) {
   const [codeLearningOpen, setCodeLearningOpen] = useState(false);
   const [dailyPythonOpen, setDailyPythonOpen] = useState(false);
   const [studentDetailsOpen, setStudentDetailsOpen] = useState(false);
+  const [staffStudentsDirectory, setStaffStudentsDirectory] = useState([]);
+  const [loadingStaffStudentsDirectory, setLoadingStaffStudentsDirectory] =
+    useState(false);
+  const [staffStudentsDirectoryError, setStaffStudentsDirectoryError] =
+    useState("");
   const [studentDetailsStudents, setStudentDetailsStudents] = useState([]);
   const [loadingStudentDetailsStudents, setLoadingStudentDetailsStudents] =
     useState(false);
@@ -540,6 +548,7 @@ export default function MenuGridPage({ forcedStaff }) {
   const isAssignmentsVisible = assignmentsOpen || isAssignmentsPageRoute;
   const isDailyPythonVisible = !isStaff && (dailyPythonOpen || isDailyPythonPageRoute);
   const isStudentDetailsVisible = studentDetailsOpen || isStudentDetailsPageRoute;
+  const shouldLoadStaffStudents = isStaff && (isStudentDetailsVisible || feesOpen);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -626,27 +635,36 @@ export default function MenuGridPage({ forcedStaff }) {
     const unsubscribe = onSnapshot(
       assignmentsQuery,
       (snapshot) => {
-        const entries = snapshot.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }));
-        const openAssignments = entries.filter((item) => !isAssignmentClosed(item));
-        setPanelAssignments(
-          openAssignments.slice(0, 3).map((item) => ({
+        setAssignmentsFeed(
+          snapshot.docs.map((item) => ({
             id: item.id,
-            title: item.title || "Assignment",
-            subtitle: `Due ${formatAssignmentDueLabel(item)}`,
-            time: getAssignmentDueMillis(item),
+            ...item.data(),
           }))
         );
+        setLoadingAssignmentsFeed(false);
+        setAssignmentsFeedError("");
       },
       () => {
-        setPanelAssignments([]);
+        setAssignmentsFeed([]);
+        setLoadingAssignmentsFeed(false);
+        setAssignmentsFeedError("Unable to load assignments.");
       }
     );
 
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    const openAssignments = assignmentsFeed.filter((item) => !isAssignmentClosed(item));
+    setPanelAssignments(
+      openAssignments.slice(0, 3).map((item) => ({
+          id: item.id,
+        title: item.title || "Assignment",
+        subtitle: `Due ${formatAssignmentDueLabel(item)}`,
+        time: getAssignmentDueMillis(item),
+      }))
+    );
+  }, [assignmentsFeed]);
 
   useEffect(() => {
     const noticesQuery = query(
@@ -751,44 +769,37 @@ export default function MenuGridPage({ forcedStaff }) {
   }, [activeModule]);
 
   useEffect(() => {
-    if (!isAssignmentsVisible) return undefined;
+    if (!isAssignmentsVisible) {
+      setLoadingAssignments(false);
+      setAssignmentsError("");
+      return undefined;
+    }
 
-    setLoadingAssignments(true);
-    setAssignmentsError("");
+    setLoadingAssignments(loadingAssignmentsFeed);
+    setAssignmentsError(assignmentsFeedError);
 
-    const assignmentsQuery = query(
-      collection(db, "assignments"),
-      orderBy("createdAt", "desc"),
-      limit(50)
-    );
+    if (loadingAssignmentsFeed) {
+      return undefined;
+    }
 
-    const unsubscribe = onSnapshot(
-      assignmentsQuery,
-      (snapshot) => {
-        const next = snapshot.docs
-          .map((item) => ({
-            id: item.id,
-            ...item.data(),
-          }))
-          .filter((assignment) => {
-            const dueMillis = getAssignmentDueMillis(assignment);
-            if (isStaff) return true;
-            return !dueMillis || dueMillis > Date.now();
-          });
+    const now = Date.now();
+    const next = assignmentsFeed.filter((assignment) => {
+      const dueMillis = getAssignmentDueMillis(assignment);
+      if (isStaff) return true;
+      return !dueMillis || dueMillis > now;
+    });
 
-        setAssignmentEntries(next);
-        setLoadingAssignments(false);
-        setAssignmentsError("");
-      },
-      () => {
-        setAssignmentEntries([]);
-        setLoadingAssignments(false);
-        setAssignmentsError("Unable to load assignments.");
-      }
-    );
-
-    return () => unsubscribe();
-  }, [isAssignmentsVisible, isStaff]);
+    setAssignmentEntries(next);
+    setLoadingAssignments(false);
+    setAssignmentsError(assignmentsFeedError);
+    return undefined;
+  }, [
+    assignmentsFeed,
+    assignmentsFeedError,
+    isAssignmentsVisible,
+    isStaff,
+    loadingAssignmentsFeed,
+  ]);
 
   useEffect(() => {
     if (!isAssignmentsVisible || isStaff || !user?.uid) {
@@ -959,10 +970,15 @@ export default function MenuGridPage({ forcedStaff }) {
   }, [calendarOpen]);
 
   useEffect(() => {
-    if (!isStudentDetailsVisible || !isStaff) return undefined;
+    if (!shouldLoadStaffStudents) {
+      setStaffStudentsDirectory([]);
+      setLoadingStaffStudentsDirectory(false);
+      setStaffStudentsDirectoryError("");
+      return undefined;
+    }
 
-    setLoadingStudentDetailsStudents(true);
-    setStudentDetailsStudentsError("");
+    setLoadingStaffStudentsDirectory(true);
+    setStaffStudentsDirectoryError("");
 
     let unsubscribe = () => {};
     try {
@@ -977,93 +993,84 @@ export default function MenuGridPage({ forcedStaff }) {
           const next = snapshot.docs
             .map((item) => {
               const data = item.data() || {};
-              const name =
-                toInputValue(data?.name) || toInputValue(data?.email) || "Student";
               return {
                 id: item.id,
-                name,
+                ...data,
+                name: toInputValue(data?.name) || toInputValue(data?.email) || "Student",
                 email: toInputValue(data?.email),
                 details: buildStudentDetails(data),
               };
             })
             .sort((a, b) => a.name.localeCompare(b.name));
 
-          setStudentDetailsStudents(next);
-          setLoadingStudentDetailsStudents(false);
-          setStudentDetailsStudentId((previous) => {
-            if (previous && next.some((item) => item.id === previous)) {
-              return previous;
-            }
-            return next[0]?.id || "";
-          });
+          setStaffStudentsDirectory(next);
+          setLoadingStaffStudentsDirectory(false);
+          setStaffStudentsDirectoryError("");
         },
         () => {
-          setStudentDetailsStudents([]);
-          setStudentDetailsStudentId("");
-          setLoadingStudentDetailsStudents(false);
-          setStudentDetailsStudentsError("Unable to load students right now.");
+          setStaffStudentsDirectory([]);
+          setLoadingStaffStudentsDirectory(false);
+          setStaffStudentsDirectoryError("Unable to load students right now.");
         }
       );
     } catch {
-      setStudentDetailsStudents([]);
-      setStudentDetailsStudentId("");
-      setLoadingStudentDetailsStudents(false);
-      setStudentDetailsStudentsError("Unable to load students right now.");
+      setStaffStudentsDirectory([]);
+      setLoadingStaffStudentsDirectory(false);
+      setStaffStudentsDirectoryError("Unable to load students right now.");
     }
 
     return () => unsubscribe();
-  }, [isStaff, isStudentDetailsVisible]);
+  }, [shouldLoadStaffStudents]);
 
   useEffect(() => {
-    if (!feesOpen || !isStaff) return undefined;
-
-    setLoadingFeesStudents(true);
-
-    let unsubscribe = () => {};
-    try {
-      const studentsQuery = query(
-        collection(db, "users"),
-        where("role", "==", "student")
-      );
-
-      unsubscribe = onSnapshot(
-        studentsQuery,
-        (snapshot) => {
-          const next = snapshot.docs
-            .map((item) => ({ id: item.id, ...item.data() }))
-            .map((student) => ({
-              ...student,
-              name: student?.name || student?.email || "Student",
-            }))
-            .sort((a, b) => a.name.localeCompare(b.name));
-
-          setFeesStudents(next);
-          setLoadingFeesStudents(false);
-
-          if (!next.length) {
-            setFeeStudentId("");
-            return;
-          }
-
-          const selectedExists = next.some((student) => student.id === feeStudentId);
-          if (!selectedExists) {
-            setFeeStudentId(next[0].id);
-          }
-        },
-        () => {
-          setFeesStudents([]);
-          setFeeStudentId("");
-          setLoadingFeesStudents(false);
-        }
-      );
-    } catch {
-      setFeesStudents([]);
-      setFeeStudentId("");
-      setLoadingFeesStudents(false);
+    if (!isStaff || !isStudentDetailsVisible) {
+      setStudentDetailsStudents([]);
+      setLoadingStudentDetailsStudents(false);
+      setStudentDetailsStudentsError("");
+      return undefined;
     }
 
-    return () => unsubscribe();
-  }, [feesOpen, isStaff, feeStudentId]);
+    setStudentDetailsStudents(staffStudentsDirectory);
+    setLoadingStudentDetailsStudents(loadingStaffStudentsDirectory);
+    setStudentDetailsStudentsError(staffStudentsDirectoryError);
+    if (!loadingStaffStudentsDirectory) {
+      setStudentDetailsStudentId((previous) => {
+        if (previous && staffStudentsDirectory.some((item) => item.id === previous)) {
+          return previous;
+        }
+        return staffStudentsDirectory[0]?.id || "";
+      });
+    }
+    return undefined;
+  }, [
+    isStaff,
+    isStudentDetailsVisible,
+    loadingStaffStudentsDirectory,
+    staffStudentsDirectory,
+    staffStudentsDirectoryError,
+  ]);
+
+  useEffect(() => {
+    if (!feesOpen || !isStaff) {
+      setFeesStudents([]);
+      setLoadingFeesStudents(false);
+      return undefined;
+    }
+
+    setFeesStudents(staffStudentsDirectory);
+    setLoadingFeesStudents(loadingStaffStudentsDirectory);
+
+    if (!loadingStaffStudentsDirectory) {
+      setFeeStudentId((previous) => {
+        if (previous && staffStudentsDirectory.some((student) => student.id === previous)) {
+          return previous;
+        }
+        return staffStudentsDirectory[0]?.id || "";
+      });
+    }
+
+    return undefined;
+  }, [feesOpen, isStaff, loadingStaffStudentsDirectory, staffStudentsDirectory]);
 
   useEffect(() => {
     if (!feesOpen) return undefined;

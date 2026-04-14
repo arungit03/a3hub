@@ -231,6 +231,7 @@ export default function HomePage({ forcedRole }) {
     if (!attendanceEnabled) {
       setAttendanceBreakdown({ present: 0, total: 0 });
       setAttendancePercent(0);
+      setActivities((prev) => removeActivity(prev, "attendance"));
       return undefined;
     }
 
@@ -240,11 +241,24 @@ export default function HomePage({ forcedRole }) {
       (snapshot) => {
         let present = 0;
         let total = 0;
+        let latest = null;
 
         snapshot.forEach((docItem) => {
-          const periods = Array.isArray(docItem.data()?.periods)
-            ? docItem.data().periods
+          const data = docItem.data() || {};
+          const periods = Array.isArray(data?.periods)
+            ? data.periods
             : [];
+          const candidateMillis =
+            toMillis(data.updatedAt) ||
+            toMillis(data.createdAt) ||
+            toMillis(data.date);
+
+          if (!latest || candidateMillis > latest.millis) {
+            latest = {
+              millis: candidateMillis,
+              data,
+            };
+          }
 
           periods.forEach((period) => {
             const students = period?.students || {};
@@ -273,10 +287,29 @@ export default function HomePage({ forcedRole }) {
         } else {
           setAttendancePercent(0);
         }
+
+        if (!latest) {
+          setActivities((prev) => removeActivity(prev, "attendance"));
+          return;
+        }
+
+        setActivities((prev) => {
+          const nextActivity = {
+            id: "attendance",
+            title: "Attendance marked",
+            subtitle: latest.data?.department || "Class attendance",
+            timeLabel: formatDateTimeLabel(
+              latest.data?.updatedAt || latest.data?.createdAt
+            ),
+            status: "completed",
+          };
+          return upsertActivity(prev, nextActivity);
+        });
       },
       () => {
         setAttendanceBreakdown({ present: 0, total: 0 });
         setAttendancePercent(0);
+        setActivities((prev) => removeActivity(prev, "attendance"));
       }
     );
 
@@ -443,17 +476,21 @@ export default function HomePage({ forcedRole }) {
       setStaffAssignmentItems([]);
       setStaffAssignmentsLoading(false);
       setStaffAssignmentsStatus("");
-      return undefined;
     }
+
     if (!assignmentsEnabled) {
       setStaffAssignmentItems([]);
       setStaffAssignmentsLoading(false);
       setStaffAssignmentsStatus("");
+      setPendingAssignmentCount(0);
+      setActivities((prev) => removeActivity(prev, "assignment"));
       return undefined;
     }
 
-    setStaffAssignmentsLoading(true);
-    setStaffAssignmentsStatus("");
+    if (isStaff) {
+      setStaffAssignmentsLoading(true);
+      setStaffAssignmentsStatus("");
+    }
     const assignmentsQuery = query(
       collection(db, "assignments"),
       orderBy("createdAt", "desc"),
@@ -467,49 +504,50 @@ export default function HomePage({ forcedRole }) {
           id: docItem.id,
           ...docItem.data(),
         }));
-        setStaffAssignmentItems(next);
-        setStaffAssignmentsLoading(false);
+        const nowMillis = Date.now();
+        const openCount = next.reduce((acc, item) => {
+          const expiresAtMillis = parseAssignmentExpiry(item);
+          if (!expiresAtMillis || expiresAtMillis > nowMillis) return acc + 1;
+          return acc;
+        }, 0);
+        const latestAssignment = next[0] || null;
+
+        if (isStaff) {
+          setStaffAssignmentItems(next);
+          setStaffAssignmentsLoading(false);
+          setStaffAssignmentsStatus("");
+        }
+
+        setPendingAssignmentCount(openCount || 0);
+        if (!latestAssignment) {
+          setActivities((prev) => removeActivity(prev, "assignment"));
+          return;
+        }
+
+        setActivities((prev) => {
+          const nextActivity = {
+            id: "assignment",
+            title: "Assignment uploaded",
+            subtitle: latestAssignment?.title || "Subject assignment",
+            timeLabel: formatDateTimeLabel(latestAssignment?.createdAt),
+            status: "pending",
+          };
+          return upsertActivity(prev, nextActivity);
+        });
       },
       () => {
-        setStaffAssignmentItems([]);
-        setStaffAssignmentsLoading(false);
-        setStaffAssignmentsStatus("Unable to load assignments.");
+        if (isStaff) {
+          setStaffAssignmentItems([]);
+          setStaffAssignmentsLoading(false);
+          setStaffAssignmentsStatus("Unable to load assignments.");
+        }
+        setPendingAssignmentCount(0);
+        setActivities((prev) => removeActivity(prev, "assignment"));
       }
     );
 
     return () => unsubscribe();
   }, [assignmentsEnabled, isStaff]);
-
-  useEffect(() => {
-    if (!assignmentsEnabled) {
-      setPendingAssignmentCount(0);
-      return undefined;
-    }
-
-    const assignmentsQuery = query(
-      collection(db, "assignments"),
-      orderBy("createdAt", "desc"),
-      limit(80)
-    );
-
-    const unsubscribe = onSnapshot(
-      assignmentsQuery,
-      (snapshot) => {
-        const nowMillis = Date.now();
-        const count = snapshot.docs.reduce((acc, docItem) => {
-          const expiresAtMillis = parseAssignmentExpiry(docItem.data());
-          if (!expiresAtMillis || expiresAtMillis > nowMillis) return acc + 1;
-          return acc;
-        }, 0);
-        setPendingAssignmentCount(count || 0);
-      },
-      () => {
-        setPendingAssignmentCount(0);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [assignmentsEnabled]);
 
   useEffect(() => {
     if (!notificationsEnabled) {
@@ -545,74 +583,11 @@ export default function HomePage({ forcedRole }) {
   useEffect(() => {
     const unsubscribers = [];
 
-    if (assignmentsEnabled) {
-      const assignmentsUnsubscribe = onSnapshot(
-        query(collection(db, "assignments"), orderBy("createdAt", "desc"), limit(1)),
-        (snapshot) => {
-          const firstItem = snapshot.docs[0]?.data();
-          if (!firstItem) {
-            setActivities((prev) => removeActivity(prev, "assignment"));
-            return;
-          }
-          setActivities((prev) => {
-            const nextActivity = {
-              id: "assignment",
-              title: "Assignment uploaded",
-              subtitle: firstItem?.title || "Subject assignment",
-              timeLabel: formatDateTimeLabel(firstItem?.createdAt),
-              status: "pending",
-            };
-            return upsertActivity(prev, nextActivity);
-          });
-        }
-      );
-      unsubscribers.push(assignmentsUnsubscribe);
-    } else {
+    if (!assignmentsEnabled) {
       setActivities((prev) => removeActivity(prev, "assignment"));
     }
 
-    if (attendanceEnabled) {
-      const attendanceUnsubscribe = onSnapshot(
-        query(collection(db, "attendance"), limit(30)),
-        (snapshot) => {
-          if (snapshot.empty) {
-            setActivities((prev) => removeActivity(prev, "attendance"));
-            return;
-          }
-          let latest = null;
-
-          snapshot.docs.forEach((docItem) => {
-            const data = docItem.data() || {};
-            const candidateMillis =
-              toMillis(data.updatedAt) ||
-              toMillis(data.createdAt) ||
-              toMillis(data.date);
-            if (!latest || candidateMillis > latest.millis) {
-              latest = {
-                millis: candidateMillis,
-                data,
-              };
-            }
-          });
-
-          if (!latest) {
-            setActivities((prev) => removeActivity(prev, "attendance"));
-            return;
-          }
-          setActivities((prev) => {
-            const nextActivity = {
-              id: "attendance",
-              title: "Attendance marked",
-              subtitle: latest.data?.department || "Class attendance",
-              timeLabel: formatDateTimeLabel(latest.data?.updatedAt || latest.data?.createdAt),
-              status: "completed",
-            };
-            return upsertActivity(prev, nextActivity);
-          });
-        }
-      );
-      unsubscribers.push(attendanceUnsubscribe);
-    } else {
+    if (!attendanceEnabled) {
       setActivities((prev) => removeActivity(prev, "attendance"));
     }
 

@@ -66,6 +66,11 @@ const FaceAttendanceModal = lazy(() => import("../components/FaceAttendanceModal
 const getFaceScanStudentLabel = (student) =>
   student?.name || student?.email || "Student";
 
+const normalizeDepartmentFilter = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
 const summarizeFaceScanItems = (items, formatter, maxItems = 3) => {
   const safeItems = Array.isArray(items) ? items : [];
   const labels = safeItems
@@ -156,6 +161,25 @@ export default function AttendancePage({ forcedStaff }) {
   const isStudent = !isStaff && role === "student";
   const canSubmitAbsenceReason = !isStaff && isParent;
   const staffDisplayName = profile?.name || user?.displayName || "Staff";
+  const staffDepartmentFilter = useMemo(() => {
+    const departmentKey = normalizeDepartmentFilter(profile?.departmentKey);
+    if (departmentKey) {
+      return {
+        field: "departmentKey",
+        value: departmentKey,
+      };
+    }
+
+    const department = String(profile?.department || "").trim();
+    if (department) {
+      return {
+        field: "department",
+        value: department,
+      };
+    }
+
+    return null;
+  }, [profile?.department, profile?.departmentKey]);
   const dateLabel = useMemo(() => formatDateLabel(selectedDate), [selectedDate]);
   const currentStudentId = user?.uid || "";
   const currentStudentName = profile?.name || user?.displayName || "Student";
@@ -482,10 +506,13 @@ export default function AttendancePage({ forcedStaff }) {
 
     let unsubscribe = () => {};
     try {
-      const studentsQuery = query(
-        collection(db, "users"),
-        where("role", "==", "student")
-      );
+      const studentsQuery = staffDepartmentFilter
+        ? query(
+            collection(db, "users"),
+            where("role", "==", "student"),
+            where(staffDepartmentFilter.field, "==", staffDepartmentFilter.value)
+          )
+        : query(collection(db, "users"), where("role", "==", "student"));
 
       unsubscribe = onSnapshot(
         studentsQuery,
@@ -516,7 +543,7 @@ export default function AttendancePage({ forcedStaff }) {
     }
 
     return () => unsubscribe();
-  }, [isStaff]);
+  }, [isStaff, staffDepartmentFilter]);
 
   useEffect(() => {
     if (!selectedDate || !/^\d{4}-\d{2}-\d{2}$/.test(selectedDate)) {

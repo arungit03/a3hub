@@ -1,4 +1,5 @@
 require("./load-env.cjs");
+const { getFirebaseAdminRuntime } = require("./firebase-admin.cjs");
 
 const AUTH_LOOKUP_ENDPOINT =
   "https://identitytoolkit.googleapis.com/v1/accounts:lookup";
@@ -60,6 +61,10 @@ const extractBearerToken = (event) => {
   const match = authorization.match(/^bearer\s+(.+)$/i);
   return match ? toSafeText(match[1]) : "";
 };
+
+const extractAppCheckToken = (event) =>
+  getHeaderValue(event?.headers, "x-firebase-appcheck") ||
+  getHeaderValue(event?.headers, "x-firebase-app-check");
 
 const getClientIp = (event) => {
   const headers = event?.headers || {};
@@ -131,6 +136,53 @@ const normalizeAccountStatus = (value) => {
     return "pending";
   }
   return "active";
+};
+
+const mapAdminVerificationError = (error) => {
+  const code = toSafeText(error?.code).toLowerCase();
+  if (!code) return null;
+
+  if (
+    code === "auth/id-token-expired" ||
+    code === "auth/id-token-revoked" ||
+    code === "auth/invalid-id-token" ||
+    code === "auth/argument-error"
+  ) {
+    return {
+      status: 401,
+      code: "auth/invalid-token",
+      message: "Invalid auth token.",
+    };
+  }
+
+  if (code === "auth/user-disabled") {
+    return {
+      status: 403,
+      code: "auth/user-disabled",
+      message: "User account is disabled.",
+    };
+  }
+
+  return null;
+};
+
+const isTrueLike = (value) => {
+  const normalized = toSafeText(String(value || "")).toLowerCase();
+  return normalized === "1" || normalized === "true" || normalized === "yes";
+};
+
+const shouldRequireAppCheck = (options = {}) => {
+  if (typeof options?.requireAppCheck === "boolean") {
+    return options.requireAppCheck;
+  }
+  return isTrueLike(process.env.REQUIRE_FIREBASE_APP_CHECK);
+};
+
+const shouldAllowMissingAppCheckToken = (options = {}) => {
+  if (typeof options?.allowMissingAppCheckToken === "boolean") {
+    return options.allowMissingAppCheckToken;
+  }
+  return isTrueLike(process.env.ALLOW_MISSING_FIREBASE_APP_CHECK);
 };
 
 const resolveAllowedRoles = (allowedRoles, fallbackRoles = []) => {
@@ -301,6 +353,37 @@ const fetchRoleFromFirestoreProfile = async ({
   }
 };
 
+const fetchRoleFromAdminProfile = async ({ runtime, uid }) => {
+  const safeUid = toSafeText(uid);
+  if (!runtime?.db || !safeUid) {
+    return {
+      role: "",
+      status: "",
+    };
+  }
+
+  try {
+    const snapshot = await runtime.db.collection("users").doc(safeUid).get();
+    if (!snapshot.exists) {
+      return {
+        role: "",
+        status: "",
+      };
+    }
+
+    const data = snapshot.data() || {};
+    return {
+      role: toSafeText(data?.role).toLowerCase(),
+      status: normalizeAccountStatus(data?.status),
+    };
+  } catch {
+    return {
+      role: "",
+      status: "",
+    };
+  }
+};
+
 const pruneTokenCache = () => {
   if (tokenCache.size <= MAX_TOKEN_CACHE_SIZE) return;
   const now = Date.now();
@@ -350,6 +433,54 @@ const verifyFirebaseIdToken = async (idToken) => {
   const cached = tokenCache.get(safeToken);
   if (cached && Number(cached.expiresAt || 0) > now && cached.authContext) {
     return cached.authContext;
+  }
+
+  try {
+    const adminRuntime = getFirebaseAdminRuntime();
+    if (adminRuntime?.auth) {
+      const decodedToken = await adminRuntime.auth.verifyIdToken(safeToken, true);
+      const firestoreProfile = await fetchRoleFromAdminProfile({
+        runtime: adminRuntime,
+        uid: decodedToken.uid,
+      });
+      const claims = parseCustomClaims(decodedToken);
+      const claimRoles = parseRolesFromClaims(claims);
+      const firestoreRole = toSafeText(firestoreProfile?.role).toLowerCase();
+      const firestoreRoles = normalizeRoleList(firestoreRole);
+      const roles = Array.from(new Set([...claimRoles, ...firestoreRoles]));
+      const authContext = {
+        uid: toSafeText(decodedToken.uid),
+        email: toSafeText(decodedToken.email).toLowerCase(),
+        emailVerified: Boolean(decodedToken.email_verified),
+        claims,
+        roles,
+        profileRole: firestoreRole,
+        accountStatus: normalizeAccountStatus(firestoreProfile?.status),
+      };
+
+      const tokenExpiryMs = parseTokenExpiryMs(safeToken);
+      const ttlCandidates = [TOKEN_CACHE_TTL_MS];
+      if (tokenExpiryMs > now) {
+        ttlCandidates.push(Math.max(1000, tokenExpiryMs - now));
+      }
+      const ttl = Math.max(1000, Math.min(...ttlCandidates));
+      tokenCache.set(safeToken, {
+        authContext,
+        expiresAt: now + ttl,
+      });
+      pruneTokenCache();
+
+      return authContext;
+    }
+  } catch (error) {
+    const mappedError = mapAdminVerificationError(error);
+    if (mappedError) {
+      const authError = new Error(mappedError.message);
+      authError.status = mappedError.status;
+      authError.code = mappedError.code;
+      throw authError;
+    }
+    // Fall back to the REST verifier if Admin SDK is unavailable or temporarily failing.
   }
 
   const firebaseApiKey = toSafeText(
@@ -434,6 +565,70 @@ const verifyFirebaseIdToken = async (idToken) => {
   pruneTokenCache();
 
   return authContext;
+};
+
+const verifyFirebaseAppCheckToken = async (event, options = {}) => {
+  if (!shouldRequireAppCheck(options)) {
+    return {
+      appId: "",
+      enforced: false,
+      verified: false,
+    };
+  }
+
+  const token = extractAppCheckToken(event);
+  if (!token) {
+    if (shouldAllowMissingAppCheckToken(options)) {
+      return {
+        appId: "",
+        enforced: true,
+        verified: false,
+      };
+    }
+
+    const error = new Error("Missing App Check token.");
+    error.status = 401;
+    error.code = "app-check/missing-token";
+    throw error;
+  }
+
+  let adminRuntime;
+  try {
+    adminRuntime = getFirebaseAdminRuntime();
+  } catch (error) {
+    const appCheckError = new Error(
+      "App Check verification is configured but Firebase Admin is unavailable."
+    );
+    appCheckError.status = 500;
+    appCheckError.code =
+      error?.code === "firebase-admin/init-failed"
+        ? "app-check/server-config-error"
+        : "app-check/verification-unavailable";
+    throw appCheckError;
+  }
+
+  if (!adminRuntime?.appCheck) {
+    const error = new Error(
+      "App Check verification is configured but Firebase Admin is unavailable."
+    );
+    error.status = 500;
+    error.code = "app-check/server-config-error";
+    throw error;
+  }
+
+  try {
+    const decodedToken = await adminRuntime.appCheck.verifyToken(token);
+    return {
+      appId: toSafeText(decodedToken?.app_id),
+      enforced: true,
+      verified: true,
+    };
+  } catch {
+    const error = new Error("Invalid App Check token.");
+    error.status = 403;
+    error.code = "app-check/invalid-token";
+    throw error;
+  }
 };
 
 const checkRateLimit = ({
@@ -527,6 +722,25 @@ const enforceFunctionGuard = async (event, options = {}) => {
         error: "Email verification is required.",
         code: "auth/email-not-verified",
       }),
+    };
+  }
+
+  try {
+    const appCheck = await verifyFirebaseAppCheckToken(event, options);
+    authContext = {
+      ...authContext,
+      appCheck,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      response: buildJsonResponse(
+        toPositiveInteger(error?.status, 403),
+        {
+          error: toSafeText(error?.message) || "App Check verification failed.",
+          code: toSafeText(error?.code) || "app-check/failed",
+        }
+      ),
     };
   }
 

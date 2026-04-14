@@ -1,14 +1,12 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, limit, query } from "firebase/firestore";
+import { collection, getCountFromServer, limit, query, where } from "firebase/firestore";
 import AdminLineChart from "../components/AdminLineChart";
 import AdminMetricCard from "../components/AdminMetricCard";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
 import { db } from "../../lib/firebase";
 import {
   dateKeyFromInput,
-  normalizeRole,
-  normalizeStatus,
   toDateKey,
   toPercent,
 } from "../lib/format";
@@ -130,7 +128,6 @@ const buildMarksTrend = (marksDocs) => {
 };
 
 export default function AdminDashboardPage() {
-  const usersQuery = useMemo(() => query(collection(db, "users"), limit(1000)), []);
   const testsQuery = useMemo(() => query(collection(db, "tests"), limit(500)), []);
   const leavesQuery = useMemo(
     () => query(collection(db, "leaveRequests"), limit(500)),
@@ -144,11 +141,15 @@ export default function AdminDashboardPage() {
     () => query(collection(db, "internalMarks"), limit(1000)),
     []
   );
-
-  const usersState = useRealtimeCollection(usersQuery, {
-    map: (docItem) => ({ id: docItem.id, data: docItem.data() || {} }),
-    onErrorMessage: "Unable to load users.",
+  const [userCounts, setUserCounts] = useState({
+    activeUsers: 0,
+    totalParents: 0,
+    totalStaff: 0,
+    totalStudents: 0,
   });
+  const [loadingUserCounts, setLoadingUserCounts] = useState(true);
+  const [userCountsError, setUserCountsError] = useState("");
+
   const testsState = useRealtimeCollection(testsQuery, {
     map: (docItem) => ({ id: docItem.id, data: docItem.data() || {} }),
     onErrorMessage: "Unable to load tests.",
@@ -166,22 +167,78 @@ export default function AdminDashboardPage() {
     onErrorMessage: "Unable to load marks.",
   });
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadUserCounts = async ({ background = false } = {}) => {
+      if (!background) {
+        setLoadingUserCounts(true);
+      }
+      setUserCountsError("");
+
+      try {
+        const [
+          totalUsersSnapshot,
+          totalStudentsSnapshot,
+          totalStaffSnapshot,
+          totalParentsSnapshot,
+          blockedUsersSnapshot,
+          pendingUsersSnapshot,
+        ] = await Promise.all([
+          getCountFromServer(collection(db, "users")),
+          getCountFromServer(
+            query(collection(db, "users"), where("role", "==", "student"))
+          ),
+          getCountFromServer(
+            query(collection(db, "users"), where("role", "==", "staff"))
+          ),
+          getCountFromServer(
+            query(collection(db, "users"), where("role", "==", "parent"))
+          ),
+          getCountFromServer(
+            query(collection(db, "users"), where("status", "==", "blocked"))
+          ),
+          getCountFromServer(
+            query(
+              collection(db, "users"),
+              where("status", "in", ["pending", "pending_approval"])
+            )
+          ),
+        ]);
+
+        if (cancelled) return;
+
+        const totalUsers = totalUsersSnapshot.data().count;
+        const blockedUsers = blockedUsersSnapshot.data().count;
+        const pendingUsers = pendingUsersSnapshot.data().count;
+
+        setUserCounts({
+          activeUsers: Math.max(0, totalUsers - blockedUsers - pendingUsers),
+          totalParents: totalParentsSnapshot.data().count,
+          totalStaff: totalStaffSnapshot.data().count,
+          totalStudents: totalStudentsSnapshot.data().count,
+        });
+        setLoadingUserCounts(false);
+        setUserCountsError("");
+      } catch {
+        if (cancelled) return;
+        setLoadingUserCounts(false);
+        setUserCountsError("Unable to load user counts.");
+      }
+    };
+
+    loadUserCounts();
+    const refreshTimer = setInterval(() => {
+      loadUserCounts({ background: true });
+    }, 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(refreshTimer);
+    };
+  }, []);
+
   const summary = useMemo(() => {
-    const users = usersState.data || [];
-    let totalStudents = 0;
-    let totalStaff = 0;
-    let totalParents = 0;
-    let activeUsers = 0;
-
-    users.forEach((item) => {
-      const role = normalizeRole(item.data?.role);
-      const status = normalizeStatus(item.data?.status);
-      if (role === "student") totalStudents += 1;
-      if (role === "staff") totalStaff += 1;
-      if (role === "parent") totalParents += 1;
-      if (status === "active") activeUsers += 1;
-    });
-
     const pendingLeaveRequests = (leavesState.data || []).filter(
       (item) => normalizeLeaveStatus(item.data?.status) === "pending"
     ).length;
@@ -196,20 +253,12 @@ export default function AdminDashboardPage() {
     );
 
     return {
-      totalStudents,
-      totalStaff,
-      totalParents,
-      activeUsers,
+      ...userCounts,
       pendingLeaveRequests,
       activeTests,
       todayAttendancePercent,
     };
-  }, [
-    attendanceState.data,
-    leavesState.data,
-    testsState.data,
-    usersState.data,
-  ]);
+  }, [attendanceState.data, leavesState.data, testsState.data, userCounts]);
 
   const attendanceTrend = useMemo(
     () => buildAttendanceTrend(attendanceState.data || []),
@@ -221,14 +270,14 @@ export default function AdminDashboardPage() {
   );
 
   const isLoading =
-    usersState.loading ||
+    loadingUserCounts ||
     testsState.loading ||
     leavesState.loading ||
     attendanceState.loading ||
     marksState.loading;
 
   const errors = [
-    usersState.error,
+    userCountsError,
     testsState.error,
     leavesState.error,
     attendanceState.error,
