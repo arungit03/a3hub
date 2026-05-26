@@ -11,8 +11,8 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
-import { auth } from "./firebase";
+} from "./supabaseData";
+import { auth } from "./supabase";
 
 const DEFAULT_CHANNELS = Object.freeze({
   inApp: true,
@@ -419,7 +419,6 @@ const resolvePushTokens = (profile = {}) => {
     : [];
   const merged = fromArray.concat([
     profile.pushToken,
-    profile.fcmToken,
     profile.deviceToken,
   ]);
   return Array.from(

@@ -9,8 +9,8 @@ import {
   orderBy,
   query,
   serverTimestamp,
-} from "firebase/firestore";
-import { db } from "../lib/firebase";
+} from "../lib/supabaseData";
+import { db } from "../lib/supabase";
 import { resolveScheduleEntryDateKey, toDateKey } from "../lib/scheduleDate";
 import { useAuth } from "../state/auth";
 

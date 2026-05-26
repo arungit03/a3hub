@@ -1,4 +1,4 @@
-import { auth } from "./firebase.js";
+import { auth } from "./supabase.js";
 const DEFAULT_RUN_ENDPOINT = "/.netlify/functions/code-run";
 const DEFAULT_TIMEOUT_MS = 20000;
 

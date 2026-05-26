@@ -4,7 +4,7 @@ import {
   LEARNING_COLLECTIONS,
   buildLearningCatalog,
 } from "../data/catalog.js";
-import { ensureFirestore } from "../../../lib/firebase.js";
+import { ensureSupabaseData } from "../../../lib/supabase.js";
 
 const INITIAL_STATE = Object.freeze({
   catalog: LEARNING_CATALOG,
@@ -26,20 +26,20 @@ export function useLearningCatalog() {
       setState((previous) => ({ ...previous, loading: true, error: "" }));
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore) {
+        const database = await ensureSupabaseData();
+        if (!database) {
           if (!cancelled) {
             setState(INITIAL_STATE);
           }
           return;
         }
 
-        const { collection, getDocs, query } = await import("firebase/firestore");
+        const { collection, getDocs, query } = await import("../../../lib/supabaseData.js");
         const [courseSnap, topicSnap, quizSnap, problemSnap] = await Promise.all([
-          getDocs(query(collection(firestore, LEARNING_COLLECTIONS.courses))),
-          getDocs(query(collection(firestore, LEARNING_COLLECTIONS.topics))),
-          getDocs(query(collection(firestore, LEARNING_COLLECTIONS.quizzes))),
-          getDocs(query(collection(firestore, LEARNING_COLLECTIONS.problems))),
+          getDocs(query(collection(database, LEARNING_COLLECTIONS.courses))),
+          getDocs(query(collection(database, LEARNING_COLLECTIONS.topics))),
+          getDocs(query(collection(database, LEARNING_COLLECTIONS.quizzes))),
+          getDocs(query(collection(database, LEARNING_COLLECTIONS.problems))),
         ]);
 
         if (cancelled) return;
@@ -55,7 +55,7 @@ export function useLearningCatalog() {
           catalog,
           loading: false,
           error: "",
-          source: "firestore",
+          source: "supabase",
         });
       } catch {
         if (!cancelled) {
@@ -78,3 +78,4 @@ export function useLearningCatalog() {
 
   return state;
 }
+

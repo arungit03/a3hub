@@ -59,8 +59,8 @@ test("code-run handler rejects unauthenticated requests", async () => {
 });
 
 test("code-run handler executes source for authenticated requests", async () => {
-  const previousApiKey = process.env.FIREBASE_WEB_API_KEY;
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  const previousApiKey = process.env.SUPABASE_PUBLISHABLE_KEY;
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
 
   const token = createMockIdToken();
   const originalFetch = globalThis.fetch;
@@ -69,9 +69,7 @@ test("code-run handler executes source for authenticated requests", async () => 
     const resolvedUrl = String(url || "");
     seenUrls.push(resolvedUrl);
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -127,16 +125,16 @@ test("code-run handler executes source for authenticated requests", async () => 
     assert.equal(payload.output, "5\n");
     assert.equal(payload.exitCode, 0);
     assert.ok(
-      seenUrls.some((item) => item.includes("identitytoolkit.googleapis.com"))
+      seenUrls.some((item) => item.includes("/auth/v1/user"))
     );
     assert.ok(seenUrls.some((item) => item.endsWith("/runtimes")));
     assert.ok(seenUrls.some((item) => item.endsWith("/execute")));
   } finally {
     globalThis.fetch = originalFetch;
     if (previousApiKey === undefined) {
-      delete process.env.FIREBASE_WEB_API_KEY;
+      delete process.env.SUPABASE_PUBLISHABLE_KEY;
     } else {
-      process.env.FIREBASE_WEB_API_KEY = previousApiKey;
+      process.env.SUPABASE_PUBLISHABLE_KEY = previousApiKey;
     }
     delete process.env.CODE_RUN_RATE_LIMIT_MAX;
     delete process.env.CODE_RUN_RATE_LIMIT_WINDOW_MS;
@@ -144,22 +142,20 @@ test("code-run handler executes source for authenticated requests", async () => 
 });
 
 test("code-run handler enforces rate limits", async () => {
-  const previousApiKey = process.env.FIREBASE_WEB_API_KEY;
+  const previousApiKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const previousRateLimitMax = process.env.CODE_RUN_RATE_LIMIT_MAX;
   const previousRateWindow = process.env.CODE_RUN_RATE_LIMIT_WINDOW_MS;
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.CODE_RUN_RATE_LIMIT_MAX = "1";
   process.env.CODE_RUN_RATE_LIMIT_WINDOW_MS = "60000";
 
   const token = createMockIdToken();
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, options = {}) => {
+  globalThis.fetch = async (url) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -211,9 +207,9 @@ test("code-run handler enforces rate limits", async () => {
   } finally {
     globalThis.fetch = originalFetch;
     if (previousApiKey === undefined) {
-      delete process.env.FIREBASE_WEB_API_KEY;
+      delete process.env.SUPABASE_PUBLISHABLE_KEY;
     } else {
-      process.env.FIREBASE_WEB_API_KEY = previousApiKey;
+      process.env.SUPABASE_PUBLISHABLE_KEY = previousApiKey;
     }
     if (previousRateLimitMax === undefined) {
       delete process.env.CODE_RUN_RATE_LIMIT_MAX;
@@ -230,13 +226,13 @@ test("code-run handler enforces rate limits", async () => {
 
 test("code-run falls back to webhook provider when piston fails", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     CODE_RUN_PROVIDER_ORDER: process.env.CODE_RUN_PROVIDER_ORDER,
     CODE_RUN_WEBHOOK_URL: process.env.CODE_RUN_WEBHOOK_URL,
     CODE_RUN_WEBHOOK_AUTH_TOKEN: process.env.CODE_RUN_WEBHOOK_AUTH_TOKEN,
   };
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.CODE_RUN_PROVIDER_ORDER = "piston,webhook";
   process.env.CODE_RUN_WEBHOOK_URL = "https://example.com/code-run-fallback";
   process.env.CODE_RUN_WEBHOOK_AUTH_TOKEN = "code-fallback-token";
@@ -247,7 +243,7 @@ test("code-run falls back to webhook provider when piston fails", async () => {
   globalThis.fetch = async (url, options = {}) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -266,8 +262,8 @@ test("code-run falls back to webhook provider when piston fails", async () => {
 
     if (resolvedUrl === "https://example.com/code-run-fallback") {
       webhookCalled = true;
-      assert.equal(options.headers.authorization, "Bearer code-fallback-token");
       const parsedBody = JSON.parse(String(options.body || "{}"));
+      assert.equal(options.headers.authorization, "Bearer code-fallback-token");
       assert.equal(parsedBody.event, "code.run");
       assert.equal(parsedBody.language, "c");
       return jsonResponse(200, {
@@ -321,3 +317,4 @@ test("code-run falls back to webhook provider when piston fails", async () => {
     delete process.env.CODE_RUN_RATE_LIMIT_WINDOW_MS;
   }
 });
+

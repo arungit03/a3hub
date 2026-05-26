@@ -1896,7 +1896,7 @@ margin: 20px;`,
         "What is the main purpose of a media query?",
         [
           "To change styles when a condition like screen width is met",
-          "To create a Firestore collection",
+          "To create a Supabase-backed collection",
           "To delete unused CSS",
           "To build HTML tags",
         ],
@@ -1992,3 +1992,4 @@ export const buildCssExampleForTopic = ({ slug }) =>
       "The preview shows a simple styled block so you can connect the CSS rule with the visual result.",
     bodyMarkup: `<div class="demo-block">This topic uses the same CSS rule pattern with a different styling goal.</div>`,
   });
+

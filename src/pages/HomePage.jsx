@@ -9,8 +9,8 @@ import {
   orderBy,
   query,
   where,
-} from "firebase/firestore";
-import { db } from "../lib/firebase";
+} from "../lib/supabaseData";
+import { db } from "../lib/supabase";
 import { useAuth } from "../state/auth";
 import StatCard from "../components/dashboard/StatCard";
 import ActivityItem from "../components/dashboard/ActivityItem";

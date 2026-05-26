@@ -9,10 +9,10 @@ import {
   orderBy,
   query,
   serverTimestamp,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import {
   createBulkUserNotifications,
   getStudentRecipientIds,

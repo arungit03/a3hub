@@ -54,3 +54,4 @@ test("markChallengeSolvedState increases streak on consecutive days", () => {
   assert.equal(dayTwo.bestStreak, 2);
   assert.equal(dayTwo.daysParticipated, 2);
 });
+

@@ -10,3 +10,4 @@ test("project_structure.txt stays in sync with repository files", () => {
     "project_structure.txt is out of sync. Run `npm run docs:structure`."
   );
 });
+

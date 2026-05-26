@@ -5,4 +5,5 @@ export {
   listenOrdersForStaff,
   updateMenuItem,
   updateOrderStatus,
-} from "../../../shared/firebase/canteen.js";
+} from "../../../shared/supabase/canteen.js";
+

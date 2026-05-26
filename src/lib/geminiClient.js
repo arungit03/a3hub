@@ -1,4 +1,4 @@
-import { auth } from "./firebase.js";
+import { auth } from "./supabase.js";
 import {
   extractJsonPayload,
   normalizeInterviewQuizAndContactPlaces,
@@ -31,19 +31,6 @@ let discoveredModelsPromise = null;
 let discoveredModelsForKey = "";
 
 const isOpenAiKey = (apiKey) => String(apiKey || "").trim().startsWith("sk-");
-const isLocalDevelopmentRuntime = () => {
-  if (typeof window === "undefined") {
-    return Boolean(import.meta.env.DEV);
-  }
-
-  const host = String(window.location.hostname || "").trim().toLowerCase();
-  return (
-    Boolean(import.meta.env.DEV) ||
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host.endsWith(".local")
-  );
-};
 
 const getRuntimeApiKey = () => {
   if (typeof window === "undefined") return "";
@@ -101,38 +88,8 @@ const resolveAiProxyEndpoint = () => {
   return endpointFromRuntime || endpointFromBuild || DEFAULT_AI_PROXY_ENDPOINT;
 };
 
-const getFirebaseProjectId = () => {
-  const projectIdFromBuild = String(
-    import.meta.env.VITE_FIREBASE_PROJECT_ID || ""
-  ).trim();
-
-  if (typeof window === "undefined") {
-    return projectIdFromBuild;
-  }
-
-  const runtimeRoot =
-    window.__A3HUB_RUNTIME_CONFIG__ &&
-    typeof window.__A3HUB_RUNTIME_CONFIG__ === "object"
-      ? window.__A3HUB_RUNTIME_CONFIG__
-      : {};
-  const runtimeFirebaseConfig =
-    window.__A3HUB_FIREBASE_CONFIG__ &&
-    typeof window.__A3HUB_FIREBASE_CONFIG__ === "object"
-      ? window.__A3HUB_FIREBASE_CONFIG__
-      : runtimeRoot.firebase && typeof runtimeRoot.firebase === "object"
-        ? runtimeRoot.firebase
-        : {};
-  const projectIdFromRuntime = String(
-    runtimeFirebaseConfig.projectId || runtimeRoot.projectId || ""
-  ).trim();
-
-  return projectIdFromRuntime || projectIdFromBuild;
-};
-
 const getAiProxyCandidateEndpoints = () => {
   const configuredEndpoint = resolveAiProxyEndpoint();
-  const projectId = getFirebaseProjectId();
-  const isRelativeConfiguredEndpoint = /^\/(?!\/)/.test(configuredEndpoint);
   const candidates = [];
 
   const addCandidate = (value) => {
@@ -142,14 +99,6 @@ const getAiProxyCandidateEndpoints = () => {
   };
 
   addCandidate(configuredEndpoint);
-
-  if (projectId && isRelativeConfiguredEndpoint && isLocalDevelopmentRuntime()) {
-    addCandidate(`http://127.0.0.1:5001/${projectId}/us-central1/aiGenerate`);
-  }
-
-  if (projectId && isRelativeConfiguredEndpoint) {
-    addCandidate(`https://us-central1-${projectId}.cloudfunctions.net/aiGenerate`);
-  }
 
   return candidates;
 };
@@ -242,18 +191,17 @@ const requestAiProxyAction = async ({ action, payload = {} }) => {
       throw error;
     }
 
-    const looksLikeMissingFirebaseRoute =
+    const looksLikeMissingProxyRoute =
       [404, 405].includes(response.status) &&
-      (/^\/(?!\/)/.test(endpoint) ||
-        /cloudfunctions\.net\/aiGenerate(?:\/)?$/i.test(endpoint));
+      /^\/(?!\/)/.test(endpoint);
 
-    if (looksLikeMissingFirebaseRoute && !isLastEndpoint) {
+    if (looksLikeMissingProxyRoute && !isLastEndpoint) {
       continue;
     }
 
-    if (looksLikeMissingFirebaseRoute) {
+    if (looksLikeMissingProxyRoute) {
       error.userMessage =
-        "This deploy cannot reach the AI backend. Deploy the Firebase aiGenerate function and keep the /api/ai-generate Hosting rewrite in place.";
+        "This deploy cannot reach the AI backend. Deploy the Netlify AI function and keep the /api/ai-generate rewrite in place.";
       throw error;
     }
 

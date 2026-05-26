@@ -7,7 +7,7 @@ import {
   toDateKey,
 } from "../src/lib/scheduleDate.js";
 
-test("normalizeDateKey supports ymd, dmy, iso and Firestore-style date objects", () => {
+test("normalizeDateKey supports ymd, dmy, iso and timestamp-like date objects", () => {
   assert.equal(normalizeDateKey("2026-03-17"), "2026-03-17");
   assert.equal(normalizeDateKey("17/03/2026"), "2026-03-17");
   assert.equal(normalizeDateKey("2026-03-17T09:30:00.000Z"), "2026-03-17");
@@ -41,3 +41,4 @@ test("resolveScheduleEntryDateKey falls back to timestamps when explicit fields 
   );
   assert.equal(toDateKey(new Date("2026-03-17T00:00:00.000Z")), "2026-03-17");
 });
+

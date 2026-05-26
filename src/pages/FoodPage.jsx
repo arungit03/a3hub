@@ -22,7 +22,7 @@ import {
   listenOrdersForStudent,
   listenVisibleMenuItems,
   placeOrder,
-} from "../../shared/firebase/canteen.js";
+} from "../../shared/supabase/canteen.js";
 
 const CART_STORAGE_PREFIX = "a3hub.canteen.cart";
 
@@ -760,3 +760,4 @@ export default function FoodPage({ forcedRole }) {
     </div>
   );
 }
+

@@ -7,7 +7,7 @@ The repo now includes a shared canteen ordering system fully inside the main A3 
 - main A3 Hub app: student/staff/admin campus services include the `Food` ordering page
 - main login page: includes a `Food` portal option for `canteen_staff` and `admin`
 - integrated canteen console: available at `/canteen/dashboard`, `/canteen/menu`, `/canteen/orders`, and `/canteen/analytics`
-- shared backend: menu items, orders, roles, and canteen helpers still use the same Firebase project and Firestore database
+- shared backend: menu items, orders, roles, and canteen helpers still use the same Supabase project and Supabase database
 
 ## Feature Scope Isolation
 
@@ -74,53 +74,52 @@ Run commands:
 - `npm run test:e2e`
 - `npm run test:all`
 
-## Firebase Client Config
+## Supabase Client Config
 
-Frontend Firebase values now load from `.env`, and the Firebase messaging service worker config is generated automatically before `npm run dev` and `npm run build`.
+Frontend Supabase values now load from `.env`, and the Supabase messaging service worker config is generated automatically before `npm run dev` and `npm run build`.
 
 Required local keys:
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_STORAGE_BUCKET`
-- `VITE_FIREBASE_MESSAGING_SENDER_ID`
-- `VITE_FIREBASE_APP_ID`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_STORAGE_BUCKET`
+- `VITE_PUSH_VAPID_KEY`
+- `VITE_SUPABASE_PUBLISHABLE_KEY`
 
 Optional local keys:
-- `VITE_FIREBASE_MEASUREMENT_ID`
-- `VITE_FIREBASE_DATABASE_URL`
+- ``
+- `VITE_SUPABASE_URL`
 - `VITE_PUSH_VAPID_KEY`
 
 Use `.env.example` as the template for local setup.
 
 ## Email Verification / Password Reset Inbox Placement
 
-For Gmail `Primary` vs `Spam` behavior and Firebase setup steps, see:
+For Gmail `Primary` vs `Spam` behavior and Supabase setup steps, see:
 - `docs/email-deliverability.md`
 
 ## Immediate Verification Resend
 
-Fresh verification links can now be generated server-side and sent through the app email provider, so resend does not have to depend on Firebase's built-in email cooldown.
+Fresh verification links can now be generated server-side and sent through the app email provider, so resend does not have to depend on Supabase's built-in email cooldown.
 
 Set these Netlify server environment variables to enable that path:
-- `FIREBASE_PROJECT_ID`
-- `FIREBASE_SERVICE_ACCOUNT_JSON`
-  or use `FIREBASE_CLIENT_EMAIL` + `FIREBASE_PRIVATE_KEY`
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 - `RESEND_API_KEY`
 - `EMAIL_FROM`
 
 Notes:
-- `FIREBASE_SERVICE_ACCOUNT_JSON` should contain a service account with `firebaseauth.users.sendEmail` permission on the Firebase project.
-- If these server variables are missing, the app falls back to Firebase's default verification sender.
+- `SUPABASE_SERVICE_ROLE_KEY` is server-only and should never be exposed to the browser.
+- If these server variables are missing, the app falls back to Supabase's default verification sender.
 - With Resend test sender (`onboarding@resend.dev`), delivery is limited; use a verified sender domain for real student inbox delivery.
 
 ## Schedule Auto-Delete (24h)
 
 Schedule docs now include an `expiresAt` timestamp.
 
-To delete old schedules automatically from Firestore itself, enable a TTL policy:
+To delete old schedules automatically from Supabase itself, enable a TTL policy:
 
-1. Open Firebase Console -> Firestore Database.
+1. Open Supabase Dashboard -> Supabase database.
 2. Go to TTL policies.
 3. Add policy for collection group `schedules` on field `expiresAt`.
 
@@ -128,18 +127,18 @@ To delete old schedules automatically from Firestore itself, enable a TTL policy
 
 Leave request docs now include an `expiresAt` timestamp.
 
-To delete old leave requests automatically from Firestore itself, enable a TTL policy:
+To delete old leave requests automatically from Supabase itself, enable a TTL policy:
 
-1. Open Firebase Console -> Firestore Database.
+1. Open Supabase Dashboard -> Supabase database.
 2. Go to TTL policies.
 3. Add policy for collection group `leaveRequests` on field `expiresAt`.
 
-## Assignment File Uploads (No Firebase Storage Billing)
+## Assignment File Uploads (No Supabase Storage Billing)
 
 Assignments and student answer files now upload with automatic fallback:
 - Cloudinary (if configured)
-- Firebase Storage
-- Firestore chunk upload fallback (no Storage needed)
+- Supabase Storage
+- Supabase chunk upload fallback (no Storage needed)
 - Inline data URL fallback for small files (<= 700 KB)
 
 1. Create an unsigned upload preset in Cloudinary.
@@ -152,9 +151,9 @@ Assignments and student answer files now upload with automatic fallback:
    - `window.__A3HUB_CLOUDINARY_CONFIG__.cloudName`
    - `window.__A3HUB_CLOUDINARY_CONFIG__.uploadPreset`
 
-If using Firebase Storage fallback, ensure Storage is enabled and rules allow signed-in users.
+If using Supabase Storage fallback, ensure Storage is enabled and rules allow signed-in users.
 
-If Cloudinary and Firebase Storage fail, files are saved under:
+If Cloudinary and Supabase Storage fail, files are saved under:
 - `/uploadedFiles/{fileId}`
 - `/uploadedFiles/{fileId}/chunks/{chunkId}`
 and served through:
@@ -182,7 +181,7 @@ Configuration options:
    - `GEMINI_API_KEY` (preferred) or `OPENAI_API_KEY`
 2. Deploy with server function:
    - Netlify: `netlify/functions/ai-generate.cjs`
-   - Firebase: `functions/index.js` exposing `/api/ai-generate`
+   - Supabase: `functions/index.js` exposing `/api/ai-generate`
 3. Browser runtime config is generated into `public/runtime-config.js`:
    - `window.__A3HUB_GEMINI_CONFIG__.apiKey = ""`
    - `window.__A3HUB_GEMINI_CONFIG__.endpoint = "/api/ai-generate"`
@@ -240,7 +239,6 @@ Notes:
 
 Attendance status updates now trigger email delivery when notifications are created with `channels.email = true`.
 This is already wired for:
-- Face-marked daily present
 - Staff manual present/absent updates per session
 - Staff bulk `Select All Present`
 
@@ -273,33 +271,33 @@ Notes:
 - You can control per-user email send using `notificationPreferences.email` on each `users/{uid}` doc.
 - With Resend test sender (`onboarding@resend.dev`), delivery is limited; use a verified sender domain to deliver to student emails.
 
-## Firebase Push Notification (FCM Web Push)
+## Supabase Push Notification (Web Push Web Push)
 
-App notifications can also fan out as browser/mobile push via Firebase Cloud Messaging.
+App notifications can also fan out as browser/mobile push via browser Web Push.
 
-### 1) Firebase setup
+### 1) Supabase setup
 
-In Firebase Console -> Project settings -> Cloud Messaging:
+In Supabase Dashboard -> Project settings -> Cloud Messaging:
 - Create Web Push certificate key pair and copy VAPID public key.
 - Copy Legacy server key (for Netlify function `push-send`).
 
 ### 2) Netlify server secret
 
 Set in Netlify Environment Variables:
-- `FCM_SERVER_KEY`
+- `Web Push_SERVER_KEY`
 
 ### 3) Client build config
 
 Set these values in local `.env` or your Netlify environment variables:
 - `VITE_PUSH_NOTIFY_ENABLED=true`
-- `VITE_PUSH_VAPID_KEY="<YOUR_FIREBASE_VAPID_PUBLIC_KEY>"`
+- `VITE_PUSH_VAPID_KEY="<YOUR_SUPABASE_VAPID_PUBLIC_KEY>"`
 - `VITE_PUSH_NOTIFY_ENDPOINT=/.netlify/functions/push-send` (optional)
-- `VITE_PUSH_SW_URL=/firebase-messaging-sw.js` (optional)
+- `VITE_PUSH_SW_URL=/push-sw.js` (optional)
 
 If you still prefer runtime config, edit `public/runtime-config.js`:
 - `enabled: true`
 - `endpoint: "/.netlify/functions/push-send"`
-- `swUrl: "/firebase-messaging-sw.js"`
+- `swUrl: "/push-sw.js"`
 
 ### 4) Deploy and test
 
@@ -308,4 +306,6 @@ If you still prefer runtime config, edit `public/runtime-config.js`:
 - This stores `pushToken` / `pushTokens` in `users/{uid}`.
 - Any `createUserNotification` / `createBulkUserNotifications` call now sends:
   - In-app inbox notification
-  - FCM push notification (if token exists)
+  - Web Push push notification (if token exists)
+
+

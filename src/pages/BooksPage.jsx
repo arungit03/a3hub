@@ -10,11 +10,11 @@ import {
   query,
   serverTimestamp,
   writeBatch,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { useAuth } from "../state/auth";
 
 const trimValue = (value) => (value || "").trim();

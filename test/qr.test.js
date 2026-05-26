@@ -16,3 +16,4 @@ test("collectIdentifierTokens keeps unique raw and numeric tokens", () => {
 
   assert.deepEqual(tokens, ["ID-42", "42", "A/42"]);
 });
+

@@ -7,7 +7,7 @@
       "properties": {
         "uid": {
           "type": "string",
-          "description": "The user's unique ID from Firebase Auth."
+          "description": "The user's unique ID from Supabase Auth."
         },
         "name": {
           "type": "string",
@@ -83,7 +83,7 @@
   "auth": {
     "providers": ["email"]
   },
-  "firestore": {
+  "supabase": {
     "/users/{userId}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Stores user profile information."
@@ -94,3 +94,4 @@
     }
   }
 }
+

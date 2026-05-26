@@ -4,13 +4,10 @@
 /index.html
   Cache-Control: public, max-age=0, must-revalidate
 
-/firebase-messaging-sw-config.js
-  Cache-Control: public, max-age=0, must-revalidate
-
 /runtime-config.js
   Cache-Control: public, max-age=0, must-revalidate
 
-/firebase-messaging-sw.js
+/push-sw.js
   Cache-Control: public, max-age=0, must-revalidate
 
 /assets/*

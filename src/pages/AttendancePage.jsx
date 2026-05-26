@@ -1,9 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import { useAuth } from "../state/auth";
-import { ensureFaceApiReady } from "../lib/faceApiLoader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { resolveScheduleEntryDateKey, toDateKey } from "../lib/scheduleDate";
 import {
   createBulkUserNotifications,
@@ -22,93 +21,24 @@ import {
   setDoc,
   limit,
   where,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import {
-  buildFaceRegistrationProfile,
-  cosineSimilarity,
-  FACE_MATCH_CONFIRMATION_COUNT,
-  FACE_MATCH_CONFIRMATION_WINDOW_MS,
-  FACE_MATCH_COOLDOWN_MS,
-  FACE_MATCH_FAST_TRACK_THRESHOLD,
-  FACE_MATCH_THRESHOLD,
-  FACE_MIN_VECTOR_LENGTH,
-  FACE_REGISTRATION_MIN_SAMPLE_SIMILARITY,
-  FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT,
   formatDateLabel,
   formatDateTimeLabel,
-  formatTimeLabel,
   getCreatedAtMillis,
-  getRequiredFaceConfirmationCount,
   getPeriodNumber,
-  getStudentFaceTemplates,
-  getStudentFaceVector,
-  getStudentScanTokens,
-  getStudentScanToken,
-  isRetryableScanError,
-  mergeOfflineScanQueueItem,
   normalizeAttendanceStatus,
   normalizeDailyQrScanEntry,
-  normalizeFaceVector,
-  normalizeFirestoreErrorCode,
-  readOfflineScanQueue,
-  resolveReliableFaceMatches,
   resolveStudentEmail,
   SCAN_QUEUE_DATE_PATTERN,
-  SCAN_QUEUE_TOKEN_PATTERN,
   statusChipClassMap,
   statusLabelMap,
-  toSimilarityPercentLabel,
-  writeOfflineScanQueue,
 } from "../features/attendance/attendanceUtils.js";
-
-const FaceAttendanceModal = lazy(() => import("../components/FaceAttendanceModal"));
-
-const getFaceScanStudentLabel = (student) =>
-  student?.name || student?.email || "Student";
 
 const normalizeDepartmentFilter = (value) =>
   String(value || "")
     .trim()
     .toLowerCase();
-
-const summarizeFaceScanItems = (items, formatter, maxItems = 3) => {
-  const safeItems = Array.isArray(items) ? items : [];
-  const labels = safeItems
-    .map((item, index) =>
-      typeof formatter === "function" ? formatter(item, index) : String(item || "").trim()
-    )
-    .filter(Boolean);
-
-  if (labels.length === 0) return "";
-  if (labels.length <= maxItems) return labels.join(", ");
-  return `${labels.slice(0, maxItems).join(", ")} +${labels.length - maxItems} more`;
-};
-
-const pruneTimestampMap = (entries, maxAgeMs, now = Date.now()) =>
-  Object.fromEntries(
-    Object.entries(entries && typeof entries === "object" ? entries : {}).filter(
-      ([, value]) => {
-        const timestamp = Number(value);
-        return Number.isFinite(timestamp) && now - timestamp < maxAgeMs;
-      }
-    )
-  );
-
-const prunePendingFaceMatches = (entries, now = Date.now()) =>
-  Object.fromEntries(
-    Object.entries(entries && typeof entries === "object" ? entries : {}).filter(
-      ([, value]) => {
-        const count = Number(value?.count);
-        const timestamp = Number(value?.at);
-        return (
-          Number.isFinite(count) &&
-          count > 0 &&
-          Number.isFinite(timestamp) &&
-          now - timestamp < FACE_MATCH_CONFIRMATION_WINDOW_MS
-        );
-      }
-    )
-  );
 
 export default function AttendancePage({ forcedStaff }) {
   const { role, user, profile } = useAuth();
@@ -130,37 +60,18 @@ export default function AttendancePage({ forcedStaff }) {
   const [absenceReasonError, setAbsenceReasonError] = useState("");
   const [loadingAbsenceReason, setLoadingAbsenceReason] = useState(false);
   const [savingAbsenceReason, setSavingAbsenceReason] = useState(false);
-  const [_scanStatus, setScanStatus] = useState("");
-  const [scanError, setScanError] = useState("");
-  const [_lastScannedId, setLastScannedId] = useState("");
-  const [isFaceScanModalOpen, setIsFaceScanModalOpen] = useState(false);
-  const [isFaceRegisterModalOpen, setIsFaceRegisterModalOpen] = useState(false);
-  const [faceProfileStatus, setFaceProfileStatus] = useState("");
-  const [faceProfileError, setFaceProfileError] = useState("");
-  const [scanQueue, setScanQueue] = useState([]);
-  const [scanQueueStatus, setScanQueueStatus] = useState("");
-  const [isSyncingScanQueue, setIsSyncingScanQueue] = useState(false);
   const [periodUpdateStatus, setPeriodUpdateStatus] = useState("");
   const [periodUpdateError, setPeriodUpdateError] = useState("");
   const [savingPeriodKey, setSavingPeriodKey] = useState("");
   const [savingBulkSessionId, setSavingBulkSessionId] = useState("");
-  const [isOnline, setIsOnline] = useState(() =>
-    typeof navigator !== "undefined" ? navigator.onLine : true
-  );
 
   const [records, setRecords] = useState({});
-  const lastScanRef = useRef({});
-  const lastFaceMatchRef = useRef({});
-  const pendingFaceMatchRef = useRef({});
-  const registrationSamplesRef = useRef([]);
-  const queueSyncInFlightRef = useRef(false);
 
   const isStaff =
     typeof forcedStaff === "boolean" ? forcedStaff : role === "staff";
   const isParent = role === "parent";
   const isStudent = !isStaff && role === "student";
   const canSubmitAbsenceReason = !isStaff && isParent;
-  const staffDisplayName = profile?.name || user?.displayName || "Staff";
   const staffDepartmentFilter = useMemo(() => {
     const departmentKey = normalizeDepartmentFilter(profile?.departmentKey);
     if (departmentKey) {
@@ -206,79 +117,7 @@ export default function AttendancePage({ forcedStaff }) {
       }),
     [scheduleItems]
   );
-  const studentScanIndex = useMemo(() => {
-    const index = new Map();
-    if (!isStaff) return index;
-
-    students.forEach((student) => {
-      getStudentScanTokens(student).forEach((token) => {
-        const existing = index.get(token) || [];
-        existing.push(student);
-        index.set(token, existing);
-      });
-    });
-
-    return index;
-  }, [isStaff, students]);
-  const studentFaceProfiles = useMemo(() => {
-    const next = [];
-    if (!isStaff) return next;
-
-    students.forEach((student) => {
-      const templates = getStudentFaceTemplates(student);
-      if (templates.length > 0) {
-        next.push({
-          student,
-          templates,
-          templateCount: templates.length,
-        });
-      }
-    });
-
-    return next;
-  }, [isStaff, students]);
-  const enrolledFaceCount = studentFaceProfiles.length;
-  const canOpenFaceScan =
-    !loadingStudents &&
-    !studentsError &&
-    students.length > 0 &&
-    enrolledFaceCount > 0;
-  const faceScanStateLabel = loadingStudents
-    ? "Loading"
-    : studentsError
-    ? "Issue"
-    : canOpenFaceScan
-    ? "Ready"
-    : "Standby";
-  const faceScanSummaryLabel = loadingStudents
-    ? "Preparing registered face profiles"
-    : studentsError
-    ? "Face scan setup needs attention"
-    : students.length === 0
-    ? "No students available for live scanning"
-    : enrolledFaceCount === 0
-    ? "Register at least one student face profile"
-    : `${enrolledFaceCount}/${students.length} face profiles ready`;
-  useEffect(() => {
-    if (!isStaff || !canOpenFaceScan || typeof window === "undefined") {
-      return undefined;
-    }
-
-    let cancelled = false;
-
-    void import("../components/FaceAttendanceModal");
-    void ensureFaceApiReady().catch(() => {
-      if (cancelled) return;
-      // Warm model assets silently so the first scan opens faster.
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [canOpenFaceScan, isStaff]);
   const dailyQrScans = useMemo(() => {
-    const faceValue = attendanceData?.dailyFaceScans;
-    if (faceValue && typeof faceValue === "object") return faceValue;
     const rawValue = attendanceData?.dailyQrScans;
     return rawValue && typeof rawValue === "object" ? rawValue : {};
   }, [attendanceData]);
@@ -393,36 +232,12 @@ export default function AttendancePage({ forcedStaff }) {
 
     return dailyQrScanMetaByStudent[currentStudentId] ? "present" : "unmarked";
   }, [currentStudentId, dailyQrScanMetaByStudent, isStudent, periodStatusByStudent]);
-  const currentStudentFaceVector = useMemo(
-    () => getStudentFaceVector({ ...(profile || {}), id: currentStudentId }),
-    [currentStudentId, profile]
-  );
-  const hasCurrentStudentFaceProfile =
-    currentStudentFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
-  useEffect(() => {
-    if (!isStudent || !isFaceRegisterModalOpen) {
-      registrationSamplesRef.current = [];
-      return;
-    }
-    registrationSamplesRef.current = [];
-  }, [isFaceRegisterModalOpen, isStudent]);
   const absenceReasonSubmittedAtLabel = formatDateTimeLabel(
     absenceReason?.submittedAt || absenceReason?.updatedAt || absenceReason?.createdAt
   );
   const hasSubmittedAbsenceReason = Boolean(
     String(absenceReason?.reason || "").trim()
   );
-  const queuedScanCount = scanQueue.length;
-  const queuedScanCountForSelectedDate = useMemo(
-    () => scanQueue.filter((item) => item.date === selectedDate).length,
-    [scanQueue, selectedDate]
-  );
-  const latestQueuedScanLabel = useMemo(() => {
-    if (scanQueue.length === 0) return "";
-    const latest = [...scanQueue].sort((a, b) => b.queuedAt - a.queuedAt)[0];
-    return latest ? formatDateTimeLabel(latest.queuedAt) : "";
-  }, [scanQueue]);
-
   useEffect(() => {
     if (!SCAN_QUEUE_DATE_PATTERN.test(selectedDate)) {
       setScheduleItems([]);
@@ -604,26 +419,11 @@ export default function AttendancePage({ forcedStaff }) {
 
   useEffect(() => {
     if (!isStaff) {
-      setIsFaceScanModalOpen(false);
-      setScanStatus("");
-      setScanError("");
-      setLastScannedId("");
-      setScanQueue([]);
-      setScanQueueStatus("");
-      setIsSyncingScanQueue(false);
       setPeriodUpdateStatus("");
       setPeriodUpdateError("");
       setSavingPeriodKey("");
       setSavingBulkSessionId("");
-      setIsOnline(typeof navigator !== "undefined" ? navigator.onLine : true);
-      lastScanRef.current = {};
-      lastFaceMatchRef.current = {};
-      pendingFaceMatchRef.current = {};
-      queueSyncInFlightRef.current = false;
-      return undefined;
     }
-
-    setScanQueue(readOfflineScanQueue());
     return undefined;
   }, [isStaff]);
 
@@ -633,35 +433,6 @@ export default function AttendancePage({ forcedStaff }) {
     setSavingPeriodKey("");
     setSavingBulkSessionId("");
   }, [selectedDate]);
-
-  useEffect(() => {
-    if (isStudent) return;
-    setIsFaceRegisterModalOpen(false);
-    setFaceProfileStatus("");
-    setFaceProfileError("");
-  }, [isStudent]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const updateOnlineState = () => {
-      setIsOnline(window.navigator.onLine);
-    };
-
-    updateOnlineState();
-    window.addEventListener("online", updateOnlineState);
-    window.addEventListener("offline", updateOnlineState);
-
-    return () => {
-      window.removeEventListener("online", updateOnlineState);
-      window.removeEventListener("offline", updateOnlineState);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isStaff) return;
-    writeOfflineScanQueue(scanQueue);
-  }, [isStaff, scanQueue]);
 
   useEffect(() => {
     if (!canSubmitAbsenceReason || !absenceReasonDocId) {
@@ -703,182 +474,6 @@ export default function AttendancePage({ forcedStaff }) {
 
     return () => unsubscribe();
   }, [absenceReasonDocId, canSubmitAbsenceReason]);
-
-  const markStudentPresentFromQr = useCallback(
-    async ({
-      student,
-      qrToken,
-      scanSource = "face",
-      matchSimilarity = null,
-      vectorLength = null,
-      attendanceDate = selectedDate,
-      applyLocalState = attendanceDate === selectedDate,
-    }) => {
-      const normalizedDate = String(attendanceDate || "").trim();
-      const normalizedToken =
-        String(qrToken || "").trim() || getStudentScanToken(student);
-      if (
-        !isStaff ||
-        !student?.id ||
-        !user ||
-        !normalizedToken ||
-        !SCAN_QUEUE_DATE_PATTERN.test(normalizedDate)
-      ) {
-        return { ok: false, reason: "invalid_context" };
-      }
-
-      const attendanceRef = doc(db, "attendance", normalizedDate);
-      const similarityValue = Number.isFinite(matchSimilarity)
-        ? Number(Number(matchSimilarity).toFixed(6))
-        : null;
-      const vectorLengthValue = Number.isFinite(vectorLength)
-        ? Number(vectorLength)
-        : null;
-
-      try {
-        const transactionResult = await runTransaction(db, async (transaction) => {
-          const attendanceSnapshot = await transaction.get(attendanceRef);
-          const attendanceValue = attendanceSnapshot.exists()
-            ? attendanceSnapshot.data()
-            : {};
-
-          const nextDailyScans =
-            attendanceValue?.dailyFaceScans &&
-            typeof attendanceValue.dailyFaceScans === "object"
-              ? { ...attendanceValue.dailyFaceScans }
-              : attendanceValue?.dailyQrScans &&
-                  typeof attendanceValue.dailyQrScans === "object"
-                ? { ...attendanceValue.dailyQrScans }
-              : {};
-
-          const existingScanMeta = normalizeDailyQrScanEntry(
-            nextDailyScans[student.id]
-          );
-          if (existingScanMeta) {
-            return {
-              status: "already_scanned",
-              existingScanMeta,
-            };
-          }
-
-          const scanMeta = {
-            qrNum: normalizedToken,
-            scannedAt: serverTimestamp(),
-            scannedBy: user.uid,
-            scannedByName: staffDisplayName,
-            source: scanSource,
-          };
-          if (similarityValue !== null) {
-            scanMeta.similarity = similarityValue;
-          }
-          if (vectorLengthValue !== null) {
-            scanMeta.vectorLength = vectorLengthValue;
-          }
-
-          nextDailyScans[student.id] = scanMeta;
-
-          const payload = {
-            date: normalizedDate,
-            updatedAt: serverTimestamp(),
-            dailyFaceScans: nextDailyScans,
-            dailyQrScans: nextDailyScans,
-          };
-
-          transaction.set(attendanceRef, payload, { merge: true });
-
-          return {
-            status: "marked_present",
-          };
-        });
-
-        if (transactionResult?.status === "already_scanned") {
-          return {
-            ok: false,
-            reason: "already_scanned",
-            existingScanMeta: transactionResult.existingScanMeta,
-          };
-        }
-
-        if (applyLocalState) {
-          const optimisticScanAt = Date.now();
-          setAttendanceData((prev) => {
-            const next = prev && typeof prev === "object" ? { ...prev } : {};
-            const existingDailyScans =
-              next.dailyFaceScans && typeof next.dailyFaceScans === "object"
-                ? next.dailyFaceScans
-                : next.dailyQrScans && typeof next.dailyQrScans === "object"
-                  ? next.dailyQrScans
-                : {};
-
-            const optimisticScanMeta = {
-              qrNum: normalizedToken,
-              scannedAt: optimisticScanAt,
-              scannedBy: user.uid,
-              scannedByName: staffDisplayName,
-              source: scanSource,
-            };
-            if (similarityValue !== null) {
-              optimisticScanMeta.similarity = similarityValue;
-            }
-            if (vectorLengthValue !== null) {
-              optimisticScanMeta.vectorLength = vectorLengthValue;
-            }
-
-            const nextValue = {
-              ...existingDailyScans,
-              [student.id]: optimisticScanMeta,
-            };
-            next.dailyFaceScans = nextValue;
-            next.dailyQrScans = nextValue;
-
-            return next;
-          });
-        }
-
-        try {
-          const studentName = student.name || student.email || "Student";
-          const notificationDateLabel =
-            formatDateLabel(normalizedDate) || normalizedDate;
-          await createUserNotification(db, {
-            recipientId: student.id,
-            recipientEmail: resolveStudentEmail(student),
-            type: notificationTypes.ATTENDANCE_STATUS,
-            priority: "low",
-            topic: notificationTypes.ATTENDANCE_STATUS,
-            title: "Attendance marked Present",
-            message: `${studentName}: Present on ${notificationDateLabel}.`,
-            link: "/student/attendance",
-            sourceType: "attendance",
-            sourceId: `${normalizedDate}_daily_${student.id}_present`,
-            channels: {
-              inApp: true,
-              email: true,
-              whatsapp: true,
-              push: true,
-            },
-          });
-        } catch {
-          // Attendance save already succeeded; notification can fail independently.
-        }
-
-        return { ok: true };
-      } catch (error) {
-        const errorCode = normalizeFirestoreErrorCode(error?.code);
-        console.error("Face attendance update failed", error);
-        return {
-          ok: false,
-          reason: isRetryableScanError(errorCode) ? "retryable_error" : "save_failed",
-          errorCode,
-        };
-      }
-    },
-    [
-      isStaff,
-      selectedDate,
-      staffDisplayName,
-      user,
-    ]
-  );
 
   const handleStaffPeriodAttendanceChange = useCallback(
     async ({ session, student, nextStatus }) => {
@@ -1203,678 +798,6 @@ export default function AttendancePage({ forcedStaff }) {
     [isStaff, orderedScheduleItems, selectedDate, students, user]
   );
 
-  const queueScanForOfflineSync = useCallback(
-    ({
-      date,
-      qrToken,
-      student,
-      source = "face",
-      matchSimilarity = null,
-    }) => {
-      const normalizedDate = String(date || "").trim();
-      const normalizedToken = String(qrToken || "").trim();
-      if (
-        !SCAN_QUEUE_DATE_PATTERN.test(normalizedDate) ||
-        !SCAN_QUEUE_TOKEN_PATTERN.test(normalizedToken)
-      ) {
-        return { alreadyQueued: false };
-      }
-
-      const alreadyQueued = scanQueue.some(
-        (item) => item.date === normalizedDate && item.qrToken === normalizedToken
-      );
-      setScanQueue((prev) =>
-        mergeOfflineScanQueueItem(prev, {
-          date: normalizedDate,
-          qrToken: normalizedToken,
-          queuedAt: Date.now(),
-          studentId: student?.id || "",
-          studentName: student?.name || student?.email || "Student",
-          source,
-          matchSimilarity,
-        })
-      );
-
-      return { alreadyQueued };
-    },
-    [scanQueue]
-  );
-
-  useEffect(() => {
-    if (!isStaff || !user || !isOnline) return undefined;
-    if (loadingStudents || studentsError) return undefined;
-    if (scanQueue.length === 0) return undefined;
-    if (queueSyncInFlightRef.current) return undefined;
-
-    let isActive = true;
-
-    const syncQueuedScans = async () => {
-      queueSyncInFlightRef.current = true;
-      setIsSyncingScanQueue(true);
-
-      let pendingQueue = [...scanQueue];
-      let syncedCount = 0;
-      let unresolvedCount = 0;
-      let retryableFailureCount = 0;
-
-      try {
-        for (const item of scanQueue) {
-          if (!isActive) break;
-
-          const matches = studentScanIndex.get(item.qrToken) || [];
-          const matchedStudent =
-            matches.length === 1
-              ? matches[0]
-              : students.find((student) => student.id === item.studentId) || null;
-          if (!matchedStudent) {
-            unresolvedCount += 1;
-            continue;
-          }
-
-          const saveResult = await markStudentPresentFromQr({
-            student: matchedStudent,
-            qrToken: item.qrToken,
-            scanSource: item.source || "face",
-            matchSimilarity: item.matchSimilarity,
-            attendanceDate: item.date,
-            applyLocalState: item.date === selectedDate,
-          });
-
-          if (saveResult.ok || saveResult.reason === "already_scanned") {
-            syncedCount += 1;
-            pendingQueue = pendingQueue.filter((entry) => entry.id !== item.id);
-            continue;
-          }
-
-          if (saveResult.reason === "retryable_error") {
-            retryableFailureCount += 1;
-            continue;
-          }
-
-          unresolvedCount += 1;
-          pendingQueue = pendingQueue.filter((entry) => entry.id !== item.id);
-        }
-
-        if (!isActive) return;
-
-        if (pendingQueue.length !== scanQueue.length) {
-          setScanQueue(pendingQueue);
-        }
-
-        if (syncedCount > 0) {
-          setScanQueueStatus(
-            `${syncedCount} queued face scan${syncedCount > 1 ? "s" : ""} synced successfully.`
-          );
-        } else if (retryableFailureCount > 0) {
-          setScanQueueStatus("Queue sync paused. Waiting for stable internet.");
-        } else if (unresolvedCount > 0) {
-          setScanQueueStatus(
-            "Some queued face scans could not be matched. They remain in queue."
-          );
-        }
-      } finally {
-        queueSyncInFlightRef.current = false;
-        if (isActive) {
-          setIsSyncingScanQueue(false);
-        }
-      }
-    };
-
-    void syncQueuedScans();
-
-    return () => {
-      isActive = false;
-    };
-  }, [
-    isOnline,
-    isStaff,
-    loadingStudents,
-    markStudentPresentFromQr,
-    scanQueue,
-    selectedDate,
-    studentScanIndex,
-    students,
-    studentsError,
-    user,
-  ]);
-
-  const handleStudentFaceRegistration = useCallback(
-    async ({ vector, vectorLength, detectionScore }) => {
-      if (!isStudent || !user?.uid) {
-        return {
-          tone: "error",
-          message: "Only students can register a face profile.",
-        };
-      }
-
-      const normalizedVector = normalizeFaceVector(vector);
-      if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) {
-        setFaceProfileError("Captured face vector is not valid. Try again.");
-        return {
-          tone: "error",
-          message: "Captured face vector is not valid. Try again.",
-        };
-      }
-
-      setFaceProfileStatus("");
-      setFaceProfileError("");
-
-      try {
-        const existingSamples = Array.isArray(registrationSamplesRef.current)
-          ? registrationSamplesRef.current
-              .map((sample) => normalizeFaceVector(sample))
-              .filter((sample) => sample.length >= FACE_MIN_VECTOR_LENGTH)
-          : [];
-        const bestExistingSimilarity =
-          existingSamples.length > 0
-            ? existingSamples.reduce(
-                (bestSimilarity, sample) =>
-                  Math.max(bestSimilarity, cosineSimilarity(normalizedVector, sample)),
-                0
-              )
-            : 1;
-
-        if (
-          existingSamples.length > 0 &&
-          bestExistingSimilarity < FACE_REGISTRATION_MIN_SAMPLE_SIMILARITY
-        ) {
-          registrationSamplesRef.current = [normalizedVector];
-          return {
-            tone: "info",
-            message: `Capture restarted because the face changed too much. Sample 1/${FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT} captured.`,
-          };
-        }
-
-        const registrationProfile = buildFaceRegistrationProfile([
-          ...existingSamples,
-          normalizedVector,
-        ]);
-        registrationSamplesRef.current = registrationProfile.vectors;
-
-        if (
-          registrationProfile.sampleCount < FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT
-        ) {
-          const remainingSamples =
-            FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT -
-            registrationProfile.sampleCount;
-          return {
-            tone: "info",
-            message: `Sample ${registrationProfile.sampleCount}/${FACE_REGISTRATION_REQUIRED_SAMPLE_COUNT} captured. Hold steady for ${remainingSamples} more clear frame${
-              remainingSamples === 1 ? "" : "s"
-            }.`,
-          };
-        }
-
-        await setDoc(
-          doc(db, "users", user.uid),
-          {
-            faceAttendance: {
-              vector: registrationProfile.vector,
-              vectorLength: Number.isFinite(vectorLength)
-                ? Number(vectorLength)
-                : registrationProfile.vectorLength,
-              sampleVectors: registrationProfile.sampleVectors,
-              sampleCount: registrationProfile.sampleCount,
-              algorithm: "face-api-128d",
-              matchThreshold: FACE_MATCH_THRESHOLD,
-              detectionScore: Number.isFinite(detectionScore)
-                ? Number(detectionScore.toFixed(4))
-                : null,
-              sampleConsistency: registrationProfile.sampleConsistency,
-              sampleMinSimilarity: registrationProfile.sampleMinSimilarity,
-              updatedAt: serverTimestamp(),
-            },
-          },
-          { merge: true }
-        );
-
-        const successMessage = `Face profile saved with ${registrationProfile.sampleCount} verified samples.`;
-
-        setFaceProfileStatus(successMessage);
-        setFaceProfileError("");
-
-        return {
-          tone: "success",
-          message: successMessage,
-        };
-      } catch (error) {
-        console.error("Face profile registration failed", error);
-        const message = "Unable to save face profile right now.";
-        setFaceProfileStatus("");
-        setFaceProfileError(message);
-        return {
-          tone: "error",
-          message,
-        };
-      }
-    },
-    [isStudent, user]
-  );
-
-  const handleStaffFaceDescriptor = useCallback(
-    async ({
-      detections = [],
-      vector,
-      vectorLength,
-      skippedCount = 0,
-    }) => {
-      if (!isStaff) {
-        return {
-          tone: "error",
-          message: "Only staff can scan attendance.",
-        };
-      }
-
-      setScanStatus("");
-      setScanError("");
-
-      if (loadingStudents) {
-        pendingFaceMatchRef.current = {};
-        return {
-          tone: "info",
-          message: "Loading students for face matching...",
-        };
-      }
-
-      if (studentsError) {
-        pendingFaceMatchRef.current = {};
-        setScanError(studentsError);
-        return {
-          tone: "error",
-          message: studentsError,
-        };
-      }
-
-      if (studentFaceProfiles.length === 0) {
-        pendingFaceMatchRef.current = {};
-        const message = "No registered student face profiles found.";
-        setScanError(message);
-        return {
-          tone: "error",
-          message,
-        };
-      }
-
-      const rawDetections =
-        Array.isArray(detections) && detections.length > 0
-          ? detections
-          : vector
-          ? [{ vector, vectorLength }]
-          : [];
-
-      const normalizedDetections = rawDetections
-        .map((detection, detectionIndex) => {
-          const normalizedVector = normalizeFaceVector(detection?.vector ?? detection);
-          if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) {
-            return null;
-          }
-
-          return {
-            ...detection,
-            detectionIndex,
-            vector: normalizedVector,
-            vectorLength: Number.isFinite(detection?.vectorLength)
-              ? Number(detection.vectorLength)
-              : normalizedVector.length,
-          };
-        })
-        .filter(Boolean);
-
-      if (normalizedDetections.length === 0) {
-        pendingFaceMatchRef.current = {};
-        const message = "No usable faces detected for attendance.";
-        setScanError(message);
-        return {
-          tone: "info",
-          message,
-        };
-      }
-
-      const { accepted, rejected } = resolveReliableFaceMatches(
-        normalizedDetections,
-        studentFaceProfiles
-      );
-
-      const now = Date.now();
-      let pendingMatches = prunePendingFaceMatches(
-        pendingFaceMatchRef.current,
-        now
-      );
-      let recentScanKeys = pruneTimestampMap(
-        lastScanRef.current,
-        FACE_MATCH_COOLDOWN_MS,
-        now
-      );
-      let recentStudentMatches = pruneTimestampMap(
-        lastFaceMatchRef.current,
-        FACE_MATCH_COOLDOWN_MS,
-        now
-      );
-
-      if (accepted.length === 0) {
-        pendingFaceMatchRef.current = pendingMatches;
-        const ambiguousMatches = rejected.filter((item) => item.status === "ambiguous");
-        const bestRejectedMatch = rejected
-          .map((item) => item.bestMatch)
-          .filter(Boolean)
-          .sort((a, b) => b.similarity - a.similarity)[0];
-
-        const message =
-          ambiguousMatches.length > 0
-            ? `Ambiguous matches detected for ${ambiguousMatches.length} face${
-                ambiguousMatches.length > 1 ? "s" : ""
-              }. Separate students slightly and try again.`
-            : bestRejectedMatch
-            ? `No reliable multi-face match above ${toSimilarityPercentLabel(
-                FACE_MATCH_THRESHOLD
-              )}. Best: ${getFaceScanStudentLabel(
-                bestRejectedMatch.student
-              )} at ${toSimilarityPercentLabel(bestRejectedMatch.similarity)}.`
-            : "No reliable face matches found.";
-        const finalMessage =
-          skippedCount > 0
-            ? `${message} ${skippedCount} face${skippedCount > 1 ? "s were" : " was"} skipped for low quality.`
-            : message;
-        setScanError(finalMessage);
-        return {
-          tone: "info",
-          message: finalMessage,
-        };
-      }
-
-      const confirmingMatches = [];
-      const readyMatches = [];
-
-      accepted.forEach((match) => {
-        const studentId = String(match?.student?.id || "").trim();
-        if (!studentId) return;
-        const requiredConfirmationCount = getRequiredFaceConfirmationCount(
-          match.similarity
-        );
-
-        const previousPending = pendingMatches[studentId];
-        const nextPending =
-          previousPending &&
-          now - Number(previousPending.at || 0) < FACE_MATCH_CONFIRMATION_WINDOW_MS
-            ? {
-                count: Number(previousPending.count || 0) + 1,
-                at: now,
-              }
-            : {
-                count: 1,
-                at: now,
-              };
-
-        if (nextPending.count < requiredConfirmationCount) {
-          pendingMatches[studentId] = nextPending;
-          confirmingMatches.push({
-            ...match,
-            confirmationCount: nextPending.count,
-            requiredConfirmationCount,
-          });
-          return;
-        }
-
-        delete pendingMatches[studentId];
-        readyMatches.push({
-          ...match,
-          requiredConfirmationCount,
-        });
-      });
-
-      pendingFaceMatchRef.current = pendingMatches;
-
-      const markedMatches = [];
-      const alreadyMarkedMatches = [];
-      const queuedOfflineMatches = [];
-      const alreadyQueuedMatches = [];
-      const cooldownMatches = [];
-      const invalidTokenMatches = [];
-      const failedMatches = [];
-
-      for (const match of readyMatches) {
-        const matchedStudent = match.student;
-        const studentId = String(matchedStudent?.id || "").trim();
-        const studentLabel = getFaceScanStudentLabel(matchedStudent);
-        if (!studentId) continue;
-
-        const scanKey = `${selectedDate}:${studentId}`;
-        if (
-          recentScanKeys[scanKey] ||
-          recentStudentMatches[studentId]
-        ) {
-          cooldownMatches.push(match);
-          continue;
-        }
-
-        recentScanKeys[scanKey] = now;
-        recentStudentMatches[studentId] = now;
-
-        const localScanMeta = dailyQrScanMetaByStudent[studentId];
-        if (localScanMeta) {
-          alreadyMarkedMatches.push({
-            ...match,
-            timeLabel: formatTimeLabel(localScanMeta.scannedAtMillis),
-          });
-          continue;
-        }
-
-        const scanToken = getStudentScanToken(matchedStudent);
-        if (!SCAN_QUEUE_TOKEN_PATTERN.test(String(scanToken || ""))) {
-          invalidTokenMatches.push(match);
-          continue;
-        }
-
-        if (!isOnline) {
-          const queueResult = queueScanForOfflineSync({
-            date: selectedDate,
-            qrToken: scanToken,
-            student: matchedStudent,
-            source: "face",
-            matchSimilarity: match.similarity,
-          });
-          if (queueResult.alreadyQueued) {
-            alreadyQueuedMatches.push(match);
-          } else {
-            queuedOfflineMatches.push(match);
-          }
-          continue;
-        }
-
-        const saveResult = await markStudentPresentFromQr({
-          student: matchedStudent,
-          qrToken: scanToken,
-          scanSource: "face",
-          matchSimilarity: match.similarity,
-          vectorLength: match.detection?.vectorLength ?? match.vectorLength,
-        });
-
-        if (saveResult.ok) {
-          markedMatches.push(match);
-          continue;
-        }
-
-        if (saveResult.reason === "already_scanned") {
-          alreadyMarkedMatches.push({
-            ...match,
-            timeLabel: formatTimeLabel(saveResult.existingScanMeta?.scannedAtMillis),
-          });
-          continue;
-        }
-
-        const shouldQueueForSync =
-          !isOnline || saveResult.reason === "retryable_error";
-        if (shouldQueueForSync) {
-          const queueResult = queueScanForOfflineSync({
-            date: selectedDate,
-            qrToken: scanToken,
-            student: matchedStudent,
-            source: "face",
-            matchSimilarity: match.similarity,
-          });
-          if (queueResult.alreadyQueued) {
-            alreadyQueuedMatches.push(match);
-          } else {
-            queuedOfflineMatches.push(match);
-          }
-          continue;
-        }
-
-        failedMatches.push({
-          ...match,
-          studentLabel,
-        });
-      }
-
-      lastScanRef.current = recentScanKeys;
-      lastFaceMatchRef.current = recentStudentMatches;
-
-      if (markedMatches.length > 0) {
-        setLastScannedId(
-          summarizeFaceScanItems(
-            markedMatches,
-            (item) =>
-              `${getFaceScanStudentLabel(item.student)} (${toSimilarityPercentLabel(
-                item.similarity
-              )})`
-          )
-        );
-      }
-
-      const ambiguousMatches = rejected.filter((item) => item.status === "ambiguous");
-      const lowConfidenceMatches = rejected.filter(
-        (item) => item.status === "below_threshold" || item.status === "no_match"
-      );
-      const messageParts = [];
-
-      if (markedMatches.length > 0) {
-        messageParts.push(
-          `Marked present: ${summarizeFaceScanItems(markedMatches, (item) =>
-            `${getFaceScanStudentLabel(item.student)} (${toSimilarityPercentLabel(
-              item.similarity
-            )})`
-          )}.`
-        );
-      }
-
-      if (alreadyMarkedMatches.length > 0) {
-        messageParts.push(
-          `Already marked: ${summarizeFaceScanItems(
-            alreadyMarkedMatches,
-            (item) =>
-              `${getFaceScanStudentLabel(item.student)}${
-                item.timeLabel ? ` at ${item.timeLabel}` : ""
-              }`
-          )}.`
-        );
-      }
-
-      if (queuedOfflineMatches.length > 0) {
-        messageParts.push(
-          `${isOnline ? "Queued for retry" : "Saved offline"}: ${summarizeFaceScanItems(
-            queuedOfflineMatches,
-            (item) => getFaceScanStudentLabel(item.student)
-          )}.`
-        );
-      }
-
-      if (alreadyQueuedMatches.length > 0) {
-        messageParts.push(
-          `Already queued: ${summarizeFaceScanItems(
-            alreadyQueuedMatches,
-            (item) => getFaceScanStudentLabel(item.student)
-          )}.`
-        );
-      }
-
-      if (confirmingMatches.length > 0) {
-        messageParts.push(
-          `Hold steady: ${summarizeFaceScanItems(
-            confirmingMatches,
-            (item) =>
-              `${getFaceScanStudentLabel(item.student)} (${item.confirmationCount}/${item.requiredConfirmationCount})`
-          )}.`
-        );
-      }
-
-      if (cooldownMatches.length > 0) {
-        messageParts.push(
-          `Cooling down: ${summarizeFaceScanItems(cooldownMatches, (item) =>
-            getFaceScanStudentLabel(item.student)
-          )}.`
-        );
-      }
-
-      if (ambiguousMatches.length > 0) {
-        messageParts.push(
-          `Ambiguous: ${summarizeFaceScanItems(
-            ambiguousMatches,
-            (item) => getFaceScanStudentLabel(item.bestMatch?.student)
-          )}.`
-        );
-      }
-
-      if (lowConfidenceMatches.length > 0 && markedMatches.length === 0) {
-        messageParts.push(
-          `Low confidence on ${lowConfidenceMatches.length} face${
-            lowConfidenceMatches.length > 1 ? "s" : ""
-          }.`
-        );
-      }
-
-      if (skippedCount > 0) {
-        messageParts.push(
-          `${skippedCount} face${skippedCount > 1 ? "s were" : " was"} skipped for low quality.`
-        );
-      }
-
-      const failureMessage =
-        invalidTokenMatches.length > 0
-          ? `Missing valid student token for ${summarizeFaceScanItems(
-              invalidTokenMatches,
-              (item) => getFaceScanStudentLabel(item.student)
-            )}.`
-          : failedMatches.length > 0
-          ? `Unable to save attendance for ${summarizeFaceScanItems(
-              failedMatches,
-              (item) => getFaceScanStudentLabel(item.student)
-            )}.`
-          : "";
-
-      const message = [...messageParts, failureMessage].filter(Boolean).join(" ");
-
-      if (failureMessage) {
-        setScanError(failureMessage);
-      } else {
-        setScanError("");
-      }
-      setScanStatus(message);
-
-      return {
-        tone:
-          markedMatches.length > 0
-            ? "success"
-            : failureMessage && messageParts.length === 0
-            ? "error"
-            : "info",
-        message:
-          message ||
-          "Faces detected, but no attendance changes were needed this cycle.",
-      };
-    },
-    [
-      dailyQrScanMetaByStudent,
-      isOnline,
-      isStaff,
-      loadingStudents,
-      markStudentPresentFromQr,
-      queueScanForOfflineSync,
-      selectedDate,
-      studentFaceProfiles,
-      studentsError,
-    ]
-  );
-
   const handleSubmitAbsenceReason = async (event) => {
     event.preventDefault();
     if (!canSubmitAbsenceReason || !absenceReasonDocId || savingAbsenceReason) {
@@ -1963,7 +886,7 @@ export default function AttendancePage({ forcedStaff }) {
         title="Attendance"
         subtitle={
           isStaff
-            ? "Scan daily attendance by face, then mark each period manually."
+            ? "Mark each period manually and review daily attendance."
             : "View your attendance status for the selected date."
         }
       />
@@ -1990,10 +913,10 @@ export default function AttendancePage({ forcedStaff }) {
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/72">
-                  Face Attendance Count
+                  Daily Attendance Count
                 </p>
                 <span className="rounded-full border border-clay/35 bg-white px-2.5 py-1 text-[11px] font-semibold text-ink/75">
-                  Face Match
+                  Daily Scan
                 </span>
               </div>
               <div className="grid gap-3 sm:grid-cols-3">
@@ -2030,7 +953,7 @@ export default function AttendancePage({ forcedStaff }) {
               Current Daily Status
             </p>
             <div className="mt-1 flex items-center justify-between gap-2">
-              <p className="text-sm font-medium text-ink">Face Attendance</p>
+              <p className="text-sm font-medium text-ink">Daily Attendance</p>
               <span
                 className={`rounded-full px-3 py-1 text-xs font-semibold ${
                   statusChipClassMap[currentStudentDailyStatus]
@@ -2039,40 +962,6 @@ export default function AttendancePage({ forcedStaff }) {
                 {statusLabelMap[currentStudentDailyStatus]}
               </span>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <span
-                className={`rounded-full px-3 py-1 text-[11px] font-semibold ${
-                  hasCurrentStudentFaceProfile
-                    ? "border border-emerald-200 bg-emerald-100 text-emerald-900"
-                    : "border border-amber-200 bg-amber-100 text-amber-900"
-                }`}
-              >
-                {hasCurrentStudentFaceProfile
-                  ? `Face Registered (${currentStudentFaceVector.length}D)`
-                  : "Face Not Registered"}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setFaceProfileStatus("");
-                  setFaceProfileError("");
-                  setIsFaceRegisterModalOpen(true);
-                }}
-                className="rounded-full border border-ocean/45 bg-white px-3 py-1 text-[11px] font-semibold text-ink/80 hover:border-ocean/70"
-              >
-                {hasCurrentStudentFaceProfile ? "Re-Register Face" : "Register Face"}
-              </button>
-            </div>
-            {faceProfileStatus ? (
-              <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-100/80 px-3 py-2 text-xs font-semibold text-emerald-900">
-                {faceProfileStatus}
-              </p>
-            ) : null}
-            {faceProfileError ? (
-              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-100/80 px-3 py-2 text-xs font-semibold text-rose-900">
-                {faceProfileError}
-              </p>
-            ) : null}
           </div>
         ) : null}
         {isParent ? (
@@ -2083,204 +972,6 @@ export default function AttendancePage({ forcedStaff }) {
           </div>
         ) : null}
       </Card>
-
-      {isStaff ? (
-        <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="space-y-1">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ink/80">
-                Face Attendance Scan
-              </p>
-              <p className="text-sm text-ink/78">
-                Keep one student face in camera. Match above{" "}
-                {toSimilarityPercentLabel(FACE_MATCH_THRESHOLD)} marks daily attendance.
-              </p>
-              <p className="text-[11px] text-ink/65">
-                Strong matches above{" "}
-                {toSimilarityPercentLabel(FACE_MATCH_FAST_TRACK_THRESHOLD)} mark
-                instantly. Other matches need {FACE_MATCH_CONFIRMATION_COUNT} steady
-                detections.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="rounded-full border border-ocean/35 bg-white px-3 py-1 text-xs font-semibold text-ink/80">
-                One Match Per Day
-              </span>
-              <span className="rounded-full border border-clay/40 bg-white px-3 py-1 text-xs font-semibold text-ink/80">
-                Face Registered: {enrolledFaceCount}/{students.length}
-              </span>
-              <span
-                className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                  isOnline
-                    ? "border border-emerald-200 bg-emerald-100 text-emerald-900"
-                    : "border border-amber-200 bg-amber-100 text-amber-900"
-                }`}
-              >
-                {isOnline ? "Online" : "Offline"}
-              </span>
-              <span className="rounded-full border border-clay/40 bg-white px-3 py-1 text-xs font-semibold text-ink/80">
-                Queue: {queuedScanCount}
-              </span>
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-start">
-            <div className="rounded-xl border border-clay/35 bg-white/80 px-4 py-4 text-xs text-ink/75">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/72">
-                Attendance Date
-              </p>
-              <p className="mt-1 text-base font-semibold text-ink">{attendanceDateLabel}</p>
-              <p className="mt-1 text-[11px] text-ink/70">
-                Daily face scan and period-wise attendance are tracked separately.
-              </p>
-              <p className="mt-1 text-[11px] text-ink/70">
-                Face descriptor vectors use 128 dimensions for matching.
-              </p>
-            </div>
-            <div className="rounded-[1.2rem] border border-ocean/20 bg-[linear-gradient(145deg,rgb(var(--cream)_/_0.96)_0%,rgb(var(--mist)_/_0.74)_100%)] px-4 py-4 text-xs text-ink/75 shadow-[inset_0_1px_0_rgb(var(--cream)_/_0.9),0_18px_34px_-26px_rgb(var(--ocean)_/_0.3)]">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="flex min-w-0 items-start gap-3">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-ocean/20 bg-white/88 text-ocean shadow-[0_10px_22px_-18px_rgb(var(--ocean)_/_0.45)]">
-                    <svg
-                      aria-hidden="true"
-                      viewBox="0 0 24 24"
-                      className="h-5 w-5"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    >
-                      <path d="M8 3H6a3 3 0 0 0-3 3v2" />
-                      <path d="M16 3h2a3 3 0 0 1 3 3v2" />
-                      <path d="M8 21H6a3 3 0 0 1-3-3v-2" />
-                      <path d="M16 21h2a3 3 0 0 0 3-3v-2" />
-                      <circle cx="12" cy="12" r="3.2" />
-                    </svg>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink/68">
-                      Live Face Camera
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-ink">
-                      {faceScanSummaryLabel}
-                    </p>
-                  </div>
-                </div>
-                <span
-                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-                    canOpenFaceScan
-                      ? "border-emerald-200 bg-emerald-100/90 text-emerald-800"
-                      : "border-clay/35 bg-white/88 text-ink/70"
-                  }`}
-                >
-                  {faceScanStateLabel}
-                </span>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScanStatus("");
-                    setScanError("");
-                    setIsFaceScanModalOpen(true);
-                  }}
-                  disabled={!canOpenFaceScan}
-                  className="inline-flex min-h-[2.7rem] items-center rounded-full border border-ocean/45 bg-[linear-gradient(135deg,rgb(var(--ocean))_0%,rgb(var(--aurora))_58%,rgb(var(--cocoa))_100%)] px-4 py-2 text-sm font-semibold text-white shadow-[0_14px_26px_-18px_rgb(var(--cocoa)_/_0.55)] transition-all hover:-translate-y-0.5 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  Open Face Attendance
-                </button>
-                <span className="inline-flex min-h-[2.7rem] items-center rounded-full border border-clay/35 bg-white/90 px-3.5 py-2 text-[11px] font-semibold text-ink/75">
-                  Threshold: {toSimilarityPercentLabel(FACE_MATCH_THRESHOLD)}
-                </span>
-                <span className="inline-flex min-h-[2.7rem] items-center rounded-full border border-clay/35 bg-white/72 px-3.5 py-2 text-[11px] font-semibold text-ink/68">
-                  Students: {students.length}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 grid gap-3">
-            {!isOnline ? (
-              <div className="rounded-lg border border-amber-200 bg-amber-100/80 px-4 py-3 text-xs font-semibold text-amber-900">
-                Offline mode active. Face scans are queued and will sync automatically when online.
-              </div>
-            ) : null}
-            {isSyncingScanQueue ? (
-              <div className="rounded-lg border border-ocean/35 bg-ocean/10 px-4 py-3 text-xs font-semibold text-ink/85">
-                Syncing queued face scans...
-              </div>
-            ) : null}
-            {scanQueueStatus ? (
-              <div className="rounded-lg border border-ocean/35 bg-ocean/10 px-4 py-3 text-xs font-semibold text-ink/85">
-                {scanQueueStatus}
-              </div>
-            ) : null}
-            {queuedScanCount > 0 ? (
-              <div className="rounded-lg border border-clay/35 bg-white/85 px-4 py-3 text-xs font-semibold text-ink/80">
-                Pending queue: {queuedScanCount} total ({queuedScanCountForSelectedDate} for selected date)
-                {latestQueuedScanLabel ? ` - Last queued: ${latestQueuedScanLabel}` : ""}
-              </div>
-            ) : null}
-            {scanError ? (
-              <div className="rounded-lg border border-rose-200 bg-rose-100/80 px-4 py-3 text-xs font-semibold text-rose-900">
-                {scanError}
-              </div>
-            ) : null}
-            {loadingStudents ? (
-              <p className="text-xs text-ink/70">Loading students for face match...</p>
-            ) : studentsError ? (
-              <p className="text-xs text-ink/70">{studentsError}</p>
-            ) : null}
-          </div>
-
-          {!loadingStudents && !studentsError && students.length > 0 ? (
-            <div className="mt-4 rounded-xl border border-clay/35 bg-white/75 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/72">
-                  Students List
-                </p>
-                <span className="text-[11px] text-ink/70">Face Status</span>
-              </div>
-
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
-                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-2.5 py-1 text-emerald-900">
-                  Present: {scanStatusCounts.present}
-                </span>
-                <span className="rounded-full border border-clay/35 bg-white px-2.5 py-1 text-ink/75">
-                  Not matched: {scanStatusCounts.unmarked}
-                </span>
-              </div>
-
-              <div className="mt-3 space-y-3">
-                {students.map((student) => {
-                  const status =
-                    scanStatusByStudent[student.id] === "present"
-                      ? "present"
-                      : "unmarked";
-                  return (
-                    <div
-                      key={`scan-inline-${student.id}`}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-clay/30 bg-white/92 px-4 py-3"
-                    >
-                      <p className="truncate text-sm font-medium text-ink">
-                        {student.name}
-                      </p>
-                      <span
-                        className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          statusChipClassMap[status]
-                        }`}
-                      >
-                        {status === "present" ? "Present" : "Not matched"}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : null}
-        </Card>
-      ) : null}
 
       <Card className="overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2600,42 +1291,7 @@ export default function AttendancePage({ forcedStaff }) {
         </Card>
       ) : null}
 
-      {isStaff ? (
-        <Suspense fallback={null}>
-          <FaceAttendanceModal
-            open={isFaceScanModalOpen}
-            mode="scan"
-            title="Live Face Attendance"
-            description={`Registered face profiles: ${enrolledFaceCount}/${students.length}`}
-            thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
-            onClose={() => setIsFaceScanModalOpen(false)}
-            onDescriptor={handleStaffFaceDescriptor}
-            disabled={
-              loadingStudents ||
-              Boolean(studentsError) ||
-              students.length === 0 ||
-              enrolledFaceCount === 0
-            }
-          />
-        </Suspense>
-      ) : null}
-
-      {isStudent ? (
-        <Suspense fallback={null}>
-          <FaceAttendanceModal
-            open={isFaceRegisterModalOpen}
-            mode="register"
-            title="Register Student Face"
-            description="Look straight at the camera. Multiple clear front-facing samples will be captured automatically for a stronger face profile."
-            thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
-            onClose={() => setIsFaceRegisterModalOpen(false)}
-            onDescriptor={handleStudentFaceRegistration}
-            disabled={!currentStudentId}
-          />
-        </Suspense>
-      ) : null}
       </div>
     </>
   );
 }
-

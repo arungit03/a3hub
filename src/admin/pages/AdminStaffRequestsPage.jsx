@@ -6,9 +6,9 @@ import {
   query,
   serverTimestamp,
   updateDoc,
-} from "firebase/firestore";
+} from "../../lib/supabaseData";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
-import { db } from "../../lib/firebase";
+import { db } from "../../lib/supabase";
 import { useAuth } from "../../state/auth";
 import { AUDIT_ACTIONS, logAuditEvent } from "../lib/auditLogs";
 import { formatDateTime, normalizeRole, normalizeStatus, toMillis } from "../lib/format";

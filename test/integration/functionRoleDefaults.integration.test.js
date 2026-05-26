@@ -35,12 +35,10 @@ const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
 
 const installStudentAuthFetchMock = (token, onUnexpectedProviderCall) => {
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url, options = {}) => {
+  globalThis.fetch = async (url) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -53,7 +51,7 @@ const installStudentAuthFetchMock = (token, onUnexpectedProviderCall) => {
       });
     }
 
-    if (resolvedUrl.includes("firestore.googleapis.com")) {
+    if (resolvedUrl.includes("/rest/v1/app_documents")) {
       return jsonResponse(404, { error: "profile_not_found" });
     }
 
@@ -67,10 +65,10 @@ const installStudentAuthFetchMock = (token, onUnexpectedProviderCall) => {
 
 test("email-send enforces secure default roles when env is blank", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     EMAIL_SEND_ALLOWED_ROLES: process.env.EMAIL_SEND_ALLOWED_ROLES,
   };
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "   ";
 
   const token = createMockIdToken();
@@ -111,10 +109,10 @@ test("email-send enforces secure default roles when env is blank", async () => {
 
 test("push-send enforces secure default roles when env is unset", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     PUSH_SEND_ALLOWED_ROLES: process.env.PUSH_SEND_ALLOWED_ROLES,
   };
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   delete process.env.PUSH_SEND_ALLOWED_ROLES;
 
   const token = createMockIdToken();
@@ -155,10 +153,10 @@ test("push-send enforces secure default roles when env is unset", async () => {
 
 test("whatsapp-send enforces secure default roles when env is unset", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     WHATSAPP_SEND_ALLOWED_ROLES: process.env.WHATSAPP_SEND_ALLOWED_ROLES,
   };
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   delete process.env.WHATSAPP_SEND_ALLOWED_ROLES;
 
   const token = createMockIdToken();
@@ -195,3 +193,4 @@ test("whatsapp-send enforces secure default roles when env is unset", async () =
     });
   }
 });
+

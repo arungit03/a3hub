@@ -55,7 +55,6 @@ Keep these controls enabled in production:
 
 ## Frontend Load Reduction
 
-- heavy face-attendance module is lazy loaded only when needed
 - keep student home/dashboard screens read-optimized
 - avoid opening many realtime listeners per page
 
@@ -68,15 +67,15 @@ Track these metrics continuously:
 - `429`, `503`, and `5xx` rates
 - provider fallback frequency (`providerAttempts`)
 
-2. Firebase
-- Firestore reads/writes per minute
+2. Supabase
+- Supabase reads/writes per minute
 - rejected rule writes
 - auth sign-in errors
 
 3. External providers
 - Gemini/OpenAI quota and rate-limit errors
 - Piston compile failures/timeouts
-- Resend/WhatsApp/FCM provider error rates
+- Resend/WhatsApp/Web Push provider error rates
 
 Alert thresholds (starting point):
 
@@ -107,5 +106,7 @@ Example:
 
 ```bash
 BASE_URL=https://your-site.netlify.app npm run loadtest:1500
-BASE_URL=https://your-site.netlify.app AUTH_TOKEN=<firebase_id_token> npm run loadtest:1500:ai
+BASE_URL=https://your-site.netlify.app AUTH_TOKEN=<supabase_access_token> npm run loadtest:1500:ai
 ```
+
+

@@ -81,10 +81,10 @@ Technology stack:
 - Vite
 - JavaScript
 - Tailwind CSS
-- Firebase Authentication
-- Firestore
-- Firebase Hosting
-- Firebase Functions / serverless functions
+- Supabase Auth
+- Supabase
+- Netlify hosting
+- Netlify Functions / serverless functions
 - AI integration for smart assistance
 
 Presentation rules:
@@ -259,7 +259,7 @@ Speaker notes:
 Slide 12: Technology Stack
 Include:
 - React and Vite for frontend
-- Firebase and Firestore for backend and data
+- Supabase and Supabase for backend and data
 - serverless functions for APIs and automation
 - Tailwind CSS for UI
 - AI integration for smart assistance
@@ -397,3 +397,4 @@ For the best result, ask the AI tool for:
 - slide-by-slide content first
 - then "convert this into a visually modern PPT"
 - then "shorten text where needed without losing meaning"
+

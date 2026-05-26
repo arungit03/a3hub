@@ -5,10 +5,10 @@ import {
   setDoc,
   Timestamp,
   updateDoc,
-} from "firebase/firestore";
+} from "../../lib/supabaseData";
 import Card from "../../components/Card";
 import GradientHeader from "../../components/GradientHeader";
-import { db } from "../../lib/firebase";
+import { db } from "../../lib/supabase";
 import { useAuth } from "../../state/auth";
 
 const STUDENT_TODO_ITEMS_LIMIT = 80;

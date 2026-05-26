@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { collection, getCountFromServer, limit, query, where } from "firebase/firestore";
+import { collection, getCountFromServer, limit, query, where } from "../../lib/supabaseData";
 import AdminLineChart from "../components/AdminLineChart";
 import AdminMetricCard from "../components/AdminMetricCard";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
-import { db } from "../../lib/firebase";
+import { db } from "../../lib/supabase";
 import {
   dateKeyFromInput,
   toDateKey,

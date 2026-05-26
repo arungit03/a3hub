@@ -1,14 +1,11 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
-import { applyActionCode, checkActionCode } from "firebase/auth";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/auth";
-import { auth, ensureFirebaseAuth } from "../lib/firebase";
+import { supabase } from "../lib/supabase";
 import { prefetchRoute } from "../lib/routePrefetch";
 import { useToast } from "../hooks/useToast";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import { useDirtyPrompt } from "../hooks/useDirtyPrompt";
-
-const FaceAttendanceModal = lazy(() => import("../components/FaceAttendanceModal"));
 
 const AUTH_BACKGROUND_IMAGE = "/auth-campus.png";
 const AUTH_DRAFT_KEY = "a3hub:draft:auth";
@@ -21,8 +18,6 @@ const PARENT_SIGNUP_DISABLED_MESSAGE =
   "Parent signup is disabled. Use login with student credentials.";
 const CANTEEN_LOGIN_ONLY_MESSAGE =
   "Food console accounts are created by admin. Use login with a canteen staff or admin account.";
-const FACE_MATCH_THRESHOLD = 0.74;
-const FACE_MIN_VECTOR_LENGTH = 64;
 
 const resolveAuthTargetPath = (role) => {
   if (role === "canteen") return "/canteen/dashboard";
@@ -30,23 +25,6 @@ const resolveAuthTargetPath = (role) => {
   if (role === "staff") return "/staff/home";
   if (role === "parent") return "/parent/home";
   return "/student/home";
-};
-
-const normalizeFaceVector = (value) => {
-  if (!Array.isArray(value)) return [];
-  const vector = value
-    .map((item) => Number(item))
-    .filter((item) => Number.isFinite(item));
-  if (vector.length < FACE_MIN_VECTOR_LENGTH) return [];
-
-  let squaredNorm = 0;
-  vector.forEach((item) => {
-    squaredNorm += item * item;
-  });
-  if (squaredNorm <= 0) return [];
-
-  const norm = Math.sqrt(squaredNorm);
-  return vector.map((item) => Number((item / norm).toFixed(7)));
 };
 
 const resolveAuthErrorMessage = (err, fallback) => {
@@ -57,22 +35,34 @@ const resolveAuthErrorMessage = (err, fallback) => {
     return "A fresh verification link could not be generated right now. Tap resend again in a moment.";
   }
   if (err?.code === "auth/operation-not-allowed") {
-    return "Email/Password sign-in is disabled in Firebase Authentication. Enable it in Firebase Console.";
+    return "Email/password sign-in is disabled in Supabase Auth. Enable it in the Supabase dashboard.";
   }
   if (
     err?.code === "auth/invalid-continue-uri" ||
     err?.code === "auth/unauthorized-continue-uri"
   ) {
-    return "Verification link configuration is invalid for this domain. Add your app domain to Firebase Authorized domains.";
+    return "Verification link configuration is invalid for this domain. Add your app domain to Supabase Auth redirect URLs.";
   }
   if (err?.code === "auth/network-request-failed") {
     return "Network error while sending verification email. Check internet and try again.";
   }
   if (err?.code === "auth/internal-error") {
-    return "Firebase could not send the verification email right now. Check Firebase Authentication templates and authorized domains.";
+    return "Supabase could not send the verification email right now. Check Supabase Auth email templates and redirect URLs.";
   }
-  if (err?.code === "firebase/not-configured") {
-    return err?.message || "Firebase is not configured for this deploy.";
+  if (err?.code === "auth/confirmation-email-failed") {
+    return err?.message || "Unable to send confirmation email right now.";
+  }
+  if (err?.code === "auth/server-email-not-configured") {
+    return "Verification email service is not configured. Set SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, and EMAIL_FROM in Netlify.";
+  }
+  if (err?.code === "auth/email-provider-failed") {
+    return "Verification link was created, but the email provider could not send it. Check RESEND_API_KEY and EMAIL_FROM.";
+  }
+  if (err?.code === "supabase/not-configured") {
+    return err?.message || "Supabase is not configured for this deploy.";
+  }
+  if (err?.code === "auth/email-not-verified") {
+    return err?.message || "Verify your email before logging in.";
   }
   if (err?.code === "auth/quota-exceeded") {
     return "Service quota reached. Please try again later.";
@@ -94,7 +84,7 @@ export default function AuthPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const {
-    firebaseReady,
+    supabaseReady,
     login,
     signup,
     startupIssue,
@@ -122,36 +112,31 @@ export default function AuthPage() {
   const [fieldErrors, setFieldErrors] = useState({});
   const [loading, setLoading] = useState(false);
   const [awaitingVerification, setAwaitingVerification] = useState(false);
-  const [isFaceRegisterModalOpen, setIsFaceRegisterModalOpen] = useState(false);
-  const [registeredFaceSamples, setRegisteredFaceSamples] = useState([]);
-  const [registeredFaceVector, setRegisteredFaceVector] = useState([]);
-  const [registeredFaceVectorLength, setRegisteredFaceVectorLength] = useState(0);
-  const [faceRegisterStatus, setFaceRegisterStatus] = useState("");
-  const [faceRegisterError, setFaceRegisterError] = useState("");
   const [resendingVerification, setResendingVerification] = useState(false);
   const [processingVerificationLink, setProcessingVerificationLink] = useState(false);
   const authUnavailableMessage =
     startupIssue ||
-    "Authentication is unavailable for this deploy. Set Firebase environment variables and redeploy.";
+    "Authentication is unavailable for this deploy. Set Supabase environment variables and redeploy.";
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const modeParam = searchParams.get("mode");
-    const oobCode = searchParams.get("oobCode");
+    const code = searchParams.get("code");
+    const legacyCode = searchParams.get("oobCode");
 
-    if (modeParam === "resetPassword" && oobCode) {
+    if ((modeParam === "resetPassword" && legacyCode) || searchParams.get("type") === "recovery") {
       navigate(`/password-change${location.search}`, { replace: true });
       return;
     }
 
-    if (modeParam === "verifyEmail" && oobCode) {
+    if (code) {
       let cancelled = false;
       const verifyEmailCode = async () => {
         setProcessingVerificationLink(true);
         setError("");
         setMessage("");
 
-        if (!firebaseReady) {
+        if (!supabaseReady || !supabase) {
           if (!cancelled) {
             setError(authUnavailableMessage);
             toastError(authUnavailableMessage);
@@ -162,11 +147,10 @@ export default function AuthPage() {
         }
 
         try {
-          await ensureFirebaseAuth();
-          const actionInfo = await checkActionCode(auth, oobCode);
-          await applyActionCode(auth, oobCode);
+          const result = await supabase.auth.exchangeCodeForSession(code);
+          if (result.error) throw result.error;
           if (cancelled) return;
-          const verifiedEmail = String(actionInfo?.data?.email || "")
+          const verifiedEmail = String(result.data?.user?.email || "")
             .trim()
             .toLowerCase();
           if (verifiedEmail) {
@@ -203,10 +187,10 @@ export default function AuthPage() {
     }
   }, [
     authUnavailableMessage,
-    firebaseReady,
     location.search,
     navigate,
     success,
+    supabaseReady,
     toastError,
     user,
   ]);
@@ -224,15 +208,6 @@ export default function AuthPage() {
     setFieldErrors({});
     setError("");
     setMessage("");
-  }, []);
-
-  const resetFaceRegistration = useCallback(() => {
-    setIsFaceRegisterModalOpen(false);
-    setRegisteredFaceSamples([]);
-    setRegisteredFaceVector([]);
-    setRegisteredFaceVectorLength(0);
-    setFaceRegisterStatus("");
-    setFaceRegisterError("");
   }, []);
 
   const switchToLogin = useCallback(
@@ -253,44 +228,6 @@ export default function AuthPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
     clearFieldError(name);
   };
-
-  const handleRegisterFaceDescriptor = useCallback(({ vector, vectorLength }) => {
-    const normalizedVector = normalizeFaceVector(vector);
-    if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) {
-      const message = "Unable to capture a valid front-facing face. Try again.";
-      setFaceRegisterStatus("");
-      setFaceRegisterError(message);
-      return {
-        tone: "error",
-        message,
-      };
-    }
-
-    const resolvedLength = Number.isFinite(vectorLength)
-      ? Number(vectorLength)
-      : normalizedVector.length;
-    const message =
-      `Face profile ready (${resolvedLength}D). Front-facing auto capture completed.`;
-
-    setRegisteredFaceSamples([normalizedVector]);
-    setRegisteredFaceVector(normalizedVector);
-    setRegisteredFaceVectorLength(resolvedLength);
-    setFaceRegisterError("");
-    setFaceRegisterStatus(message);
-    clearFieldError("faceScan");
-
-    return {
-      tone: "success",
-      message,
-    };
-  }, [clearFieldError]);
-
-  useEffect(() => {
-    if (mode === "signup" && selectedRole === "student") {
-      return;
-    }
-    resetFaceRegistration();
-  }, [mode, resetFaceRegistration, selectedRole]);
 
   const restoreDraft = useCallback((draftValue) => {
     if (!draftValue || typeof draftValue !== "object") return;
@@ -352,14 +289,12 @@ export default function AuthPage() {
         delete next.department;
         delete next.year;
         delete next.rollNo;
-        delete next.faceScan;
         delete next.designation;
       }
 
       if (selectedRole !== "student") {
         delete next.year;
         delete next.rollNo;
-        delete next.faceScan;
       }
       if (selectedRole === "admin") {
         delete next.department;
@@ -370,14 +305,6 @@ export default function AuthPage() {
 
       return next;
     });
-
-    if (mode === "login" || selectedRole !== "student") {
-      setIsFaceRegisterModalOpen(false);
-      setRegisteredFaceVector([]);
-      setRegisteredFaceVectorLength(0);
-      setFaceRegisterStatus("");
-      setFaceRegisterError("");
-    }
   }, [mode, selectedRole]);
 
   const handleRoleSelect = (value) => {
@@ -424,7 +351,6 @@ export default function AuthPage() {
   const isParentRole = selectedRole === "parent";
   const isCanteenRole = selectedRole === "canteen";
   const isAdminRole = selectedRole === "admin";
-  const hasRegisteredFace = registeredFaceVector.length >= FACE_MIN_VECTOR_LENGTH;
   const isDirty = useMemo(() => {
     const hasFieldContent = Object.values(form).some((value) =>
       String(value || "").trim()
@@ -474,17 +400,13 @@ export default function AuthPage() {
           nextErrors.rollNo = "Roll number is required.";
         }
 
-        if (registeredFaceVector.length < FACE_MIN_VECTOR_LENGTH) {
-          nextErrors.faceScan =
-            "Capture one clear front-facing face for student attendance recognition.";
-        }
       } else if (selectedRole === "staff" && !form.designation.trim()) {
         nextErrors.designation = "Designation is required.";
       }
     }
 
     return nextErrors;
-  }, [form, isLoginMode, registeredFaceVector.length, selectedRole]);
+  }, [form, isLoginMode, selectedRole]);
 
   const renderFieldError = (fieldName) =>
     fieldErrors[fieldName] ? (
@@ -513,7 +435,7 @@ export default function AuthPage() {
     event.preventDefault();
     setError("");
     setMessage("");
-    if (!firebaseReady) {
+    if (!supabaseReady) {
       setError(authUnavailableMessage);
       toastError(authUnavailableMessage);
       return;
@@ -564,10 +486,6 @@ export default function AuthPage() {
         department: form.department,
         year: form.year,
         rollNo: form.rollNo,
-        faceVector: selectedRole === "student" ? registeredFaceVector : [],
-        faceSamples: selectedRole === "student" ? registeredFaceSamples : [],
-        faceVectorLength:
-          selectedRole === "student" ? registeredFaceVectorLength : 0,
         designation: form.designation,
       });
 
@@ -599,7 +517,7 @@ export default function AuthPage() {
   const handleReset = async () => {
     setError("");
     setMessage("");
-    if (!firebaseReady) {
+    if (!supabaseReady) {
       setError(authUnavailableMessage);
       toastError(authUnavailableMessage);
       return;
@@ -648,18 +566,17 @@ export default function AuthPage() {
     setError("");
     setMessage("");
 
-    if (!firebaseReady) {
+    if (!supabaseReady) {
       setError(authUnavailableMessage);
       toastError(authUnavailableMessage);
       return;
     }
 
     const safeEmail = form.email.trim();
-    const safePassword = form.password.trim();
 
-    if (!safeEmail || !safePassword) {
+    if (!safeEmail) {
       const nextMessage =
-        "Enter email and password on login screen, then tap Resend verification email.";
+        "Enter your email on the login screen, then tap Resend verification email.";
       setMessage(nextMessage);
       info(nextMessage);
       return;
@@ -669,7 +586,6 @@ export default function AuthPage() {
     try {
       const result = await resendVerificationEmail({
         email: safeEmail,
-        password: safePassword,
       });
       if (result?.alreadyVerified) {
         switchToLogin("Email already verified. You can login now.");
@@ -823,7 +739,7 @@ export default function AuthPage() {
             </p>
           </div>
 
-          {!firebaseReady ? (
+          {!supabaseReady ? (
             <div className="mb-4 rounded-2xl border border-amber-300/80 bg-amber-100/90 px-4 py-3 text-sm font-medium text-amber-950">
               {authUnavailableMessage}
             </div>
@@ -922,48 +838,6 @@ export default function AuthPage() {
                       {renderFieldError("rollNo")}
                     </div>
                   </div>
-                  <div className="grid gap-1.5">
-                    <label className="text-sm font-semibold text-ink/80">
-                      Attendance Setup
-                    </label>
-                    <div className="rounded-2xl border border-ocean/25 bg-[linear-gradient(145deg,rgb(var(--cream)_/_0.92)_0%,rgb(var(--sand)_/_0.8)_58%,rgb(var(--mist)_/_0.72)_100%)] px-3.5 py-3 text-xs text-ink/76 shadow-[inset_0_1px_0_rgb(var(--cream)_/_0.9),0_12px_22px_-18px_rgb(var(--ocean)_/_0.38)]">
-                      <p className="font-medium text-ink/82">
-                        Look straight at the camera. Face capture happens automatically when your face is centered and front-facing.
-                      </p>
-                      <div className="mt-2.5 flex flex-wrap items-center gap-2.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFaceRegisterError("");
-                            setIsFaceRegisterModalOpen(true);
-                          }}
-                          className="inline-flex min-h-[34px] items-center rounded-full border border-ocean/65 bg-[linear-gradient(140deg,rgb(var(--ocean))_0%,rgb(var(--aurora))_58%,rgb(var(--cocoa))_100%)] px-4 py-1.5 text-[11px] font-semibold text-white shadow-[0_14px_24px_-16px_rgb(var(--cocoa)_/_0.62)] transition-all duration-200 hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0 active:scale-[0.985]"
-                        >
-                          {hasRegisteredFace ? "Re-Capture Face" : "Open Face Capture"}
-                        </button>
-                        <span
-                          className={`inline-flex min-h-[34px] items-center rounded-full px-3 py-1.5 text-[11px] font-semibold tracking-[0.01em] shadow-[inset_0_1px_0_rgb(var(--cream)_/_0.9)] ${
-                            hasRegisteredFace
-                              ? "border border-emerald-300/85 bg-[linear-gradient(135deg,rgb(211_248_227)_0%,rgb(187_242_211)_100%)] text-emerald-900"
-                              : "border border-amber-300/85 bg-[linear-gradient(135deg,rgb(255_240_204)_0%,rgb(255_228_173)_100%)] text-amber-900"
-                          }`}
-                        >
-                          {hasRegisteredFace ? "Face Ready" : "Front Face Required"}
-                        </span>
-                      </div>
-                    </div>
-                    {renderFieldError("faceScan")}
-                    {faceRegisterStatus ? (
-                      <p className="text-xs font-semibold text-emerald-700">
-                        {faceRegisterStatus}
-                      </p>
-                    ) : null}
-                    {faceRegisterError ? (
-                      <p className="text-xs font-semibold text-rose-700">
-                        {faceRegisterError}
-                      </p>
-                    ) : null}
-                  </div>
                 </>
               ) : (
                 <div className="grid gap-1.5">
@@ -1016,7 +890,7 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={handleReset}
-              disabled={!firebaseReady}
+              disabled={!supabaseReady}
               className="font-semibold text-ink/80 transition-colors hover:text-ocean"
             >
               Forget Password
@@ -1026,7 +900,7 @@ export default function AuthPage() {
             <button
               type="button"
               onClick={handleReset}
-              disabled={!firebaseReady}
+              disabled={!supabaseReady}
               className="self-start text-sm font-semibold text-ink/80 transition-colors hover:text-ocean"
             >
               Forgot / Change password?
@@ -1046,7 +920,7 @@ export default function AuthPage() {
 
           <button
             type="submit"
-            disabled={loading || !firebaseReady}
+            disabled={loading || !supabaseReady}
             className="mt-1 rounded-full bg-[linear-gradient(135deg,rgb(var(--ocean))_0%,rgb(var(--aurora))_100%)] px-4 py-3 text-base font-semibold text-white shadow-[0_14px_28px_-18px_rgb(var(--cocoa)_/_0.42)] transition-all hover:-translate-y-0.5 hover:brightness-105 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-80"
           >
             {loading
@@ -1087,21 +961,6 @@ export default function AuthPage() {
         )}
       </div>
 
-      {mode === "signup" &&
-      selectedRole === "student" &&
-      isFaceRegisterModalOpen ? (
-        <Suspense fallback={null}>
-          <FaceAttendanceModal
-            open={isFaceRegisterModalOpen}
-            mode="register"
-            title="Student Face Registration"
-            description="Look straight at the camera. A single front-facing face profile will be captured automatically for your student account."
-            thresholdPercent={Math.round(FACE_MATCH_THRESHOLD * 100)}
-            onClose={() => setIsFaceRegisterModalOpen(false)}
-            onDescriptor={handleRegisterFaceDescriptor}
-          />
-        </Suspense>
-      ) : null}
     </div>
   );
 }

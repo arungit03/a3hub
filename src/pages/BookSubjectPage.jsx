@@ -9,12 +9,12 @@ import {
   orderBy,
   query,
   serverTimestamp,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import { useNavigate, useParams } from "react-router-dom";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import { useToast } from "../hooks/useToast";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
 import { useDirtyPrompt } from "../hooks/useDirtyPrompt";
 import { useAuth } from "../state/auth";

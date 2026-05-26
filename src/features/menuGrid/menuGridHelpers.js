@@ -444,14 +444,14 @@ export const getAssignmentUploadErrorMessage = (error) => {
     return "Upload requires a signed-in account.";
   }
   if (code === "storage/unauthorized") {
-    return "Upload blocked by Firebase Storage rules. Allow signed-in users to upload.";
+    return "Upload blocked by Supabase Storage policies. Allow signed-in users to upload.";
   }
   if (code === "storage/unknown") {
     const detail = String(error?.message || "");
     if (/cors|preflight|xmlhttprequest|http status|failed to fetch/i.test(detail)) {
-      return "Firebase Storage CORS/bucket issue. Configure Cloudinary runtime config in public/runtime-config.js or fix Storage bucket/CORS.";
+      return "Supabase Storage CORS/bucket issue. Configure Cloudinary runtime config in public/runtime-config.js or fix Storage bucket/CORS.";
     }
-    return "Firebase Storage error occurred. Please verify bucket and rules.";
+    return "Supabase Storage error occurred. Please verify bucket and rules.";
   }
   if (code === "storage/upload-timeout" || code === "storage/download-url-timeout") {
     return "Upload is taking too long. Please try again.";
@@ -461,22 +461,22 @@ export const getAssignmentUploadErrorMessage = (error) => {
     code === "storage/project-not-found" ||
     code === "storage/bucket-not-configured"
   ) {
-    return "Firebase Storage is not ready. Enable Storage in Firebase Console.";
+    return "Supabase Storage is not ready. Create the storage bucket in Supabase.";
   }
   if (code === "upload/inline-too-large") {
-    return "Upload fallback supports only small files (<= 700 KB) when using inline mode. Enable Firestore chunk fallback by deploying updated rules.";
+    return "Upload fallback supports only small files (<= 700 KB) when using inline mode. Enable database chunk fallback by applying the Supabase schema.";
   }
   if (code === "permission-denied") {
-    return "Upload blocked by Firestore rules. Deploy updated firestore.rules.";
+    return "Upload blocked by Supabase policies. Apply the Supabase schema policies.";
   }
   if (code === "resource-exhausted") {
-    return "Firestore quota limit reached. Try later or reduce file size.";
+    return "Supabase quota limit reached. Try later or reduce file size.";
   }
   if (code === "upload/no-provider") {
     if (error?.message) {
       return `All upload methods failed. ${error.message}`;
     }
-    return "All upload methods failed. Enable Firebase Storage or configure Cloudinary.";
+    return "All upload methods failed. Enable Supabase Storage or configure Cloudinary.";
   }
   if (code) {
     return `Upload failed (${code}).`;
@@ -596,3 +596,4 @@ export const saveDailyPythonChallengeCache = ({
     // Ignore storage write errors.
   }
 };
+

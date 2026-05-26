@@ -1,5 +1,5 @@
 {
-  "name": "firebase_chat",
+  "name": "a3hub",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -27,9 +27,7 @@
     "loadtest:1500:ai": "k6 run -e ENABLE_FUNCTIONS=true scripts/loadtest/k6-1500-smoke.js"
   },
   "dependencies": {
-    "@vladmandic/face-api": "^1.7.15",
-    "firebase": "^12.8.0",
-    "firebase-admin": "^13.7.0",
+    "@supabase/supabase-js": "^2.105.4",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.0",
     "jsqr": "^1.4.0",

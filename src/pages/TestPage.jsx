@@ -11,10 +11,10 @@ import {
   setDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { useAuth } from "../state/auth";
 
 const MIN_QUESTIONS = 1;
@@ -765,7 +765,7 @@ export default function TestPage() {
       if (resultModalTest?.id === testItem.id) {
         setResultModalTest(null);
       }
-      setCreateStatus("Test and related student results removed from Firebase.");
+      setCreateStatus("Test and related student results removed from Supabase.");
     } catch {
       setCreateStatus("Unable to remove test.");
     } finally {
@@ -1323,5 +1323,6 @@ export default function TestPage() {
     </>
   );
 }
+
 
 

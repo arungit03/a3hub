@@ -1,4 +1,4 @@
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { addDoc, collection, serverTimestamp } from "../../lib/supabaseData";
 
 export const AUDIT_ACTIONS = {
   USER_ROLE_CHANGED: "user_role_changed",

@@ -4,10 +4,10 @@ import {
   onSnapshot,
   query,
   where,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { useAuth } from "../state/auth";
 
 const getMillis = (value) => {

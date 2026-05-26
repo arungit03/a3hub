@@ -62,14 +62,14 @@ test("ai-generate handler rejects unauthenticated requests", async () => {
 
 test("ai-generate handler serves authenticated chat requests", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     GEMINI_API_KEY: process.env.GEMINI_API_KEY,
     OPENAI_API_KEY: process.env.OPENAI_API_KEY,
     AI_PROVIDER: process.env.AI_PROVIDER,
     AI_GENERATE_ALLOWED_ROLES: process.env.AI_GENERATE_ALLOWED_ROLES,
   };
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.GEMINI_API_KEY = "test-gemini-server-key";
   delete process.env.OPENAI_API_KEY;
   process.env.AI_PROVIDER = "gemini";
@@ -82,9 +82,7 @@ test("ai-generate handler serves authenticated chat requests", async () => {
   globalThis.fetch = async (url, options = {}) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -149,3 +147,4 @@ test("ai-generate handler serves authenticated chat requests", async () => {
     delete process.env.AI_GENERATE_RATE_LIMIT_WINDOW_MS;
   }
 });
+

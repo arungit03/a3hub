@@ -1,6 +1,6 @@
 # Service Portability and Failover
 
-This project integrates external providers (Firebase, Netlify Functions, Cloudinary, Piston, Resend, WhatsApp, FCM). To reduce outage impact and vendor lock-in, notification and code-execution functions now support ordered provider fallback.
+This project integrates external providers (Supabase, Netlify Functions, Cloudinary, Piston, Resend, WhatsApp, Web Push). To reduce outage impact and vendor lock-in, notification and code-execution functions now support ordered provider fallback.
 
 ## Provider Chain Strategy
 
@@ -41,8 +41,8 @@ Function: `netlify/functions/push-send.cjs`
 
 Env variables:
 
-- `PUSH_PROVIDER_ORDER` (default: `fcm,webhook`)
-- `FCM_SERVER_KEY`
+- `PUSH_PROVIDER_ORDER` (default: `webhook,webhook`)
+- `Web Push_SERVER_KEY`
 - `PUSH_WEBHOOK_URL` (or `PUSH_FALLBACK_WEBHOOK_URL`)
 - `PUSH_WEBHOOK_AUTH_TOKEN` (optional)
 
@@ -74,3 +74,4 @@ Webhook providers should return `2xx` on success and JSON response body.
 3. Validate fallback in staging by forcing primary failure.
 4. Swap order in `*_PROVIDER_ORDER` to promote new provider.
 5. Remove old provider when stable.
+

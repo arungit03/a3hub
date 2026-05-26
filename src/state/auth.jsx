@@ -7,18 +7,24 @@ import {
   useState,
 } from "react";
 import {
-  auth,
-  createFirebaseUnavailableError,
+  createSupabaseUnavailableError,
   db,
-  ensureFirebaseAuth,
-  ensureFirestore,
-  firebaseClientReady,
-  firebaseStartupIssue,
-} from "../lib/firebase";
+  getAuthRedirectUrl,
+  setSupabaseAuthUser,
+  supabase,
+  supabaseClientReady,
+  supabaseStartupIssue,
+  toSupabaseAppUser,
+} from "../lib/supabase";
+import {
+  doc,
+  getDoc,
+  serverTimestamp,
+  setDoc,
+  writeBatch,
+} from "../lib/supabaseData";
 import { extractNumericQrValue } from "../lib/qr";
 
-let firebaseAuthModulePromise = null;
-let firebaseFirestoreModulePromise = null;
 let pushNotificationsModulePromise = null;
 
 const normalizeDepartment = (value) =>
@@ -29,23 +35,6 @@ const AUTH_BOOTSTRAP_DOC_ID = "authBootstrap";
 const BLOCKED_ACCOUNT_MESSAGE = "Your account is blocked. Contact admin.";
 const STAFF_PENDING_APPROVAL_MESSAGE =
   "Your staff account is pending admin approval.";
-const FACE_MIN_VECTOR_LENGTH = 64;
-const FACE_REGISTRATION_SAMPLE_LIMIT = 6;
-const FACE_MATCH_THRESHOLD = 0.74;
-
-const loadFirebaseAuthModule = () => {
-  if (!firebaseAuthModulePromise) {
-    firebaseAuthModulePromise = import("firebase/auth");
-  }
-  return firebaseAuthModulePromise;
-};
-
-const loadFirebaseFirestoreModule = () => {
-  if (!firebaseFirestoreModulePromise) {
-    firebaseFirestoreModulePromise = import("firebase/firestore");
-  }
-  return firebaseFirestoreModulePromise;
-};
 
 const loadPushNotificationsModule = () => {
   if (!pushNotificationsModulePromise) {
@@ -53,101 +42,6 @@ const loadPushNotificationsModule = () => {
   }
   return pushNotificationsModulePromise;
 };
-
-const normalizeFaceVector = (value) => {
-  if (!Array.isArray(value)) return [];
-  const vector = value
-    .map((item) => Number(item))
-    .filter((item) => Number.isFinite(item));
-  if (vector.length < FACE_MIN_VECTOR_LENGTH) return [];
-
-  let squaredNorm = 0;
-  vector.forEach((item) => {
-    squaredNorm += item * item;
-  });
-  if (squaredNorm <= 0) return [];
-
-  const norm = Math.sqrt(squaredNorm);
-  return vector.map((item) => Number((item / norm).toFixed(7)));
-};
-
-const cosineSimilarity = (vectorA, vectorB) => {
-  if (!Array.isArray(vectorA) || !Array.isArray(vectorB)) return 0;
-  if (vectorA.length === 0 || vectorB.length === 0) return 0;
-
-  const dimensions = Math.min(vectorA.length, vectorB.length);
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-
-  for (let index = 0; index < dimensions; index += 1) {
-    const a = Number(vectorA[index]) || 0;
-    const b = Number(vectorB[index]) || 0;
-    dot += a * b;
-    normA += a * a;
-    normB += b * b;
-  }
-
-  if (normA <= 0 || normB <= 0) return 0;
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB));
-};
-
-const dedupeFaceVectors = (vectors, duplicateSimilarity = 0.998) => {
-  const next = [];
-  const safeVectors = Array.isArray(vectors) ? vectors : [];
-  safeVectors.forEach((vector) => {
-    const normalizedVector = normalizeFaceVector(vector);
-    if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) return;
-    const duplicate = next.some(
-      (existing) => cosineSimilarity(existing, normalizedVector) >= duplicateSimilarity
-    );
-    if (!duplicate) {
-      next.push(normalizedVector);
-    }
-  });
-  return next;
-};
-
-const averageFaceVector = (vectors) => {
-  if (!Array.isArray(vectors) || vectors.length === 0) return [];
-  const dimensions = vectors.reduce(
-    (max, vector) => Math.max(max, Array.isArray(vector) ? vector.length : 0),
-    0
-  );
-  if (dimensions < FACE_MIN_VECTOR_LENGTH) return [];
-
-  const sums = new Array(dimensions).fill(0);
-  const counts = new Array(dimensions).fill(0);
-  vectors.forEach((vector) => {
-    if (!Array.isArray(vector)) return;
-    for (let index = 0; index < dimensions; index += 1) {
-      const value = Number(vector[index]);
-      if (!Number.isFinite(value)) continue;
-      sums[index] += value;
-      counts[index] += 1;
-    }
-  });
-
-  const averaged = sums.map((sum, index) => {
-    const count = counts[index];
-    if (!count) return 0;
-    return sum / count;
-  });
-  return normalizeFaceVector(averaged);
-};
-
-const serializeFaceSampleVectors = (vectors) =>
-  (Array.isArray(vectors) ? vectors : [])
-    .map((vector, index) => {
-      const normalizedVector = normalizeFaceVector(vector);
-      if (normalizedVector.length < FACE_MIN_VECTOR_LENGTH) return null;
-
-      return {
-        id: `sample_${index + 1}`,
-        vector: normalizedVector,
-      };
-    })
-    .filter(Boolean);
 
 const normalizeAccountRole = (value) => {
   const normalized = toSafeText(value).toLowerCase();
@@ -298,174 +192,121 @@ const resolveProfileName = ({ profileName, userName, userEmail }) => {
   return "Campus Member";
 };
 
-const buildAuthActionCodeSettings = (path = "/") => {
-  if (typeof window === "undefined") return undefined;
-
-  try {
-    const { origin, protocol } = window.location;
-    if (protocol !== "http:" && protocol !== "https:") {
-      return undefined;
-    }
-
-    const safePath = String(path || "/").trim();
-    const normalizedPath = safePath.startsWith("/") ? safePath : `/${safePath}`;
-
-    return { url: `${origin}${normalizedPath}` };
-  } catch {
-    return undefined;
-  }
+const createAuthErrorWithCode = (code, message, details = {}) => {
+  const error = new Error(message);
+  error.code = code;
+  Object.assign(error, details);
+  return error;
 };
 
-const buildVerificationActionCodeSettings = () =>
-  buildAuthActionCodeSettings("/");
-
-const buildResetActionCodeSettings = () => {
-  return buildAuthActionCodeSettings("/password-change");
-};
-
-const DEFAULT_VERIFICATION_EMAIL_PROXY_ENDPOINT =
-  "/.netlify/functions/auth-send-verification";
-
-const shouldTryVerificationEmailProxy = (error) => {
-  const code = toSafeText(error?.code).toLowerCase();
+const isConfirmationEmailSendError = (error) => {
+  const normalized = `${error?.code || ""} ${error?.message || ""}`
+    .trim()
+    .toLowerCase();
   return (
-    code !== "auth/operation-not-allowed" &&
-    code !== "auth/user-disabled" &&
-    code !== "auth/invalid-user-token"
+    normalized.includes("error sending confirmation email") ||
+    normalized.includes("error sending verification email") ||
+    normalized.includes("confirmation email") ||
+    normalized.includes("verification email")
   );
 };
 
-const requestVerificationEmailViaProxy = async (
-  firebaseUser,
-  actionCodeSettings
-) => {
-  if (!firebaseUser?.getIdToken || typeof fetch !== "function") {
-    throw new Error("Unable to send verification email.");
-  }
+const isAuthFunctionUnavailableError = (error) =>
+  error?.code === "auth/function-unavailable" ||
+  error?.code === "auth/server-email-not-configured" ||
+  error?.code === "auth/server-not-configured";
 
-  const idToken = await firebaseUser.getIdToken();
-  if (!idToken) {
-    throw new Error("Unable to authorize verification email request.");
-  }
+const buildAuthFunctionError = (code, message, details = {}) =>
+  createAuthErrorWithCode(
+    code || "auth/function-failed",
+    message || "Authentication email service failed.",
+    details
+  );
 
-  const response = await fetch(DEFAULT_VERIFICATION_EMAIL_PROXY_ENDPOINT, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      idToken,
-      continueUrl: actionCodeSettings?.url || "",
-    }),
-  });
-
-  const rawText = await response.text();
-  let payload = {};
-  try {
-    payload = rawText ? JSON.parse(rawText) : {};
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error("Verification email fallback endpoint unavailable.");
-    }
-    throw createAuthErrorWithCode(
-      payload?.code || "auth/internal-error",
-      payload?.error || "Unable to send verification email."
+const postAuthFunction = async (functionName, payload) => {
+  if (typeof fetch !== "function") {
+    throw buildAuthFunctionError(
+      "auth/function-unavailable",
+      "Authentication email service is not available in this browser."
     );
   }
-};
 
-const ensureFirebaseConfigured = (feature = "Authentication") => {
-  if (firebaseClientReady) return;
-  throw createFirebaseUnavailableError(feature);
-};
-
-const loadFirebaseAuthRuntime = async (feature = "Authentication") => {
-  ensureFirebaseConfigured(feature);
-  const [authModule] = await Promise.all([
-    loadFirebaseAuthModule(),
-    ensureFirebaseAuth(),
-  ]);
-  return { authModule, auth };
-};
-
-const loadFirebaseSessionRuntime = async (feature = "Authentication") => {
-  ensureFirebaseConfigured(feature);
-  const [authModule, firestoreModule] = await Promise.all([
-    loadFirebaseAuthModule(),
-    loadFirebaseFirestoreModule(),
-    ensureFirebaseAuth(),
-    ensureFirestore(),
-  ]);
-  return {
-    authModule,
-    firestoreModule,
-    auth,
-    db,
-  };
-};
-
-const getAuthBootstrapRef = (docRef) =>
-  docRef(db, "systemSettings", AUTH_BOOTSTRAP_DOC_ID);
-
-const sendVerificationEmailWithFallback = async (
-  firebaseUser,
-  sendEmailVerificationFn
-) => {
-  if (!firebaseUser) {
-    throw new Error("Unable to send verification email.");
-  }
-
-  const actionCodeSettings = buildVerificationActionCodeSettings();
+  let response;
   try {
-    if (!actionCodeSettings) {
-      await sendEmailVerificationFn(firebaseUser);
-      return;
-    }
-
-    await sendEmailVerificationFn(firebaseUser, actionCodeSettings);
+    response = await fetch(`/.netlify/functions/${functionName}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload || {}),
+    });
   } catch (error) {
-    if (
-      error?.code === "auth/unauthorized-continue-uri" ||
-      error?.code === "auth/invalid-continue-uri"
-    ) {
-      try {
-        await sendEmailVerificationFn(firebaseUser);
-        return;
-      } catch (fallbackError) {
-        if (!shouldTryVerificationEmailProxy(fallbackError)) {
-          throw fallbackError;
-        }
-
-        try {
-          await requestVerificationEmailViaProxy(firebaseUser);
-          return;
-        } catch (proxyError) {
-          throw proxyError?.code ? proxyError : fallbackError;
-        }
-      }
-    }
-
-    if (!shouldTryVerificationEmailProxy(error)) {
-      throw error;
-    }
-
-    try {
-      await requestVerificationEmailViaProxy(firebaseUser, actionCodeSettings);
-      return;
-    } catch (proxyError) {
-      throw proxyError?.code ? proxyError : error;
-    }
+    throw buildAuthFunctionError(
+      "auth/function-unavailable",
+      "Authentication email service is not reachable.",
+      { cause: error }
+    );
   }
+
+  const contentType = response.headers.get("content-type") || "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    throw buildAuthFunctionError(
+      "auth/function-unavailable",
+      "Authentication email service is not deployed."
+    );
+  }
+
+  let body = {};
+  try {
+    body = await response.json();
+  } catch {
+    body = {};
+  }
+
+  if (!response.ok || body?.ok === false) {
+    throw buildAuthFunctionError(
+      body?.code,
+      body?.error || body?.message || "Authentication email service failed.",
+      {
+        status: response.status,
+        details: body,
+      }
+    );
+  }
+
+  return body;
 };
 
-const createAuthErrorWithCode = (code, message) => {
-  const error = new Error(message);
-  error.code = code;
-  return error;
+const ensureSupabaseConfigured = (feature = "Authentication") => {
+  if (supabaseClientReady && supabase) return;
+  throw createSupabaseUnavailableError(feature);
+};
+
+const getAuthBootstrapRef = () => doc(db, "systemSettings", AUTH_BOOTSTRAP_DOC_ID);
+
+const buildVerificationRedirectTo = () => getAuthRedirectUrl("/");
+const buildResetRedirectTo = () => getAuthRedirectUrl("/password-change");
+
+const throwIfSupabaseError = (error, fallback = "Authentication failed.") => {
+  if (!error) return;
+  const message = toSafeText(error.message) || fallback;
+  const normalized = message.toLowerCase();
+  if (normalized.includes("email not confirmed")) {
+    throw createAuthErrorWithCode(
+      "auth/email-not-verified",
+      "Verify your email before logging in."
+    );
+  }
+  if (normalized.includes("invalid login credentials")) {
+    throw createAuthErrorWithCode(
+      "auth/invalid-credential",
+      "Invalid email or password."
+    );
+  }
+  if (normalized.includes("rate limit")) {
+    throw createAuthErrorWithCode("auth/too-many-requests", message);
+  }
+  throw createAuthErrorWithCode(error.code || "auth/request-failed", message);
 };
 
 const AuthContext = createContext(null);
@@ -507,7 +348,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (!firebaseClientReady) {
+    if (!supabaseClientReady || !supabase) {
       resetSignedOutState();
       setLoading(false);
       return undefined;
@@ -518,22 +359,10 @@ export function AuthProvider({ children }) {
 
     const connectAuth = async () => {
       try {
-        const {
-          authModule: { onAuthStateChanged, reload, signOut },
-        } = await loadFirebaseAuthRuntime("Authentication");
-
-        if (cancelled) return;
-
-        unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        const handleSessionUser = async (session) => {
+          const currentUser = toSupabaseAppUser(session?.user, session);
+          setSupabaseAuthUser(currentUser);
           setLoading(true);
-
-          if (currentUser) {
-            try {
-              await reload(currentUser);
-            } catch {
-              // Non-blocking: fall back to cached auth state if reload fails.
-            }
-          }
 
           if (!currentUser || !currentUser.emailVerified) {
             resetSignedOutState();
@@ -544,9 +373,6 @@ export function AuthProvider({ children }) {
           setUser(currentUser);
 
           try {
-            const {
-              firestoreModule: { doc, getDoc, serverTimestamp, setDoc },
-            } = await loadFirebaseSessionRuntime("User profile");
             const userDoc = await getDoc(doc(db, "users", currentUser.uid));
             if (userDoc.exists()) {
               const data = userDoc.data();
@@ -554,7 +380,8 @@ export function AuthProvider({ children }) {
               if (accountStatus === "blocked" || accountStatus === "pending") {
                 resetSignedOutState();
                 try {
-                  await signOut(auth);
+                  await supabase.auth.signOut();
+                  setSupabaseAuthUser(null);
                 } catch {
                   // Ignore sign-out race conditions; blocked accounts should still be cleared locally.
                 }
@@ -616,7 +443,7 @@ export function AuthProvider({ children }) {
               if (canonicalAccountRole === "admin") {
                 try {
                   await setDoc(
-                    getAuthBootstrapRef(doc),
+                    getAuthBootstrapRef(),
                     {
                       adminUid: currentUser.uid,
                       updatedAt: serverTimestamp(),
@@ -644,7 +471,20 @@ export function AuthProvider({ children }) {
           } finally {
             setLoading(false);
           }
+        };
+
+        const sessionResult = await supabase.auth.getSession();
+        throwIfSupabaseError(sessionResult.error, "Unable to load session.");
+        if (!cancelled) {
+          await handleSessionUser(sessionResult.data?.session || null);
+        }
+
+        const subscription = supabase.auth.onAuthStateChange((_event, session) => {
+          if (!cancelled) {
+            void handleSessionUser(session);
+          }
         });
+        unsubscribe = () => subscription.data.subscription.unsubscribe();
       } catch {
         if (cancelled) return;
         resetSignedOutState();
@@ -691,20 +531,9 @@ export function AuthProvider({ children }) {
     year,
     rollNo,
     qrNum,
-    faceVector,
-    faceSamples,
-    faceVectorLength,
     designation,
   }) => {
-    const {
-      authModule: {
-        createUserWithEmailAndPassword,
-        sendEmailVerification,
-        signOut,
-        updateProfile,
-      },
-      firestoreModule: { doc, serverTimestamp, setDoc, writeBatch },
-    } = await loadFirebaseSessionRuntime("Account signup");
+    ensureSupabaseConfigured("Account signup");
 
     const safeEmail = toSafeText(email).toLowerCase();
     const safeRole = normalizeSessionRole(role);
@@ -722,13 +551,6 @@ export function AuthProvider({ children }) {
     let verificationEmailStatus = "sent";
 
     try {
-      credential = await createUserWithEmailAndPassword(auth, safeEmail, password);
-      sessionStorage.setItem("roleSelection", safeRole);
-
-      if (name) {
-        await updateProfile(credential.user, { displayName: name });
-      }
-
       const normalizedDepartment = normalizeDepartment(department);
       const userProfile = {
         email: safeEmail,
@@ -763,12 +585,6 @@ export function AuthProvider({ children }) {
         const safeQrNum = toSafeText(qrNum);
         const rollNoNumber = extractNumericQrValue(safeRollNo);
         const qrNumNumber = extractNumericQrValue(safeQrNum);
-        const normalizedFaceVector = normalizeFaceVector(faceVector);
-        const normalizedFaceSamples = dedupeFaceVectors(faceSamples).slice(
-          -FACE_REGISTRATION_SAMPLE_LIMIT
-        );
-        const serializedFaceSamples =
-          serializeFaceSampleVectors(normalizedFaceSamples);
         userProfile.year = year ? Number(year) : null;
         userProfile.rollNo = safeRollNo;
         userProfile.registerNumber = safeRollNo;
@@ -779,61 +595,106 @@ export function AuthProvider({ children }) {
         userProfile.qrNumNumber = Number.isSafeInteger(qrNumNumber)
           ? qrNumNumber
           : null;
-        const stableFaceVector = averageFaceVector([
-          ...normalizedFaceSamples,
-          normalizedFaceVector,
-        ]);
-        const resolvedFaceVector =
-          stableFaceVector.length >= FACE_MIN_VECTOR_LENGTH
-            ? stableFaceVector
-            : normalizedFaceVector;
-        if (resolvedFaceVector.length >= FACE_MIN_VECTOR_LENGTH) {
-          userProfile.faceAttendance = {
-            vector: resolvedFaceVector,
-            vectorLength: Number.isFinite(faceVectorLength)
-              ? Number(faceVectorLength)
-              : resolvedFaceVector.length,
-            sampleVectors: serializedFaceSamples,
-            sampleCount: serializedFaceSamples.length,
-            algorithm: "face-api-128d",
-            matchThreshold: FACE_MATCH_THRESHOLD,
-            updatedAt: serverTimestamp(),
-          };
-        }
       } else {
         userProfile.designation = designation || "";
       }
 
-      const userRef = doc(db, "users", credential.user.uid);
+      const metadataProfile = JSON.parse(JSON.stringify(userProfile));
+      metadataProfile.createdAt = new Date().toISOString();
 
-      if (safeRole === "admin") {
-        const bootstrapRef = getAuthBootstrapRef(doc);
-        const batch = writeBatch(db);
-        batch.set(userRef, userProfile);
-        batch.set(
-          bootstrapRef,
-          {
-            adminUid: credential.user.uid,
-            updatedAt: serverTimestamp(),
+      const signupWithCustomEmail = async () => {
+        const result = await postAuthFunction("auth-signup", {
+          email: safeEmail,
+          password,
+          role: safeRole,
+          profile: userProfile,
+          metadata: {
+            ...metadataProfile,
+            display_name: name || "New User",
           },
-          { merge: true }
-        );
-        await batch.commit();
-      } else {
-        await setDoc(userRef, userProfile);
+          redirectTo: buildVerificationRedirectTo(),
+        });
+        const appUser = toSupabaseAppUser(result.user, null);
+        if (!appUser?.uid) {
+          throw createAuthErrorWithCode(
+            "auth/server-signup-invalid",
+            "Account was created, but Supabase did not return the new account id."
+          );
+        }
+        return {
+          credential: { user: appUser },
+          verificationEmailStatus: result.emailStatus || "sent",
+        };
+      };
+
+      const signupResult = await supabase.auth.signUp({
+        email: safeEmail,
+        password,
+        options: {
+          data: {
+            ...metadataProfile,
+            display_name: name || "New User",
+          },
+          emailRedirectTo: buildVerificationRedirectTo(),
+        },
+      });
+      if (signupResult.error && isConfirmationEmailSendError(signupResult.error)) {
+        try {
+          return await signupWithCustomEmail();
+        } catch (customEmailError) {
+          if (isAuthFunctionUnavailableError(customEmailError)) {
+            throw createAuthErrorWithCode(
+              "auth/confirmation-email-failed",
+              "Supabase could not send the confirmation email. Configure Supabase Auth SMTP, or set SUPABASE_SERVICE_ROLE_KEY plus RESEND_API_KEY/EMAIL_FROM so A3 Hub can send verification emails."
+            );
+          }
+          throw customEmailError;
+        }
+      }
+      throwIfSupabaseError(signupResult.error, "Unable to create account.");
+
+      const appUser = toSupabaseAppUser(
+        signupResult.data?.user,
+        signupResult.data?.session
+      );
+      if (!appUser?.uid) {
+        throw new Error("Supabase did not return the new account id.");
       }
 
-      profileStored = true;
+      credential = { user: appUser };
+      sessionStorage.setItem("roleSelection", safeRole);
+      setSupabaseAuthUser(appUser);
+
+      const userRef = doc(db, "users", appUser.uid);
 
       try {
-        await sendVerificationEmailWithFallback(
-          credential.user,
-          sendEmailVerification
-        );
-      } catch {
-        verificationEmailStatus = "cooldown";
+        if (safeRole === "admin") {
+          const bootstrapRef = getAuthBootstrapRef();
+          const batch = writeBatch(db);
+          batch.set(userRef, userProfile);
+          batch.set(
+            bootstrapRef,
+            {
+              adminUid: appUser.uid,
+              updatedAt: serverTimestamp(),
+            },
+            { merge: true }
+          );
+          await batch.commit();
+        } else {
+          await setDoc(userRef, userProfile);
+        }
+
+        profileStored = true;
+      } catch (profileError) {
+        if (signupResult.data?.session) {
+          throw profileError;
+        }
+        profileStored = true;
       }
-      await signOut(auth);
+
+      await supabase.auth.signOut().catch(() => {});
+      setSupabaseAuthUser(null);
 
       return {
         credential,
@@ -841,11 +702,8 @@ export function AuthProvider({ children }) {
       };
     } catch (error) {
       if (credential?.user && !profileStored) {
-        try {
-          await credential.user.delete();
-        } catch {
-          // Ignore cleanup failures; orphaned auth account can be handled by admin later.
-        }
+        // Supabase client-side signups cannot delete the auth account; the
+        // database trigger in supabase/schema.sql keeps profile creation in sync.
       }
       if (
         safeRole === "admin" &&
@@ -860,7 +718,7 @@ export function AuthProvider({ children }) {
         isPermissionDeniedError(error)
       ) {
         throw new Error(
-          "Staff signup could not be saved. Publish the latest Firestore rules, then the account will be created in pending approval status."
+          "Staff signup could not be saved. Apply the Supabase schema and policies, then the account will be created in pending approval status."
         );
       }
       throw error;
@@ -868,23 +726,24 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const {
-      authModule: { reload, signInWithEmailAndPassword, signOut },
-      firestoreModule: { doc, getDoc },
-    } = await loadFirebaseSessionRuntime("Login");
+    ensureSupabaseConfigured("Login");
 
     const safeEmail = toSafeText(email).toLowerCase();
     const selectedRole = normalizeSessionRole(sessionStorage.getItem("roleSelection"));
-    const credential = await signInWithEmailAndPassword(
-      auth,
-      safeEmail,
-      password
+    const signInResult = await supabase.auth.signInWithPassword({
+      email: safeEmail,
+      password,
+    });
+    throwIfSupabaseError(signInResult.error, "Login failed.");
+    const currentUser = toSupabaseAppUser(
+      signInResult.data?.user,
+      signInResult.data?.session
     );
-    try {
-      await reload(credential.user);
-    } catch {
-      // Non-blocking: continue with current auth state if reload fails.
+    if (!currentUser) {
+      throw new Error("Unable to load the signed-in account.");
     }
+    setSupabaseAuthUser(currentUser);
+    const credential = { user: currentUser };
 
     try {
       const profileSnapshot = await getDoc(doc(db, "users", credential.user.uid));
@@ -894,18 +753,21 @@ export function AuthProvider({ children }) {
         profileSnapshot.exists() &&
         normalizeAccountStatus(profileData?.status) === "blocked"
       ) {
-        await signOut(auth);
+        await supabase.auth.signOut();
+        setSupabaseAuthUser(null);
         throw new Error(BLOCKED_ACCOUNT_MESSAGE);
       }
       if (
         profileSnapshot.exists() &&
         normalizeAccountStatus(profileData?.status) === "pending"
       ) {
-        await signOut(auth);
+        await supabase.auth.signOut();
+        setSupabaseAuthUser(null);
         throw new Error(STAFF_PENDING_APPROVAL_MESSAGE);
       }
       if (selectedRole === "admin" && accountRole !== "admin") {
-        await signOut(auth);
+        await supabase.auth.signOut();
+        setSupabaseAuthUser(null);
         throw new Error(
           "This account does not have admin access. Login with an existing admin account."
         );
@@ -914,7 +776,8 @@ export function AuthProvider({ children }) {
         selectedRole === "canteen" &&
         !["admin", "canteen_staff"].includes(accountRole)
       ) {
-        await signOut(auth);
+        await supabase.auth.signOut();
+        setSupabaseAuthUser(null);
         throw new Error(
           "This account does not have food console access. Login with a canteen staff or admin account."
         );
@@ -931,10 +794,11 @@ export function AuthProvider({ children }) {
         throw error;
       }
       if (selectedRole === "canteen") {
-        await signOut(auth).catch(() => {});
+        await supabase.auth.signOut().catch(() => {});
+        setSupabaseAuthUser(null);
         if (isPermissionDeniedError(error)) {
           throw new Error(
-            "Food console access could not be verified. This signed-in account is not recognized as an active canteen staff member or admin by Firestore."
+            "Food console access could not be verified. This signed-in account is not recognized as an active canteen staff member or admin by Supabase."
           );
         }
         throw new Error(
@@ -942,10 +806,11 @@ export function AuthProvider({ children }) {
         );
       }
       if (selectedRole === "admin") {
-        await signOut(auth).catch(() => {});
+        await supabase.auth.signOut().catch(() => {});
+        setSupabaseAuthUser(null);
         if (isPermissionDeniedError(error)) {
           throw new Error(
-            "Admin access could not be verified. This signed-in account is not recognized as an active admin by Firestore."
+            "Admin access could not be verified. This signed-in account is not recognized as an active admin by Supabase."
           );
         }
         throw new Error("Unable to verify admin access right now. Please try again.");
@@ -956,90 +821,68 @@ export function AuthProvider({ children }) {
     return credential;
   };
 
-  const resendVerificationEmail = async ({ email, password }) => {
-    const {
-      authModule: {
-        reload,
-        sendEmailVerification,
-        signInWithEmailAndPassword,
-        signOut,
-      },
-      firestoreModule: { doc, getDoc },
-    } = await loadFirebaseSessionRuntime("Email verification");
+  const resendVerificationEmail = async ({ email }) => {
+    ensureSupabaseConfigured("Email verification");
 
     const safeEmail = toSafeText(email).toLowerCase();
-    const safePassword = String(password || "");
-    if (!safeEmail || !safePassword) {
-      throw new Error("Enter email and password to resend verification email.");
+    if (!safeEmail) {
+      throw new Error("Enter email to resend verification email.");
     }
-
-    const credential = await signInWithEmailAndPassword(
-      auth,
-      safeEmail,
-      safePassword
-    );
 
     try {
-      const profileSnapshot = await getDoc(doc(db, "users", credential.user.uid));
-      if (
-        profileSnapshot.exists() &&
-        normalizeAccountStatus(profileSnapshot.data()?.status) === "blocked"
-      ) {
-        throw new Error(BLOCKED_ACCOUNT_MESSAGE);
+      const result = await postAuthFunction("auth-send-verification", {
+        email: safeEmail,
+        redirectTo: buildVerificationRedirectTo(),
+      });
+      return {
+        alreadyVerified: Boolean(result?.alreadyVerified),
+        provider: result?.provider || "custom",
+      };
+    } catch (customEmailError) {
+      if (!isAuthFunctionUnavailableError(customEmailError)) {
+        throw customEmailError;
       }
-      if (
-        profileSnapshot.exists() &&
-        normalizeAccountStatus(profileSnapshot.data()?.status) === "pending"
-      ) {
-        throw new Error(STAFF_PENDING_APPROVAL_MESSAGE);
-      }
-
-      try {
-        await reload(credential.user);
-      } catch {
-        // Non-blocking: continue if reload fails.
-      }
-
-      if (credential.user.emailVerified) {
-        return { alreadyVerified: true };
-      }
-
-      try {
-        await sendVerificationEmailWithFallback(
-          credential.user,
-          sendEmailVerification
-        );
-      } catch (error) {
-        if (error?.code === "auth/too-many-requests") {
-          throw createAuthErrorWithCode(
-            "auth/verification-send-busy",
-            "A fresh verification link could not be generated right now. Tap resend again in a moment."
-          );
-        }
-        throw error;
-      }
-      return { alreadyVerified: false };
-    } finally {
-      await signOut(auth).catch(() => {});
     }
+
+    const result = await supabase.auth.resend({
+      type: "signup",
+      email: safeEmail,
+      options: {
+        emailRedirectTo: buildVerificationRedirectTo(),
+      },
+    });
+    try {
+      throwIfSupabaseError(result.error, "Unable to resend verification email.");
+    } catch (error) {
+      if (isConfirmationEmailSendError(error)) {
+        throw createAuthErrorWithCode(
+          "auth/confirmation-email-failed",
+          "Supabase could not send the confirmation email. Configure Supabase Auth SMTP, or set SUPABASE_SERVICE_ROLE_KEY plus RESEND_API_KEY/EMAIL_FROM so A3 Hub can send verification emails."
+        );
+      }
+      if (error?.code === "auth/too-many-requests") {
+        throw createAuthErrorWithCode(
+          "auth/verification-send-busy",
+          "A fresh verification link could not be generated right now. Tap resend again in a moment."
+        );
+      }
+      throw error;
+    }
+    return { alreadyVerified: false };
   };
 
   const logout = async () => {
-    if (!firebaseClientReady) {
+    if (!supabaseClientReady || !supabase) {
       sessionStorage.removeItem("roleSelection");
       return;
     }
-    const {
-      authModule: { signOut },
-    } = await loadFirebaseAuthRuntime("Logout");
     sessionStorage.removeItem("roleSelection");
-    return signOut(auth);
+    setSupabaseAuthUser(null);
+    return supabase.auth.signOut();
   };
 
   const resetPassword = async (email) => {
-    const {
-      authModule: { sendPasswordResetEmail },
-    } = await loadFirebaseAuthRuntime("Password reset");
+    ensureSupabaseConfigured("Password reset");
 
     const safeEmail = toSafeText(email).toLowerCase();
 
@@ -1047,25 +890,10 @@ export function AuthProvider({ children }) {
       throw new Error("Enter your email to reset password.");
     }
 
-    const actionCodeSettings = buildResetActionCodeSettings();
-    if (!actionCodeSettings) {
-      await sendPasswordResetEmail(auth, safeEmail);
-      return;
-    }
-
-    try {
-      await sendPasswordResetEmail(auth, safeEmail, actionCodeSettings);
-    } catch (error) {
-      if (
-        error?.code === "auth/unauthorized-continue-uri" ||
-        error?.code === "auth/invalid-continue-uri"
-      ) {
-        await sendPasswordResetEmail(auth, safeEmail);
-        return;
-      }
-
-      throw error;
-    }
+    const result = await supabase.auth.resetPasswordForEmail(safeEmail, {
+      redirectTo: buildResetRedirectTo(),
+    });
+    throwIfSupabaseError(result.error, "Unable to send password reset email.");
   };
 
   const value = {
@@ -1073,8 +901,8 @@ export function AuthProvider({ children }) {
     role,
     profile,
     loading,
-    firebaseReady: firebaseClientReady,
-    startupIssue: firebaseStartupIssue,
+    supabaseReady: supabaseClientReady,
+    startupIssue: supabaseStartupIssue,
     login,
     signup,
     logout,

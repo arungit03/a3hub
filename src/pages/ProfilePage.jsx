@@ -4,7 +4,7 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import {
   CalendarDays,
   Code2,
@@ -15,7 +15,7 @@ import {
   TrendingUp,
   UserRound,
 } from "lucide-react";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { extractNumericQrValue } from "../lib/qr";
 import { useAuth } from "../state/auth";
 

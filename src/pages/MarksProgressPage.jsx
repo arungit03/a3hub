@@ -9,11 +9,11 @@ import {
   query,
   serverTimestamp,
   where,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import ProgressBar from "../components/ProgressBar";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import { createUserNotification, notificationTypes } from "../lib/notifications";
 import { useAuth } from "../state/auth";
 

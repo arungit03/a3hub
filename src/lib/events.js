@@ -254,7 +254,7 @@ export const getEventImageUploadErrorMessage = (error) => {
   }
 
   if (code === "storage/unauthorized") {
-    return "Image upload is blocked by Firebase Storage rules.";
+    return "Image upload is blocked by Supabase Storage policies.";
   }
 
   if (
@@ -262,7 +262,7 @@ export const getEventImageUploadErrorMessage = (error) => {
     code === "storage/project-not-found" ||
     code === "storage/bucket-not-configured"
   ) {
-    return "Image upload is not configured yet. Enable Firebase Storage or Cloudinary.";
+    return "Image upload is not configured yet. Enable Supabase Storage or Cloudinary.";
   }
 
   if (code === "storage/retry-limit-exceeded" || code === "storage/unknown") {
@@ -270,7 +270,7 @@ export const getEventImageUploadErrorMessage = (error) => {
   }
 
   if (code === "upload/no-provider") {
-    return "Image upload is unavailable right now. Configure Cloudinary or Firebase Storage.";
+    return "Image upload is unavailable right now. Configure Cloudinary or Supabase Storage.";
   }
 
   if (code === "upload/inline-too-large") {
@@ -279,3 +279,4 @@ export const getEventImageUploadErrorMessage = (error) => {
 
   return toSafeText(error?.message) || "Unable to upload the event image.";
 };
+

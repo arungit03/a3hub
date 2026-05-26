@@ -11,8 +11,8 @@ import {
   serverTimestamp,
   updateDoc,
   writeBatch,
-} from "firebase/firestore";
-import { db } from "../lib/firebase";
+} from "../lib/supabaseData";
+import { db } from "../lib/supabase";
 import { useAuth } from "../state/auth";
 
 const TYPE_META = {
@@ -169,10 +169,10 @@ const getLatestDeliveryLog = (item = {}) => {
 const getLoadErrorMessage = (error) => {
   const code = error?.code || "";
   if (code === "permission-denied") {
-    return "Notifications are blocked by Firestore rules. Deploy updated firestore.rules.";
+    return "Notifications are blocked by Supabase policies. Apply the Supabase schema policies.";
   }
   if (code === "failed-precondition") {
-    return "Notification query needs Firestore index/config updates.";
+    return "Notification query needs Supabase schema/config updates.";
   }
   if (code) {
     return `Unable to load notifications (${code}).`;
@@ -959,3 +959,4 @@ export default function NotificationCenter({
     </>
   );
 }
+

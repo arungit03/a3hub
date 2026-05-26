@@ -33,13 +33,13 @@ const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
 
 test("email-send handler sends via provider for authenticated requests", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_SEND_ALLOWED_ROLES: process.env.EMAIL_SEND_ALLOWED_ROLES,
   };
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.RESEND_API_KEY = "test-resend-key";
   process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "staff,admin";
@@ -50,9 +50,7 @@ test("email-send handler sends via provider for authenticated requests", async (
   globalThis.fetch = async (url, options = {}) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -113,13 +111,13 @@ test("email-send handler sends via provider for authenticated requests", async (
 
 test("email-send handler blocks unauthorized roles before provider call", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_SEND_ALLOWED_ROLES: process.env.EMAIL_SEND_ALLOWED_ROLES,
   };
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.RESEND_API_KEY = "test-resend-key";
   process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "admin";
@@ -127,12 +125,10 @@ test("email-send handler blocks unauthorized roles before provider call", async 
   const token = createMockIdToken();
   const originalFetch = globalThis.fetch;
   let providerCalled = false;
-  globalThis.fetch = async (url, options = {}) => {
+  globalThis.fetch = async (url) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
-      const parsedBody = JSON.parse(String(options.body || "{}"));
-      assert.equal(parsedBody.idToken, token);
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -185,7 +181,7 @@ test("email-send handler blocks unauthorized roles before provider call", async 
 
 test("email-send falls back to webhook when primary provider fails", async () => {
   const previousEnv = {
-    FIREBASE_WEB_API_KEY: process.env.FIREBASE_WEB_API_KEY,
+    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
     RESEND_API_KEY: process.env.RESEND_API_KEY,
     EMAIL_FROM: process.env.EMAIL_FROM,
     EMAIL_SEND_ALLOWED_ROLES: process.env.EMAIL_SEND_ALLOWED_ROLES,
@@ -194,7 +190,7 @@ test("email-send falls back to webhook when primary provider fails", async () =>
     EMAIL_WEBHOOK_AUTH_TOKEN: process.env.EMAIL_WEBHOOK_AUTH_TOKEN,
   };
 
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
   process.env.RESEND_API_KEY = "test-resend-key";
   process.env.EMAIL_FROM = "A3 Hub <no-reply@example.com>";
   process.env.EMAIL_SEND_ALLOWED_ROLES = "staff,admin";
@@ -209,7 +205,7 @@ test("email-send falls back to webhook when primary provider fails", async () =>
   globalThis.fetch = async (url, options = {}) => {
     const resolvedUrl = String(url || "");
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
         users: [
           {
@@ -229,8 +225,8 @@ test("email-send falls back to webhook when primary provider fails", async () =>
 
     if (resolvedUrl === "https://example.com/email-fallback") {
       webhookCalled = true;
-      assert.equal(options.headers.authorization, "Bearer fallback-token");
       const parsedBody = JSON.parse(String(options.body || "{}"));
+      assert.equal(options.headers.authorization, "Bearer fallback-token");
       assert.equal(parsedBody.event, "notification.email");
       assert.deepEqual(parsedBody.to, ["student@example.com"]);
       return jsonResponse(200, { accepted: true, messageId: "fallback-1" });
@@ -272,3 +268,4 @@ test("email-send falls back to webhook when primary provider fails", async () =>
     });
   }
 });
+

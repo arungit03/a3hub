@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { collection, doc, getDoc, getDocs, orderBy, query } from "firebase/firestore";
-import { db } from "../lib/firebase";
+import { collection, doc, getDoc, getDocs, orderBy, query } from "../lib/supabaseData";
+import { db } from "../lib/supabase";
 
 const decodeName = (value) => {
   const raw = String(value || "").trim();

@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import {
-  auth,
-  ensureFirebaseAuth,
-  firebaseClientReady,
-  firebaseStartupIssue,
-} from "../lib/firebase";
+  setSupabaseAuthUser,
+  supabase,
+  supabaseClientReady,
+  supabaseStartupIssue,
+  toSupabaseAppUser,
+} from "../lib/supabase";
 
 export default function PasswordChangePage() {
   const navigate = useNavigate();
@@ -22,12 +22,12 @@ export default function PasswordChangePage() {
   const [checkingLink, setCheckingLink] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const authUnavailableMessage =
-    firebaseStartupIssue ||
-    "Password reset is unavailable for this deploy. Set Firebase environment variables and redeploy.";
+    supabaseStartupIssue ||
+    "Password reset is unavailable for this deploy. Set Supabase environment variables and redeploy.";
 
-  const mode = searchParams.get("mode");
-  const oobCode = searchParams.get("oobCode") || "";
-  const hasResetCode = mode === "resetPassword" && Boolean(oobCode);
+  const code = searchParams.get("code") || "";
+  const legacyCode = searchParams.get("oobCode") || "";
+  const hasResetCode = Boolean(code || legacyCode);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,15 +44,22 @@ export default function PasswordChangePage() {
         return;
       }
 
-      if (!firebaseClientReady) {
+      if (!supabaseClientReady || !supabase) {
         setLinkError(authUnavailableMessage);
         setCheckingLink(false);
         return;
       }
 
       try {
-        await ensureFirebaseAuth();
-        const verifiedEmail = await verifyPasswordResetCode(auth, oobCode);
+        if (code) {
+          const result = await supabase.auth.exchangeCodeForSession(code);
+          if (result.error) throw result.error;
+          const appUser = toSupabaseAppUser(result.data?.user, result.data?.session);
+          setSupabaseAuthUser(appUser);
+        }
+        const userResult = await supabase.auth.getUser();
+        if (userResult.error) throw userResult.error;
+        const verifiedEmail = userResult.data?.user?.email || "";
         if (!cancelled) {
           setEmail(verifiedEmail);
         }
@@ -74,14 +81,14 @@ export default function PasswordChangePage() {
     return () => {
       cancelled = true;
     };
-  }, [authUnavailableMessage, hasResetCode, oobCode]);
+  }, [authUnavailableMessage, code, hasResetCode]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
     setFormError("");
     setSuccessMessage("");
 
-    if (!firebaseClientReady) {
+    if (!supabaseClientReady || !supabase) {
       setLinkError(authUnavailableMessage);
       return;
     }
@@ -98,17 +105,18 @@ export default function PasswordChangePage() {
 
     setSubmitting(true);
     try {
-      await ensureFirebaseAuth();
-      await confirmPasswordReset(auth, oobCode, password);
+      const result = await supabase.auth.updateUser({ password });
+      if (result.error) throw result.error;
       setSuccessMessage(
-        "Password updated successfully in Firebase. Login with your new password."
+        "Password updated successfully in Supabase. Login with your new password."
       );
       setPassword("");
       setConfirmPassword("");
     } catch (error) {
       if (
         error?.code === "auth/expired-action-code" ||
-        error?.code === "auth/invalid-action-code"
+        error?.code === "auth/invalid-action-code" ||
+        String(error?.message || "").toLowerCase().includes("expired")
       ) {
         setLinkError("This reset link expired. Request another reset email.");
       } else {

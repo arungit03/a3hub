@@ -25,7 +25,7 @@ import {
   setDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "../../lib/supabaseData";
 import { RemoteImage } from "../../components/RemoteImage";
 import {
   EVENT_FORM_QUESTION_TYPES,
@@ -44,7 +44,7 @@ import {
   optimizeImageFileForUpload,
   uploadFileWithFallbacks,
 } from "../../lib/mediaUpload";
-import { db } from "../../lib/firebase";
+import { db } from "../../lib/supabase";
 import { useAuth } from "../../state/auth";
 
 const toSafeText = (value) => String(value || "").trim();

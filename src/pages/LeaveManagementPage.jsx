@@ -13,10 +13,10 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from "firebase/firestore";
+} from "../lib/supabaseData";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
-import { db } from "../lib/firebase";
+import { db } from "../lib/supabase";
 import {
   createUserNotification,
   notificationTypes,
@@ -96,7 +96,7 @@ const getStatusMeta = (status) =>
 const getSendErrorMessage = (error) => {
   const code = error?.code || "";
   if (code === "permission-denied") {
-    return "You already sent a request today or Firestore rules blocked the request.";
+    return "You already sent a request today or Supabase policies blocked the request.";
   }
   if (code === "unauthenticated") {
     return "Please sign in again to send a request.";
@@ -110,10 +110,10 @@ const getSendErrorMessage = (error) => {
 const getLoadErrorMessage = (error) => {
   const code = error?.code || "";
   if (code === "permission-denied") {
-    return "Cannot load requests. Firestore rules blocked access.";
+    return "Cannot load requests. Supabase policies blocked access.";
   }
   if (code === "failed-precondition") {
-    return "Query needs a Firestore index.";
+    return "Query needs Supabase schema/config updates.";
   }
   return code ? `Unable to load requests (${code}).` : "Unable to load leave requests.";
 };
@@ -327,7 +327,7 @@ export default function LeaveManagementPage({ forcedStaff }) {
           if (expiredSnapshot.size < 100) return;
         }
       } catch {
-        // Keep UI responsive; Firebase TTL can still clean these up server-side.
+        // Keep UI responsive; Supabase cleanup jobs can still remove these server-side.
       }
     };
 
@@ -813,4 +813,5 @@ export default function LeaveManagementPage({ forcedStaff }) {
     </>
   );
 }
+
 

@@ -119,3 +119,4 @@ test("installChunkLoadRecovery ignores unrelated promise rejections and clears t
     restoreWindow();
   }
 });
+

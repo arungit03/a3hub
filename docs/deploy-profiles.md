@@ -66,4 +66,5 @@ When a feature is disabled, the app now hides or skips:
 - route prefetch for disabled modules
 - selected home dashboard subscriptions and cards
 
-This helps reduce deploy complexity, background Firestore listeners, and accidental exposure of modules that are out of scope for a given environment.
+This helps reduce deploy complexity, background Supabase listeners, and accidental exposure of modules that are out of scope for a given environment.
+

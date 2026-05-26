@@ -150,7 +150,7 @@ const SEARCH_ALIASES = Object.freeze({
   dashboard: ["home", "overview", "main page"],
   activity: ["today", "schedule", "timetable", "subjects today"],
   "campus-services": ["menu", "services", "modules", "campus menu"],
-  attendance: ["present", "absent", "attendance scan", "face attendance"],
+  attendance: ["present", "absent", "attendance"],
   marks: ["marks", "progress", "scores", "internal marks", "marksheet"],
   exams: ["exam", "exam schedule", "exam timetable"],
   assignments: ["assignment", "homework", "submissions"],

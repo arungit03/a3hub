@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ensureFirestore } from "../../../lib/firebase.js";
+import { ensureSupabaseData } from "../../../lib/supabase.js";
 import { useAuth } from "../../../state/auth.jsx";
 import { HTML_EDITOR_COLLECTIONS } from "../lib/htmlEditor.js";
 
@@ -80,8 +80,8 @@ export function useHtmlEditorPersistence() {
       }
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore) {
+        const database = await ensureSupabaseData();
+        if (!database) {
           if (!cancelled) {
             setLoading(false);
           }
@@ -89,10 +89,10 @@ export function useHtmlEditorPersistence() {
         }
 
         const { collection, onSnapshot, query, where } = await import(
-          "firebase/firestore"
+          "../../../lib/supabaseData.js"
         );
         const snippetQuery = query(
-          collection(firestore, HTML_EDITOR_COLLECTIONS.snippets),
+          collection(database, HTML_EDITOR_COLLECTIONS.snippets),
           where("userId", "==", user.uid)
         );
 
@@ -112,14 +112,14 @@ export function useHtmlEditorPersistence() {
             if (cancelled) return;
             setSnippets(localSnippets);
             setLoading(false);
-            setError("Using local HTML snippets because Firestore is unavailable.");
+            setError("Using local HTML snippets because Supabase is unavailable.");
           }
         );
       } catch {
         if (!cancelled) {
           setSnippets(localSnippets);
           setLoading(false);
-          setError("Using local HTML snippets because Firestore is unavailable.");
+          setError("Using local HTML snippets because Supabase is unavailable.");
         }
       }
     };
@@ -154,14 +154,14 @@ export function useHtmlEditorPersistence() {
       saveLocalSnippets(user?.uid || "guest", nextSnippets);
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore || !user?.uid) {
+        const database = await ensureSupabaseData();
+        if (!database || !user?.uid) {
           return payload;
         }
 
-        const { doc, serverTimestamp, setDoc } = await import("firebase/firestore");
+        const { doc, serverTimestamp, setDoc } = await import("../../../lib/supabaseData.js");
         await setDoc(
-          doc(firestore, HTML_EDITOR_COLLECTIONS.snippets, safeId),
+          doc(database, HTML_EDITOR_COLLECTIONS.snippets, safeId),
           {
             id: safeId,
             userId: user.uid,
@@ -175,7 +175,7 @@ export function useHtmlEditorPersistence() {
           { merge: true }
         );
       } catch {
-        setError("Saved locally. Firestore sync is not available right now.");
+        setError("Saved locally. Supabase sync is not available right now.");
       }
 
       return payload;
@@ -190,12 +190,12 @@ export function useHtmlEditorPersistence() {
       }
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore) return;
+        const database = await ensureSupabaseData();
+        if (!database) return;
 
-        const { doc, serverTimestamp, setDoc } = await import("firebase/firestore");
+        const { doc, serverTimestamp, setDoc } = await import("../../../lib/supabaseData.js");
         await setDoc(
-          doc(firestore, HTML_EDITOR_COLLECTIONS.history, user.uid),
+          doc(database, HTML_EDITOR_COLLECTIONS.history, user.uid),
           {
             userId: user.uid,
             lastSnippetId: toSafeText(lastSnippetId),
@@ -225,13 +225,13 @@ export function useHtmlEditorPersistence() {
       }
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore) return;
+        const database = await ensureSupabaseData();
+        if (!database) return;
 
-        const { doc, serverTimestamp, setDoc } = await import("firebase/firestore");
+        const { doc, serverTimestamp, setDoc } = await import("../../../lib/supabaseData.js");
         const progressId = `${user.uid}_${toSafeText(topicId)}_${toSafeText(problemId) || "topic"}`;
         await setDoc(
-          doc(firestore, HTML_EDITOR_COLLECTIONS.practice, progressId),
+          doc(database, HTML_EDITOR_COLLECTIONS.practice, progressId),
           {
             id: progressId,
             userId: user.uid,
@@ -262,3 +262,4 @@ export function useHtmlEditorPersistence() {
     [error, loading, saveEditorHistory, savePracticeProgress, saveSnippet, snippets]
   );
 }
+

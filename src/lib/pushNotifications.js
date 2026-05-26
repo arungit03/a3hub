@@ -1,11 +1,17 @@
-import { arrayUnion, doc, serverTimestamp, setDoc } from "firebase/firestore";
-import { getMessaging, getToken, isSupported } from "firebase/messaging";
-import app, { db } from "./firebase";
+import { arrayUnion, doc, serverTimestamp, setDoc } from "./supabaseData";
+import { db } from "./supabase";
 
-const DEFAULT_SW_URL = "/firebase-messaging-sw.js";
+const DEFAULT_SW_URL = "/push-sw.js";
 const toSafeText = (value) => (typeof value === "string" ? value.trim() : "");
 const toBoolean = (value) =>
   /^(1|true|yes|on)$/i.test(String(value || "").trim());
+
+const urlBase64ToUint8Array = (base64String) => {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)));
+};
 
 const resolvePushClientConfig = () => {
   const runtimeRoot =
@@ -67,19 +73,16 @@ export async function registerPushTokenForUser(userId) {
   if (!config.enabled) return;
   if (!config.vapidKey) return;
 
-  const messagingSupported = await isSupported().catch(() => false);
-  if (!messagingSupported) return;
-
   const permission = await requestNotificationPermission();
   if (permission !== "granted") return;
 
   try {
     const registration = await navigator.serviceWorker.register(config.swUrl);
-    const messaging = getMessaging(app);
-    const pushToken = await getToken(messaging, {
-      vapidKey: config.vapidKey,
-      serviceWorkerRegistration: registration,
+    const subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(config.vapidKey),
     });
+    const pushToken = JSON.stringify(subscription.toJSON());
 
     if (!toSafeText(pushToken)) return;
 

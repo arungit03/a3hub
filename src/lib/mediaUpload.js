@@ -2,13 +2,13 @@ import {
   getDownloadURL,
   ref,
   uploadBytesResumable,
-} from "firebase/storage";
+} from "./supabaseStorage";
 import { uploadFileToCloudinary } from "./cloudinaryUpload";
 import {
-  ensureFirebaseStorage,
+  ensureSupabaseStorage,
   getStorageForBucket,
   storageBuckets,
-} from "./firebase";
+} from "./supabase";
 
 const toSafeText = (value) => String(value || "").trim();
 const IMAGE_QUALITY_STEPS = [0.9, 0.82, 0.74, 0.66];
@@ -274,7 +274,7 @@ const uploadBytesWithTimeout = (storageRef, file, metadata) =>
       uploadTask.cancel();
       reject(
         createUploadError(
-          "Firebase Storage upload timed out.",
+          "Supabase Storage upload timed out.",
           "storage/upload-timeout"
         )
       );
@@ -288,7 +288,7 @@ const uploadBytesWithTimeout = (storageRef, file, metadata) =>
         if (error?.code === "storage/canceled") {
           reject(
             createUploadError(
-              "Firebase Storage upload timed out.",
+              "Supabase Storage upload timed out.",
               "storage/upload-timeout"
             )
           );
@@ -303,7 +303,7 @@ const uploadBytesWithTimeout = (storageRef, file, metadata) =>
     );
   });
 
-export const uploadFileToFirebaseStorage = async ({
+export const uploadFileToSupabaseStorage = async ({
   file,
   folder = "a3hub/uploads",
 }) => {
@@ -314,7 +314,7 @@ export const uploadFileToFirebaseStorage = async ({
   const buckets = storageBuckets?.length ? storageBuckets : [];
   if (buckets.length === 0) {
     throw createUploadError(
-      "Firebase Storage is not configured for uploads.",
+      "Supabase Storage is not configured for uploads.",
       "storage/bucket-not-configured"
     );
   }
@@ -326,12 +326,12 @@ export const uploadFileToFirebaseStorage = async ({
     const bucket = buckets[index];
     const bucketStorage =
       index === 0
-        ? await ensureFirebaseStorage()
+        ? await ensureSupabaseStorage()
         : await getStorageForBucket(bucket);
 
     if (!bucketStorage) {
       throw createUploadError(
-        "Firebase Storage is not configured for uploads.",
+        "Supabase Storage is not configured for uploads.",
         "storage/bucket-not-configured"
       );
     }
@@ -359,7 +359,7 @@ export const uploadFileToFirebaseStorage = async ({
         url,
         bucket,
         path: storageRef.fullPath,
-        provider: "firebase-storage",
+        provider: "supabase-storage",
         bytes: Number(file.size || 0),
         format: toSafeText(file.name).split(".").pop()?.toLowerCase() || "",
         resourceType: toSafeText(file.type).split("/")[0] || "",
@@ -393,7 +393,7 @@ export const uploadFileWithFallbacks = async ({
   }
 
   try {
-    return await uploadFileToFirebaseStorage({ file, folder });
+    return await uploadFileToSupabaseStorage({ file, folder });
   } catch (storageError) {
     if (allowInlineImageFallback && isImageFile(file)) {
       return buildInlineImageAsset(file);

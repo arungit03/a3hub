@@ -9,7 +9,7 @@ import {
   serverTimestamp,
   updateDoc,
   where,
-} from "firebase/firestore";
+} from "../../src/lib/supabaseData.js";
 import {
   MENU_ITEM_STATUS,
   ORDER_STATUS,
@@ -34,7 +34,7 @@ import {
   validateMenuItemForm,
   validateOrderStatus,
 } from "../utils/validation";
-import { assertFirebaseReady, auth, db } from "./client";
+import { assertSupabaseReady, auth, db } from "./client";
 
 const MENU_ITEMS_COLLECTION = "menuItems";
 const ORDERS_COLLECTION = "orders";
@@ -87,15 +87,15 @@ const getPlaceOrderErrorMessage = (error) => {
   const code = normalizeText(error?.code).toLowerCase();
   const message = normalizeText(error?.message);
 
-  if (code === "permission-denied" || code === "firestore/permission-denied") {
-    return "Canteen ordering permissions are not updated yet. Deploy the latest Firestore rules and try again.";
+  if (code === "permission-denied" || code === "supabase/permission-denied") {
+    return "Canteen ordering permissions are not updated yet. Deploy the latest Supabase policies and try again.";
   }
 
-  if (code === "aborted" || code === "firestore/aborted") {
+  if (code === "aborted" || code === "supabase/aborted") {
     return "Stock changed while your order was being placed. Refresh the food page and try again.";
   }
 
-  if (code === "unavailable" || code === "firestore/unavailable") {
+  if (code === "unavailable" || code === "supabase/unavailable") {
     return "Canteen ordering is temporarily unavailable right now. Try again in a moment.";
   }
 
@@ -103,7 +103,7 @@ const getPlaceOrderErrorMessage = (error) => {
 };
 
 export const listenVisibleMenuItems = (listener, onError) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   const itemsQuery = query(
     collection(db, MENU_ITEMS_COLLECTION),
     where("visible", "==", true)
@@ -117,7 +117,7 @@ export const listenVisibleMenuItems = (listener, onError) => {
 };
 
 export const listenMenuItemsForStaff = (listener, onError) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   return onSnapshot(
     collection(db, MENU_ITEMS_COLLECTION),
     (snapshot) => listener(mapMenuItems(snapshot)),
@@ -126,7 +126,7 @@ export const listenMenuItemsForStaff = (listener, onError) => {
 };
 
 export const listenOrdersForStudent = (userId, listener, onError) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   if (!normalizeText(userId)) {
     listener([]);
     return () => {};
@@ -145,7 +145,7 @@ export const listenOrdersForStudent = (userId, listener, onError) => {
 };
 
 export const listenOrdersForStaff = (listener, onError) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   return onSnapshot(
     collection(db, ORDERS_COLLECTION),
     (snapshot) => listener(mapOrders(snapshot)),
@@ -154,7 +154,7 @@ export const listenOrdersForStaff = (listener, onError) => {
 };
 
 export const createMenuItem = async (values, userId) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   const errors = validateMenuItemForm(values);
   if (Object.keys(errors).length > 0) {
     const error = new Error("Please fix the highlighted menu item fields.");
@@ -171,7 +171,7 @@ export const createMenuItem = async (values, userId) => {
 };
 
 export const updateMenuItem = async (itemId, values, existing = null) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   const errors = validateMenuItemForm(values);
   if (Object.keys(errors).length > 0) {
     const error = new Error("Please fix the highlighted menu item fields.");
@@ -187,12 +187,12 @@ export const updateMenuItem = async (itemId, values, existing = null) => {
 };
 
 export const deleteMenuItem = async (itemId) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   return deleteDoc(doc(db, MENU_ITEMS_COLLECTION, itemId));
 };
 
 export const updateOrderStatus = async (orderId, status) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   const safeStatus = normalizeText(status).toLowerCase();
   if (!validateOrderStatus(safeStatus) || safeStatus === ORDER_STATUS.PLACED) {
     throw new Error("Only collected or cancelled are allowed here.");
@@ -205,7 +205,7 @@ export const updateOrderStatus = async (orderId, status) => {
 };
 
 export const placeOrder = async (items = []) => {
-  assertFirebaseReady();
+  assertSupabaseReady();
   const currentUser = auth?.currentUser;
   if (!currentUser?.uid) {
     throw new Error("Sign in before placing an order.");
@@ -373,3 +373,4 @@ export const STUDENT_MENU_STATES = Object.freeze([
   MENU_ITEM_STATUS.LIMITED,
   MENU_ITEM_STATUS.SOLD_OUT,
 ]);
+

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { onSnapshot } from "firebase/firestore";
+import { onSnapshot } from "../../lib/supabaseData";
 
 const defaultMapper = (docItem) => ({ id: docItem.id, ...docItem.data() });
 const EMPTY_DATA = [];

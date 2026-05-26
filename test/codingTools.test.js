@@ -105,3 +105,4 @@ test("applyToggleLineComment comments and uncomments the current line", () => {
     selectionEnd: 6,
   });
 });
+

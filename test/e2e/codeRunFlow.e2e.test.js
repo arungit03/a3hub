@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRequire } from "node:module";
-import { auth, setAuthForTesting } from "../../src/lib/firebase.js";
+import { auth, setAuthForTesting } from "../../src/lib/supabase.js";
 import { runNativeCode } from "../../src/lib/nativeCodeRunner.js";
 
 const require = createRequire(import.meta.url);
@@ -34,9 +34,11 @@ const createMockIdToken = ({ expSecondsFromNow = 3600 } = {}) => {
 };
 
 test("e2e flow: runNativeCode -> Netlify code-run -> provider mocks", async () => {
-  const previousApiKey = process.env.FIREBASE_WEB_API_KEY;
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_PUBLISHABLE_KEY;
   const previousAuth = auth;
-  process.env.FIREBASE_WEB_API_KEY = "test-firebase-web-key";
+  process.env.SUPABASE_URL = "https://example.supabase.co";
+  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
 
   const token = createMockIdToken();
   setAuthForTesting({
@@ -71,17 +73,17 @@ test("e2e flow: runNativeCode -> Netlify code-run -> provider mocks", async () =
       return jsonResponse(lambdaResponse.statusCode, parsedBody);
     }
 
-    if (resolvedUrl.includes("identitytoolkit.googleapis.com")) {
+    if (resolvedUrl.includes("/auth/v1/user")) {
       return jsonResponse(200, {
-        users: [
-          {
-            localId: "uid-e2e",
-            email: "staff@example.com",
-            emailVerified: true,
-            customAttributes: JSON.stringify({ role: "staff" }),
-          },
-        ],
+        id: "uid-e2e",
+        email: "staff@example.com",
+        email_confirmed_at: new Date().toISOString(),
+        user_metadata: { role: "staff" },
       });
+    }
+
+    if (resolvedUrl.includes("/rest/v1/app_documents")) {
+      return jsonResponse(200, [{ data: { role: "staff", status: "active" } }]);
     }
 
     if (resolvedUrl.endsWith("/runtimes")) {
@@ -117,12 +119,18 @@ test("e2e flow: runNativeCode -> Netlify code-run -> provider mocks", async () =
   } finally {
     globalThis.fetch = originalFetch;
     setAuthForTesting(previousAuth);
-    if (previousApiKey === undefined) {
-      delete process.env.FIREBASE_WEB_API_KEY;
+    if (previousUrl === undefined) {
+      delete process.env.SUPABASE_URL;
     } else {
-      process.env.FIREBASE_WEB_API_KEY = previousApiKey;
+      process.env.SUPABASE_URL = previousUrl;
+    }
+    if (previousKey === undefined) {
+      delete process.env.SUPABASE_PUBLISHABLE_KEY;
+    } else {
+      process.env.SUPABASE_PUBLISHABLE_KEY = previousKey;
     }
     delete process.env.CODE_RUN_RATE_LIMIT_MAX;
     delete process.env.CODE_RUN_RATE_LIMIT_WINDOW_MS;
   }
 });
+

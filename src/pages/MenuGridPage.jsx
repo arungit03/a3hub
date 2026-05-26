@@ -28,10 +28,10 @@ import { menuItems } from "../data/menuItems";
 import { useAuth } from "../state/auth";
 import {
   db,
-  ensureFirebaseStorage,
+  ensureSupabaseStorage,
   getStorageForBucket,
   storageBuckets,
-} from "../lib/firebase";
+} from "../lib/supabase";
 import {
   createBulkUserNotifications,
   createUserNotification,
@@ -60,8 +60,8 @@ import {
   setDoc,
   Timestamp,
   where,
-} from "firebase/firestore";
-import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+} from "../lib/supabaseData";
+import { getDownloadURL, ref, uploadBytes } from "../lib/supabaseStorage";
 import {
   ACTION_BADGE_CLASS,
   ASSIGNMENT_FILE_MAX_SIZE_BYTES,
@@ -129,13 +129,13 @@ const getNoticeUploadErrorMessage = (error) => {
     return "Upload requires a signed-in account.";
   }
   if (code === "storage/unauthorized") {
-    return "Upload blocked by Storage rules or billing. Check Firebase Storage rules and plan.";
+    return "Upload blocked by Storage policies or billing. Check Supabase Storage policies and plan.";
   }
   if (code === "storage/bucket-not-found" || code === "storage/project-not-found") {
-    return "Storage bucket not found. Enable Firebase Storage and verify storageBucket in firebase config.";
+    return "Storage bucket not found. Create the Supabase Storage bucket and verify storage config.";
   }
   if (code === "storage/bucket-not-configured") {
-    return "Storage bucket not configured. Add the bucket name in firebase config.";
+    return "Storage bucket not configured. Add the Supabase bucket name in runtime config.";
   }
   if (code === "storage/quota-exceeded") {
     return "Storage quota exceeded. Free up space or upgrade the plan.";
@@ -162,7 +162,7 @@ const uploadNoticeFile = async ({ file, noticeId }) => {
     const bucket = buckets[index];
     const bucketStorage =
       index === 0
-        ? await ensureFirebaseStorage()
+        ? await ensureSupabaseStorage()
         : await getStorageForBucket(bucket);
     if (!bucketStorage) {
       const error = new Error("Storage bucket not configured.");
@@ -1336,7 +1336,7 @@ export default function MenuGridPage({ forcedStaff }) {
           console.error("Daily Python challenge sync failed:", error);
           if (!cancelled) {
             setDailyPythonError(
-              "Showing local AI challenges. Update Firestore rules to sync 24h rotation."
+              "Showing local AI challenges. Apply Supabase policies to sync 24h rotation."
             );
           }
         }
@@ -5260,6 +5260,7 @@ export default function MenuGridPage({ forcedStaff }) {
     </div>
   );
 }
+
 
 
 

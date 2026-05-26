@@ -13,44 +13,17 @@ const mode = process.env.MODE || process.env.NODE_ENV || inferredMode;
 const env = loadEnv(mode, rootDir, "");
 
 const outputPath = path.join(rootDir, "public", "runtime-config.js");
-const firebaseSwConfigPath = path.join(
-  rootDir,
-  "public",
-  "firebase-messaging-sw-config.js"
-);
 
 const DEFAULT_AI_PROXY_ENDPOINT = "/api/ai-generate";
 const DEFAULT_PUSH_ENDPOINT = "/.netlify/functions/push-send";
-const DEFAULT_PUSH_SW_URL = "/firebase-messaging-sw.js";
+const DEFAULT_PUSH_SW_URL = "/push-sw.js";
 const DEFAULT_WHATSAPP_ENDPOINT = "/.netlify/functions/whatsapp-send";
 const DEFAULT_EMAIL_ENDPOINT = "/.netlify/functions/email-send";
-
-const FIREBASE_ENV_KEY_BY_CONFIG_KEY = Object.freeze({
-  apiKey: "VITE_FIREBASE_API_KEY",
-  authDomain: "VITE_FIREBASE_AUTH_DOMAIN",
-  projectId: "VITE_FIREBASE_PROJECT_ID",
-  storageBucket: "VITE_FIREBASE_STORAGE_BUCKET",
-  messagingSenderId: "VITE_FIREBASE_MESSAGING_SENDER_ID",
-  appId: "VITE_FIREBASE_APP_ID",
-  measurementId: "VITE_FIREBASE_MEASUREMENT_ID",
-  databaseURL: "VITE_FIREBASE_DATABASE_URL",
-});
-
-const REQUIRED_FIREBASE_KEYS = Object.freeze([
-  "apiKey",
-  "authDomain",
-  "projectId",
-  "storageBucket",
-  "messagingSenderId",
-  "appId",
-]);
 
 const getEnvValue = (...keys) => {
   for (const key of keys) {
     const value = process.env[key] || env[key];
-    if (typeof value === "string") {
-      return value.trim();
-    }
+    if (typeof value === "string") return value.trim();
   }
   return "";
 };
@@ -70,9 +43,7 @@ const pickFirstText = (...values) => {
 const pickFirstBoolean = (...values) => {
   for (const value of values) {
     if (typeof value === "boolean") return value;
-    if (typeof value === "string" && value.trim()) {
-      return toBoolean(value);
-    }
+    if (typeof value === "string" && value.trim()) return toBoolean(value);
   }
   return false;
 };
@@ -80,14 +51,8 @@ const pickFirstBoolean = (...values) => {
 const readAssignedGlobal = async (filePath, globalKey) => {
   try {
     const file = await fs.readFile(filePath, "utf8");
-    const sandbox = {
-      window: {},
-      self: {},
-    };
-    vm.runInNewContext(file, sandbox, {
-      filename: filePath,
-      timeout: 100,
-    });
+    const sandbox = { window: {}, self: {} };
+    vm.runInNewContext(file, sandbox, { filename: filePath, timeout: 100 });
     const value = sandbox.window?.[globalKey] ?? sandbox.self?.[globalKey];
     return value && typeof value === "object" ? value : {};
   } catch {
@@ -98,10 +63,6 @@ const readAssignedGlobal = async (filePath, globalKey) => {
 const existingRuntimeConfig = await readAssignedGlobal(
   outputPath,
   "__A3HUB_RUNTIME_CONFIG__"
-);
-const existingFirebaseConfig = await readAssignedGlobal(
-  firebaseSwConfigPath,
-  "__A3HUB_FIREBASE_CONFIG__"
 );
 const legacyCloudinaryConfig = await readAssignedGlobal(
   path.join(rootDir, "public", "cloudinary-config.js"),
@@ -128,10 +89,10 @@ const legacyEmailConfig = await readAssignedGlobal(
   "__A3HUB_EMAIL_CONFIG__"
 );
 
-const runtimeFirebaseConfig =
-  existingRuntimeConfig.firebase &&
-  typeof existingRuntimeConfig.firebase === "object"
-    ? existingRuntimeConfig.firebase
+const runtimeSupabaseConfig =
+  existingRuntimeConfig.supabase &&
+  typeof existingRuntimeConfig.supabase === "object"
+    ? existingRuntimeConfig.supabase
     : {};
 const runtimeAiConfig =
   existingRuntimeConfig.ai && typeof existingRuntimeConfig.ai === "object"
@@ -156,16 +117,24 @@ const runtimeEmailConfig =
     ? existingRuntimeConfig.email
     : {};
 
-const firebaseConfig = Object.fromEntries(
-  Object.entries(FIREBASE_ENV_KEY_BY_CONFIG_KEY).flatMap(([configKey, envKey]) => {
-    const value = pickFirstText(
-      getEnvValue(envKey),
-      runtimeFirebaseConfig[configKey],
-      existingFirebaseConfig[configKey]
-    );
-    return value ? [[configKey, value]] : [];
-  })
-);
+const supabaseConfig = {
+  url: pickFirstText(getEnvValue("VITE_SUPABASE_URL"), runtimeSupabaseConfig.url),
+  publishableKey: pickFirstText(
+    getEnvValue("VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"),
+    runtimeSupabaseConfig.publishableKey,
+    runtimeSupabaseConfig.anonKey
+  ),
+  documentsTable:
+    pickFirstText(
+      getEnvValue("VITE_SUPABASE_DOCUMENTS_TABLE"),
+      runtimeSupabaseConfig.documentsTable
+    ) || "app_documents",
+  storageBucket:
+    pickFirstText(
+      getEnvValue("VITE_SUPABASE_STORAGE_BUCKET"),
+      runtimeSupabaseConfig.storageBucket
+    ) || "a3hub",
+};
 
 const allowClientAiKey = toBoolean(getEnvValue("VITE_ALLOW_CLIENT_AI_KEY"));
 const isProductionBuild = mode === "production";
@@ -271,7 +240,9 @@ const pushConfig = {
   swUrl:
     pickFirstText(
       getEnvValue("VITE_PUSH_SW_URL"),
-      runtimePushConfig.swUrl,
+      String(runtimePushConfig.swUrl || "").includes("messaging-sw")
+        ? ""
+        : runtimePushConfig.swUrl,
       legacyPushConfig.swUrl
     ) || DEFAULT_PUSH_SW_URL,
 };
@@ -291,7 +262,7 @@ const emailConfig = {
 };
 
 const runtimeConfig = {
-  firebase: firebaseConfig,
+  supabase: supabaseConfig,
   ai: aiConfig,
   cloudinary: cloudinaryConfig,
   whatsapp: whatsappConfig,
@@ -306,7 +277,7 @@ await fs.writeFile(
     "/* Auto-generated by scripts/generate-runtime-config.mjs */",
     "// Runtime config for browser boot. Keep this file uncached across deploys.",
     `window.__A3HUB_RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig, null, 2)};`,
-    "window.__A3HUB_FIREBASE_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.firebase || {};",
+    "window.__A3HUB_SUPABASE_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.supabase || {};",
     "window.__A3HUB_GEMINI_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.ai || {};",
     "window.__A3HUB_OPENAI_CONFIG__ = window.__A3HUB_GEMINI_CONFIG__;",
     "window.__A3HUB_CLOUDINARY_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.cloudinary || {};",
@@ -321,13 +292,16 @@ await fs.writeFile(
   "utf8"
 );
 
-const missingFirebaseKeys = REQUIRED_FIREBASE_KEYS.filter(
-  (key) => !toSafeText(firebaseConfig[key])
-);
+const missingSupabaseKeys = [
+  ["url", supabaseConfig.url],
+  ["publishableKey", supabaseConfig.publishableKey],
+]
+  .filter(([, value]) => !toSafeText(value))
+  .map(([key]) => key);
 
-if (missingFirebaseKeys.length > 0) {
+if (missingSupabaseKeys.length > 0) {
   console.warn(
-    `[runtime-config] Missing Firebase values: ${missingFirebaseKeys.join(", ")}`
+    `[runtime-config] Missing Supabase values: ${missingSupabaseKeys.join(", ")}`
   );
 }
 

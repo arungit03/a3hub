@@ -28,3 +28,4 @@ Delivery control options:
 Recommended delivery state progression:
 - `pending` -> `sent`
 - `pending` -> `failed` (with retry counter + error field)
+

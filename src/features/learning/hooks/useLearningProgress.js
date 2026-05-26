@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../../state/auth.jsx";
-import { ensureFirestore } from "../../../lib/firebase.js";
+import { ensureSupabaseData } from "../../../lib/supabase.js";
 import { LEARNING_CATALOG, LEARNING_COLLECTIONS } from "../data/catalog.js";
 import {
   buildLearningProgressSummary,
@@ -26,7 +26,7 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const progressRef = useRef(createEmptyLearningProgress());
-  const firestoreRef = useRef(null);
+  const databaseRef = useRef(null);
   const docRef = useRef(null);
 
   const saveProgress = useCallback(
@@ -37,13 +37,13 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
       saveLearningProgressToStorage(user?.uid || "guest", safeProgress);
 
       try {
-        const firestore = firestoreRef.current || (await ensureFirestore());
-        if (!firestore || !user?.uid) return;
+        const database = databaseRef.current || (await ensureSupabaseData());
+        if (!database || !user?.uid) return;
 
-        firestoreRef.current = firestore;
-        const { doc, serverTimestamp, setDoc } = await import("firebase/firestore");
+        databaseRef.current = database;
+        const { doc, serverTimestamp, setDoc } = await import("../../../lib/supabaseData.js");
         const reference =
-          docRef.current || doc(firestore, LEARNING_COLLECTIONS.progress, user.uid);
+          docRef.current || doc(database, LEARNING_COLLECTIONS.progress, user.uid);
         docRef.current = reference;
         await setDoc(
           reference,
@@ -55,7 +55,7 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
           { merge: true }
         );
       } catch {
-        setError("Saved locally. Firestore sync is not available right now.");
+        setError("Saved locally. Supabase sync is not available right now.");
       }
     },
     [catalog, user?.uid]
@@ -137,17 +137,17 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
       }
 
       try {
-        const firestore = await ensureFirestore();
-        if (!firestore) {
+        const database = await ensureSupabaseData();
+        if (!database) {
           if (!cancelled) {
             setLoading(false);
           }
           return;
         }
 
-        firestoreRef.current = firestore;
-        const { doc, onSnapshot } = await import("firebase/firestore");
-        const reference = doc(firestore, LEARNING_COLLECTIONS.progress, user.uid);
+        databaseRef.current = database;
+        const { doc, onSnapshot } = await import("../../../lib/supabaseData.js");
+        const reference = doc(database, LEARNING_COLLECTIONS.progress, user.uid);
         docRef.current = reference;
 
         unsubscribe = onSnapshot(
@@ -168,7 +168,7 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
             progressRef.current = local;
             setProgress(local);
             setLoading(false);
-            setError("Using local learning progress because Firestore is unavailable.");
+            setError("Using local learning progress because Supabase is unavailable.");
           }
         );
       } catch {
@@ -176,7 +176,7 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
           progressRef.current = local;
           setProgress(local);
           setLoading(false);
-          setError("Using local learning progress because Firestore is unavailable.");
+          setError("Using local learning progress because Supabase is unavailable.");
         }
       }
     };
@@ -304,3 +304,4 @@ export function useLearningProgress(catalog = LEARNING_CATALOG) {
     restartQuizAttempt,
   };
 }
+

@@ -1,12 +1,4 @@
 import { useMemo, useState } from "react";
-import { deleteApp, initializeApp } from "firebase/app";
-import {
-  createUserWithEmailAndPassword,
-  getAuth,
-  sendEmailVerification,
-  signOut as signOutAuth,
-  updateProfile,
-} from "firebase/auth";
 import {
   collection,
   deleteDoc,
@@ -16,9 +8,9 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
-} from "firebase/firestore";
+} from "../../lib/supabaseData";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
-import { db, firebaseConfig } from "../../lib/firebase";
+import { createEphemeralSupabaseClient, db, getAuthRedirectUrl } from "../../lib/supabase";
 import { useAuth } from "../../state/auth";
 import { AUDIT_ACTIONS, logAuditEvent } from "../lib/auditLogs";
 import { normalizeRole, normalizeStatus } from "../lib/format";
@@ -45,33 +37,34 @@ const isPermissionDeniedError = (error) => {
 
 const resolveAdminActionErrorMessage = (error, fallback) => {
   if (isPermissionDeniedError(error)) {
-    return "This account is not recognized as an active admin by Firestore. Login with a real admin account and try again.";
+    return "This account is not recognized as an active admin by Supabase. Login with a real admin account and try again.";
   }
   return error?.message || fallback;
 };
 
 const createSecondaryUserAuthAccount = async ({ email, password, name }) => {
-  const appName = `a3hub-admin-provision-${Date.now()}-${Math.random()
-    .toString(36)
-    .slice(2, 7)}`;
-  const secondaryApp = initializeApp(firebaseConfig, appName);
-  const secondaryAuth = getAuth(secondaryApp);
+  const client = createEphemeralSupabaseClient();
 
   try {
-    const credential = await createUserWithEmailAndPassword(
-      secondaryAuth,
+    const result = await client.auth.signUp({
       email,
-      password
-    );
-
-    if (name) {
-      await updateProfile(credential.user, { displayName: name }).catch(() => {});
+      password,
+      options: {
+        data: {
+          name,
+          display_name: name,
+        },
+        emailRedirectTo: getAuthRedirectUrl("/"),
+      },
+    });
+    if (result.error) throw result.error;
+    const uid = result.data?.user?.id || "";
+    if (!uid) {
+      throw new Error("Supabase did not return the created account id.");
     }
-    await sendEmailVerification(credential.user).catch(() => {});
-    return credential.user.uid;
+    return uid;
   } finally {
-    await signOutAuth(secondaryAuth).catch(() => {});
-    await deleteApp(secondaryApp).catch(() => {});
+    await client.auth.signOut().catch(() => {});
   }
 };
 
@@ -312,7 +305,7 @@ export default function AdminUsersPage() {
     }
 
     const confirmed = window.confirm(
-      "Delete this user from Firestore profile data? Auth account removal requires backend admin SDK."
+      "Delete this user from Supabase profile data? Auth account removal requires a service-role backend."
     );
     if (!confirmed) return;
 
@@ -331,7 +324,7 @@ export default function AdminUsersPage() {
           email: userItem.email || "",
         },
       }).catch(() => {});
-      setStatusMessage("User Firestore profile deleted.");
+      setStatusMessage("User Supabase profile deleted.");
     } catch (error) {
       setStatusMessage(resolveAdminActionErrorMessage(error, "Unable to delete user."));
     } finally {
@@ -352,7 +345,7 @@ export default function AdminUsersPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Create Staff Account</h3>
           <p className="text-xs text-slate-500">
-            Creates Firebase Auth account + Firestore profile with `staff` role.
+            Creates Supabase Auth account and profile data with `staff` role.
           </p>
 
           <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateStaff}>

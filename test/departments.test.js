@@ -28,3 +28,4 @@ test("departments include core campus programs", () => {
     assert.ok(values.has(item), `expected department not found: ${item}`);
   });
 });
+
