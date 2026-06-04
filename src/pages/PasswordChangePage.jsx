@@ -1,14 +1,13 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { confirmPasswordReset, verifyPasswordResetCode } from "firebase/auth";
 import Card from "../components/Card";
 import GradientHeader from "../components/GradientHeader";
 import {
-  setSupabaseAuthUser,
-  supabase,
-  supabaseClientReady,
-  supabaseStartupIssue,
-  toSupabaseAppUser,
-} from "../lib/supabase";
+  firebaseAuth,
+  firebaseAuthReady,
+  firebaseStartupIssue,
+} from "../lib/firebase";
 
 export default function PasswordChangePage() {
   const navigate = useNavigate();
@@ -22,12 +21,11 @@ export default function PasswordChangePage() {
   const [checkingLink, setCheckingLink] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const authUnavailableMessage =
-    supabaseStartupIssue ||
-    "Password reset is unavailable for this deploy. Set Supabase environment variables and redeploy.";
+    firebaseStartupIssue ||
+    "Password reset is unavailable for this deploy. Set Firebase environment variables and redeploy.";
 
-  const code = searchParams.get("code") || "";
-  const legacyCode = searchParams.get("oobCode") || "";
-  const hasResetCode = Boolean(code || legacyCode);
+  const code = searchParams.get("oobCode") || searchParams.get("code") || "";
+  const hasResetCode = Boolean(code);
 
   useEffect(() => {
     let cancelled = false;
@@ -44,24 +42,16 @@ export default function PasswordChangePage() {
         return;
       }
 
-      if (!supabaseClientReady || !supabase) {
+      if (!firebaseAuthReady || !firebaseAuth) {
         setLinkError(authUnavailableMessage);
         setCheckingLink(false);
         return;
       }
 
       try {
-        if (code) {
-          const result = await supabase.auth.exchangeCodeForSession(code);
-          if (result.error) throw result.error;
-          const appUser = toSupabaseAppUser(result.data?.user, result.data?.session);
-          setSupabaseAuthUser(appUser);
-        }
-        const userResult = await supabase.auth.getUser();
-        if (userResult.error) throw userResult.error;
-        const verifiedEmail = userResult.data?.user?.email || "";
+        const verifiedEmail = await verifyPasswordResetCode(firebaseAuth, code);
         if (!cancelled) {
-          setEmail(verifiedEmail);
+          setEmail(verifiedEmail || "");
         }
       } catch {
         if (!cancelled) {
@@ -88,7 +78,7 @@ export default function PasswordChangePage() {
     setFormError("");
     setSuccessMessage("");
 
-    if (!supabaseClientReady || !supabase) {
+    if (!firebaseAuthReady || !firebaseAuth) {
       setLinkError(authUnavailableMessage);
       return;
     }
@@ -105,10 +95,9 @@ export default function PasswordChangePage() {
 
     setSubmitting(true);
     try {
-      const result = await supabase.auth.updateUser({ password });
-      if (result.error) throw result.error;
+      await confirmPasswordReset(firebaseAuth, code, password);
       setSuccessMessage(
-        "Password updated successfully in Supabase. Login with your new password."
+        "Password updated successfully in Firebase. Login with your new password."
       );
       setPassword("");
       setConfirmPassword("");
@@ -208,7 +197,7 @@ export default function PasswordChangePage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded-2xl bg-gradient-to-r from-clay via-ocean to-rose px-4 py-3 text-sm font-bold text-ink dark:text-white shadow-[0_12px_30px_-12px_rgb(var(--ocean)_/_0.45)] shadow-glow transition-all hover:-translate-y-0.5 hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay/40 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70"
+                className="rounded-2xl bg-gradient-to-r from-clay via-ocean to-rose px-4 py-3 text-sm font-bold text-ink shadow-[0_12px_30px_-12px_rgb(var(--ocean)_/_0.45)] shadow-glow transition-all hover:-translate-y-0.5 hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay/40 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 dark:text-white"
               >
                 {submitting ? "Updating password..." : "Update Password"}
               </button>
@@ -219,4 +208,3 @@ export default function PasswordChangePage() {
     </div>
   );
 }
-

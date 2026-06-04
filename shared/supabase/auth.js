@@ -1,12 +1,31 @@
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 import { doc, getDoc } from "../../src/lib/supabaseData.js";
+import {
+  firebaseAuth,
+  firebaseAuthReady,
+  firebaseStartupIssue,
+  toFirebaseAppUser,
+} from "../../src/lib/firebase.js";
 import { normalizeRole } from "../types/canteen";
 import {
   assertSupabaseReady,
   auth,
   db,
-  supabase,
 } from "./client";
-import { setSupabaseAuthUser, toSupabaseAppUser } from "../../src/lib/supabase.js";
+import { setSupabaseAuthUser } from "../../src/lib/supabase.js";
+
+const assertFirebaseReady = () => {
+  if (!firebaseAuthReady || !firebaseAuth) {
+    throw new Error(
+      firebaseStartupIssue ||
+        "Firebase Authentication is not configured. Add the VITE_FIREBASE_* variables."
+    );
+  }
+};
 
 export const getUserProfile = async (uid) => {
   assertSupabaseReady();
@@ -37,9 +56,10 @@ export const createSessionSnapshot = async (user) => {
 
 export const subscribeToSession = (listener) => {
   assertSupabaseReady();
+  assertFirebaseReady();
 
-  const handleSession = async (session) => {
-    const user = toSupabaseAppUser(session?.user, session);
+  const handleSession = async (firebaseUser) => {
+    const user = toFirebaseAppUser(firebaseUser);
     setSupabaseAuthUser(user);
     try {
       const nextSession = await createSessionSnapshot(user);
@@ -56,26 +76,24 @@ export const subscribeToSession = (listener) => {
     }
   };
 
-  void supabase.auth.getSession().then((result) => handleSession(result.data?.session));
-  const subscription = supabase.auth.onAuthStateChange((_event, session) => {
-    void handleSession(session);
+  return onAuthStateChanged(firebaseAuth, (nextUser) => {
+    void handleSession(nextUser);
   });
-
-  return () => subscription.data.subscription.unsubscribe();
 };
 
 export const signInUser = async ({ email, password }) => {
   assertSupabaseReady();
-  const result = await supabase.auth.signInWithPassword({ email, password });
-  if (result.error) throw result.error;
-  const user = toSupabaseAppUser(result.data?.user, result.data?.session);
+  assertFirebaseReady();
+  const result = await signInWithEmailAndPassword(firebaseAuth, email, password);
+  const user = toFirebaseAppUser(result.user);
   setSupabaseAuthUser(user);
   return createSessionSnapshot(user);
 };
 
 export const signOutUser = async () => {
   assertSupabaseReady();
+  assertFirebaseReady();
   setSupabaseAuthUser(null);
   auth.currentUser = null;
-  await supabase.auth.signOut();
+  await signOut(firebaseAuth);
 };

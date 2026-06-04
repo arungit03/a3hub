@@ -18,7 +18,7 @@ const DEFAULT_AI_PROXY_ENDPOINT = "/api/ai-generate";
 const DEFAULT_PUSH_ENDPOINT = "/.netlify/functions/push-send";
 const DEFAULT_PUSH_SW_URL = "/push-sw.js";
 const DEFAULT_WHATSAPP_ENDPOINT = "/.netlify/functions/whatsapp-send";
-const DEFAULT_EMAIL_ENDPOINT = "/.netlify/functions/email-send";
+const DEFAULT_EMAIL_ENDPOINT = "supabase:functions:email-send";
 
 const getEnvValue = (...keys) => {
   for (const key of keys) {
@@ -94,6 +94,11 @@ const runtimeSupabaseConfig =
   typeof existingRuntimeConfig.supabase === "object"
     ? existingRuntimeConfig.supabase
     : {};
+const runtimeFirebaseConfig =
+  existingRuntimeConfig.firebase &&
+  typeof existingRuntimeConfig.firebase === "object"
+    ? existingRuntimeConfig.firebase
+    : {};
 const runtimeAiConfig =
   existingRuntimeConfig.ai && typeof existingRuntimeConfig.ai === "object"
     ? existingRuntimeConfig.ai
@@ -134,6 +139,37 @@ const supabaseConfig = {
       getEnvValue("VITE_SUPABASE_STORAGE_BUCKET"),
       runtimeSupabaseConfig.storageBucket
     ) || "a3hub",
+};
+
+const firebaseConfig = {
+  apiKey: pickFirstText(
+    getEnvValue("VITE_FIREBASE_API_KEY"),
+    runtimeFirebaseConfig.apiKey
+  ),
+  authDomain: pickFirstText(
+    getEnvValue("VITE_FIREBASE_AUTH_DOMAIN"),
+    runtimeFirebaseConfig.authDomain
+  ),
+  projectId: pickFirstText(
+    getEnvValue("VITE_FIREBASE_PROJECT_ID"),
+    runtimeFirebaseConfig.projectId
+  ),
+  storageBucket: pickFirstText(
+    getEnvValue("VITE_FIREBASE_STORAGE_BUCKET"),
+    runtimeFirebaseConfig.storageBucket
+  ),
+  messagingSenderId: pickFirstText(
+    getEnvValue("VITE_FIREBASE_MESSAGING_SENDER_ID"),
+    runtimeFirebaseConfig.messagingSenderId
+  ),
+  appId: pickFirstText(
+    getEnvValue("VITE_FIREBASE_APP_ID"),
+    runtimeFirebaseConfig.appId
+  ),
+  measurementId: pickFirstText(
+    getEnvValue("VITE_FIREBASE_MEASUREMENT_ID"),
+    runtimeFirebaseConfig.measurementId
+  ),
 };
 
 const allowClientAiKey = toBoolean(getEnvValue("VITE_ALLOW_CLIENT_AI_KEY"));
@@ -263,6 +299,7 @@ const emailConfig = {
 
 const runtimeConfig = {
   supabase: supabaseConfig,
+  firebase: firebaseConfig,
   ai: aiConfig,
   cloudinary: cloudinaryConfig,
   whatsapp: whatsappConfig,
@@ -278,6 +315,7 @@ await fs.writeFile(
     "// Runtime config for browser boot. Keep this file uncached across deploys.",
     `window.__A3HUB_RUNTIME_CONFIG__ = ${JSON.stringify(runtimeConfig, null, 2)};`,
     "window.__A3HUB_SUPABASE_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.supabase || {};",
+    "window.__A3HUB_FIREBASE_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.firebase || {};",
     "window.__A3HUB_GEMINI_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.ai || {};",
     "window.__A3HUB_OPENAI_CONFIG__ = window.__A3HUB_GEMINI_CONFIG__;",
     "window.__A3HUB_CLOUDINARY_CONFIG__ = window.__A3HUB_RUNTIME_CONFIG__.cloudinary || {};",

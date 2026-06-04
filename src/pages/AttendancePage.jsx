@@ -40,6 +40,57 @@ const normalizeDepartmentFilter = (value) =>
     .trim()
     .toLowerCase();
 
+const emailDeliveryReasonMap = {
+  channel_not_configured:
+    "Email is enabled, but the sender endpoint or server secrets are not configured.",
+  delivery_failed:
+    "Email delivery failed. Check the Supabase email-send function logs and mail sender secrets.",
+  disabled_by_payload: "Email delivery is disabled for this notification.",
+  disabled_by_user_preferences: "Email is disabled in this student's notification preferences.",
+  empty_message: "Email message was empty.",
+  missing_auth_token: "Email delivery needs the signed-in staff auth token.",
+  missing_email_address: "This student profile does not have a valid email address.",
+  recipient_not_found: "Student profile was not found while sending email.",
+  supabase_functions_unavailable: "Supabase Edge Functions are not available in this app session.",
+};
+
+const getAttendanceEmailDeliveryMessage = (delivery, targetLabel = "student") => {
+  const emailSummary = delivery?.byChannel?.email;
+  if (!emailSummary) {
+    return {
+      ok: false,
+      message: `Attendance saved, but email delivery did not run for ${targetLabel}.`,
+    };
+  }
+
+  if ((emailSummary.sent || 0) > 0) {
+    return {
+      ok: true,
+      message: `Email sent to ${targetLabel}.`,
+    };
+  }
+
+  const failure = Array.isArray(emailSummary.failures)
+    ? emailSummary.failures[0]
+    : null;
+  const reason =
+    failure?.reason ||
+    ((emailSummary.disabled || 0) > 0
+      ? "channel_not_configured"
+      : (emailSummary.skipped || 0) > 0
+        ? "missing_email_address"
+        : "delivery_failed");
+  const detail =
+    failure?.errorMessage ||
+    emailDeliveryReasonMap[reason] ||
+    "Email was not sent.";
+
+  return {
+    ok: false,
+    message: `Attendance saved, but email was not sent to ${targetLabel}. ${detail}`,
+  };
+};
+
 export default function AttendancePage({ forcedStaff }) {
   const { role, user, profile } = useAuth();
   const [scheduleItems, setScheduleItems] = useState([]);
@@ -619,9 +670,25 @@ export default function AttendancePage({ forcedStaff }) {
                 whatsapp: true,
                 push: true,
               },
+            }).then((notificationResult) => {
+              const emailResult = getAttendanceEmailDeliveryMessage(
+                notificationResult?.delivery,
+                studentName
+              );
+              if (emailResult.ok) {
+                setPeriodUpdateStatus(
+                  `${studentName}: ${sessionLabel} set to ${updatedLabel}. ${emailResult.message}`
+                );
+              } else {
+                setPeriodUpdateError(emailResult.message);
+              }
             });
-          } catch {
-            // Attendance update succeeded; notification can fail independently.
+          } catch (notificationError) {
+            setPeriodUpdateError(
+              `Attendance saved, but email notification failed. ${
+                notificationError?.message || "Check the email sender configuration."
+              }`
+            );
           }
         }
       } catch (error) {
@@ -783,9 +850,26 @@ export default function AttendancePage({ forcedStaff }) {
                 whatsapp: true,
                 push: true,
               },
+            }).then((notificationResult) => {
+              const emailSummary = notificationResult?.delivery?.byChannel?.email;
+              if ((emailSummary?.sent || 0) > 0) {
+                setPeriodUpdateStatus(
+                  `All students marked Present for ${sessionLabel}. Email sent to ${emailSummary.sent}/${recipientIds.length}.`
+                );
+              } else {
+                const emailResult = getAttendanceEmailDeliveryMessage(
+                  notificationResult?.delivery,
+                  "students"
+                );
+                setPeriodUpdateError(emailResult.message);
+              }
             });
-          } catch {
-            // Attendance update succeeded; notification can fail independently.
+          } catch (notificationError) {
+            setPeriodUpdateError(
+              `Attendance saved, but bulk email notification failed. ${
+                notificationError?.message || "Check the email sender configuration."
+              }`
+            );
           }
         }
       } catch (error) {

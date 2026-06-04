@@ -133,7 +133,7 @@ export default function TodaysSchedulePage({ forcedRole }) {
     setCreating(true);
     setStatus("");
     try {
-      await addDoc(collection(db, "todaysSchedules"), {
+      const docRef = await addDoc(collection(db, "todaysSchedules"), {
         dateKey: todayKey,
         date: todayKey,
         time: safeTime,
@@ -145,6 +145,30 @@ export default function TodaysSchedulePage({ forcedRole }) {
           profile?.name || user?.displayName || user?.email || "Staff"
         ).trim(),
       });
+      
+      // Optimistically update UI
+      const newEntry = {
+        id: docRef.id,
+        entryDateKey: todayKey,
+        time: safeTime,
+        period: safePeriod,
+        subjectName: safeSubjectName,
+        createdAt: { toMillis: () => Date.now() },
+        createdByName: String(
+          profile?.name || user?.displayName || user?.email || "Staff"
+        ).trim(),
+      };
+      setEntries((prev) => {
+        const updated = [...prev, newEntry];
+        return updated.sort((a, b) => {
+          const timeDiff = parseTimeToMinutes(a.time) - parseTimeToMinutes(b.time);
+          if (timeDiff !== 0) return timeDiff;
+          const aMillis = a.createdAt?.toMillis?.() || 0;
+          const bMillis = b.createdAt?.toMillis?.() || 0;
+          return aMillis - bMillis;
+        });
+      });
+      
       setForm(EMPTY_FORM);
       setStatus("Today's schedule item added.");
     } catch {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { applyActionCode, checkActionCode } from "firebase/auth";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../state/auth";
-import { supabase } from "../lib/supabase";
+import { firebaseAuth } from "../lib/firebase";
 import { prefetchRoute } from "../lib/routePrefetch";
 import { useToast } from "../hooks/useToast";
 import { useAutosaveDraft } from "../hooks/useAutosaveDraft";
@@ -35,31 +36,34 @@ const resolveAuthErrorMessage = (err, fallback) => {
     return "A fresh verification link could not be generated right now. Tap resend again in a moment.";
   }
   if (err?.code === "auth/operation-not-allowed") {
-    return "Email/password sign-in is disabled in Supabase Auth. Enable it in the Supabase dashboard.";
+    return "Email/password sign-in is disabled in Firebase Authentication. Enable it in the Firebase console.";
   }
   if (
     err?.code === "auth/invalid-continue-uri" ||
     err?.code === "auth/unauthorized-continue-uri"
   ) {
-    return "Verification link configuration is invalid for this domain. Add your app domain to Supabase Auth redirect URLs.";
+    return "Verification link configuration is invalid for this domain. Add your app domain to Firebase Authentication authorized domains.";
   }
   if (err?.code === "auth/network-request-failed") {
     return "Network error while sending verification email. Check internet and try again.";
   }
   if (err?.code === "auth/internal-error") {
-    return "Supabase could not send the verification email right now. Check Supabase Auth email templates and redirect URLs.";
+    return "Firebase could not send the verification email right now. Check Firebase Authentication email templates and authorized domains.";
   }
   if (err?.code === "auth/confirmation-email-failed") {
     return err?.message || "Unable to send confirmation email right now.";
   }
   if (err?.code === "auth/server-email-not-configured") {
-    return "Verification email service is not configured. Set SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY, and EMAIL_FROM in Netlify.";
+    return "Verification email service is not configured. Set Firebase server config, RESEND_API_KEY, and EMAIL_FROM in Netlify.";
   }
   if (err?.code === "auth/email-provider-failed") {
     return "Verification link was created, but the email provider could not send it. Check RESEND_API_KEY and EMAIL_FROM.";
   }
   if (err?.code === "supabase/not-configured") {
     return err?.message || "Supabase is not configured for this deploy.";
+  }
+  if (err?.code === "firebase/not-configured") {
+    return err?.message || "Firebase Authentication is not configured for this deploy.";
   }
   if (err?.code === "auth/email-not-verified") {
     return err?.message || "Verify your email before logging in.";
@@ -116,27 +120,30 @@ export default function AuthPage() {
   const [processingVerificationLink, setProcessingVerificationLink] = useState(false);
   const authUnavailableMessage =
     startupIssue ||
-    "Authentication is unavailable for this deploy. Set Supabase environment variables and redeploy.";
+    "Authentication is unavailable for this deploy. Set Firebase and Supabase profile storage environment variables and redeploy.";
 
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const modeParam = searchParams.get("mode");
-    const code = searchParams.get("code");
+    const code = searchParams.get("oobCode") || searchParams.get("code");
     const legacyCode = searchParams.get("oobCode");
 
-    if ((modeParam === "resetPassword" && legacyCode) || searchParams.get("type") === "recovery") {
+    if (
+      (modeParam === "resetPassword" && legacyCode) ||
+      searchParams.get("type") === "recovery"
+    ) {
       navigate(`/password-change${location.search}`, { replace: true });
       return;
     }
 
-    if (code) {
+    if (code && (!modeParam || modeParam === "verifyEmail")) {
       let cancelled = false;
       const verifyEmailCode = async () => {
         setProcessingVerificationLink(true);
         setError("");
         setMessage("");
 
-        if (!supabaseReady || !supabase) {
+        if (!supabaseReady || !firebaseAuth) {
           if (!cancelled) {
             setError(authUnavailableMessage);
             toastError(authUnavailableMessage);
@@ -147,10 +154,10 @@ export default function AuthPage() {
         }
 
         try {
-          const result = await supabase.auth.exchangeCodeForSession(code);
-          if (result.error) throw result.error;
+          const actionInfo = await checkActionCode(firebaseAuth, code);
+          await applyActionCode(firebaseAuth, code);
           if (cancelled) return;
-          const verifiedEmail = String(result.data?.user?.email || "")
+          const verifiedEmail = String(actionInfo.data?.email || "")
             .trim()
             .toLowerCase();
           if (verifiedEmail) {
@@ -472,9 +479,10 @@ export default function AuthPage() {
           return;
         }
 
-        sessionStorage.setItem("roleSelection", selectedRole);
+        const targetRole = credential.role || selectedRole;
+        sessionStorage.setItem("roleSelection", targetRole);
         clearDraft();
-        navigate(resolveAuthTargetPath(selectedRole));
+        navigate(resolveAuthTargetPath(targetRole));
         return;
       }
 
@@ -507,6 +515,15 @@ export default function AuthPage() {
         err,
         "Authentication failed. Please try again."
       );
+      if (err?.code === "auth/email-not-verified") {
+        setAwaitingVerification(true);
+        setMode("login");
+        setMessage(nextError);
+        info(
+          "Check your verification email. If not received, use Resend Verification Email to generate a fresh link."
+        );
+        return;
+      }
       setError(nextError);
       toastError(nextError);
     } finally {

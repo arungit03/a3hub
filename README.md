@@ -76,7 +76,7 @@ Run commands:
 
 ## Supabase Client Config
 
-Frontend Supabase values now load from `.env`, and the Supabase messaging service worker config is generated automatically before `npm run dev` and `npm run build`.
+Frontend Supabase values now load from `.env`, and Supabase remains the profile/data/storage backend. User signup, signin, verification, and password reset now use Firebase Authentication.
 
 Required local keys:
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
@@ -92,6 +92,21 @@ Optional local keys:
 - `VITE_PUSH_VAPID_KEY`
 
 Use `.env.example` as the template for local setup.
+
+## Firebase Authentication
+
+Firebase is the only browser authentication provider. The default web config points at the `a3hubb` Firebase project, and it can be overridden with:
+
+- `VITE_FIREBASE_API_KEY`
+- `VITE_FIREBASE_AUTH_DOMAIN`
+- `VITE_FIREBASE_PROJECT_ID`
+- `VITE_FIREBASE_APP_ID`
+
+For deployed profile writes and verification resend, set Netlify server variables:
+
+- `FIREBASE_PROJECT_ID`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- optional `FIREBASE_SERVICE_ACCOUNT_JSON` for server-generated verification links
 
 ## Email Verification / Password Reset Inbox Placement
 
@@ -242,27 +257,36 @@ This is already wired for:
 - Staff manual present/absent updates per session
 - Staff bulk `Select All Present`
 
-### 1) Configure Netlify server function secrets
+### 1) Configure mail sender secrets
 
-Set in Netlify Site Settings -> Environment variables:
+Set these on the server that sends email. For Supabase Edge Functions, set them as Supabase function secrets:
 - `RESEND_API_KEY`
 - `EMAIL_FROM` (example: `A3 Hub <no-reply@yourdomain.com>`)
 - `RESEND_API_ENDPOINT` (optional, default: `https://api.resend.com/emails`)
+- `FIREBASE_PROJECT_ID` (required when staff signs in with Firebase)
+
+Example:
+
+```bash
+supabase secrets set RESEND_API_KEY="..." EMAIL_FROM="A3 Hub <no-reply@yourdomain.com>" FIREBASE_PROJECT_ID="your-firebase-project-id"
+supabase functions deploy email-send
+```
 
 ### 2) Enable client forwarding
 
 Set build env values:
 - `VITE_EMAIL_NOTIFY_ENABLED=true`
-- `VITE_EMAIL_NOTIFY_ENDPOINT=/.netlify/functions/email-send` (optional)
+- `VITE_EMAIL_NOTIFY_ENDPOINT=supabase:functions:email-send`
 
 If you do not use `.env` / build env vars, set runtime config in:
 - `public/runtime-config.js`
 - `window.__A3HUB_EMAIL_CONFIG__.enabled = true`
-- `window.__A3HUB_EMAIL_CONFIG__.endpoint = "/.netlify/functions/email-send"`
+- `window.__A3HUB_EMAIL_CONFIG__.endpoint = "supabase:functions:email-send"`
 
 ### 3) Deploy
 
 This repo now includes:
+- `supabase/functions/email-send/index.ts`
 - `netlify/functions/email-send.cjs`
 - generated browser runtime config in `public/runtime-config.js`
 
@@ -270,6 +294,7 @@ Notes:
 - If email send fails, attendance save and in-app notification still succeed.
 - You can control per-user email send using `notificationPreferences.email` on each `users/{uid}` doc.
 - With Resend test sender (`onboarding@resend.dev`), delivery is limited; use a verified sender domain to deliver to student emails.
+- If you prefer Netlify, Vercel, or another backend, point `VITE_EMAIL_NOTIFY_ENDPOINT` to that HTTP endpoint instead.
 
 ## Supabase Push Notification (Web Push Web Push)
 

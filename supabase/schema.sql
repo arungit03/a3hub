@@ -1,6 +1,6 @@
--- A3 Hub Supabase schema
--- Run this in the Supabase SQL editor before using the migrated app.
-
+-- ================================
+-- TABLE
+-- ================================
 create table if not exists public.app_documents (
   path text primary key,
   collection_path text not null,
@@ -16,7 +16,10 @@ create index if not exists app_documents_collection_path_idx
 create index if not exists app_documents_data_gin_idx
   on public.app_documents using gin (data);
 
-create or replace function public.touch_app_documents_updated_at()
+-- ================================
+-- TRIGGER
+-- ================================
+create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
 as $$
@@ -26,96 +29,168 @@ begin
 end;
 $$;
 
-drop trigger if exists app_documents_touch_updated_at on public.app_documents;
-create trigger app_documents_touch_updated_at
+drop trigger if exists update_timestamp on public.app_documents;
+
+create trigger update_timestamp
 before update on public.app_documents
 for each row
-execute function public.touch_app_documents_updated_at();
+execute function public.touch_updated_at();
 
+-- ================================
+-- ENABLE RLS
+-- ================================
 alter table public.app_documents enable row level security;
 
-drop policy if exists "app documents read authenticated" on public.app_documents;
-create policy "app documents read authenticated"
-on public.app_documents
-for select
-to authenticated
-using (true);
-
-drop policy if exists "app documents insert authenticated" on public.app_documents;
-create policy "app documents insert authenticated"
-on public.app_documents
-for insert
-to authenticated
-with check (auth.uid() is not null);
-
-drop policy if exists "app documents update authenticated" on public.app_documents;
-create policy "app documents update authenticated"
-on public.app_documents
-for update
-to authenticated
-using (auth.uid() is not null)
-with check (auth.uid() is not null);
-
-drop policy if exists "app documents delete authenticated" on public.app_documents;
-create policy "app documents delete authenticated"
-on public.app_documents
-for delete
-to authenticated
-using (auth.uid() is not null);
-
-create or replace function public.create_profile_document_for_new_user()
-returns trigger
-language plpgsql
-security definer
-set search_path = public
+-- ================================
+-- HELPER FUNCTIONS
+-- ================================
+create or replace function public.get_role(uid text)
+returns text
+language sql stable
 as $$
-declare
-  profile jsonb;
-begin
-  profile := coalesce(new.raw_user_meta_data, '{}'::jsonb);
-  profile := profile
-    || jsonb_build_object(
-      'email', coalesce(new.email, ''),
-      'status', coalesce(profile->>'status', 'active'),
-      'role', coalesce(profile->>'role', 'student'),
-      'createdAt', now()
-    );
-
-  insert into public.app_documents (path, collection_path, document_id, data)
-  values ('users/' || new.id::text, 'users', new.id::text, profile)
-  on conflict (path) do update
-  set data = public.app_documents.data || excluded.data,
-      updated_at = now();
-
-  return new;
-end;
+  select coalesce(data->>'role','student')
+  from public.app_documents
+  where path = 'users/' || uid
+  limit 1;
 $$;
 
-drop trigger if exists create_profile_document_on_auth_user on auth.users;
-create trigger create_profile_document_on_auth_user
-after insert on auth.users
-for each row
-execute function public.create_profile_document_for_new_user();
+create or replace function public.is_admin(uid text)
+returns boolean
+language sql stable
+as $$
+  select exists(
+    select 1 from public.app_documents
+    where path = 'users/' || uid
+    and data->>'role' = 'admin'
+  );
+$$;
 
+create or replace function public.is_staff(uid text)
+returns boolean
+language sql stable
+as $$
+  select exists(
+    select 1 from public.app_documents
+    where path = 'users/' || uid
+    and data->>'role' = 'staff'
+  );
+$$;
+
+-- ================================
+-- USERS POLICIES
+-- ================================
+drop policy if exists "users read" on public.app_documents;
+create policy "users read"
+on public.app_documents
+for select
+using (
+  collection_path = 'users'
+  and (
+    auth.uid()::text = document_id
+    or public.is_admin(auth.uid()::text)
+    or public.is_staff(auth.uid()::text)
+  )
+);
+
+drop policy if exists "users create" on public.app_documents;
+create policy "users create"
+on public.app_documents
+for insert
+with check (
+  collection_path = 'users'
+  and auth.uid()::text = document_id
+);
+
+drop policy if exists "users update" on public.app_documents;
+create policy "users update"
+on public.app_documents
+for update
+using (
+  collection_path = 'users'
+  and (
+    auth.uid()::text = document_id
+    or public.is_admin(auth.uid()::text)
+  )
+)
+with check (
+  collection_path = 'users'
+);
+
+drop policy if exists "users delete" on public.app_documents;
+create policy "users delete"
+on public.app_documents
+for delete
+using (
+  collection_path = 'users'
+  and public.is_admin(auth.uid()::text)
+);
+
+-- ================================
+-- GENERAL CONTENT (Schedules, Notices etc.)
+-- ================================
+drop policy if exists "content read" on public.app_documents;
+create policy "content read"
+on public.app_documents
+for select
+using (
+  auth.uid() is not null
+);
+
+drop policy if exists "content write" on public.app_documents;
+create policy "content write"
+on public.app_documents
+for insert
+with check (
+  auth.uid() is not null
+  and (
+    public.is_admin(auth.uid()::text)
+    or public.is_staff(auth.uid()::text)
+  )
+);
+
+drop policy if exists "content update" on public.app_documents;
+create policy "content update"
+on public.app_documents
+for update
+using (
+  auth.uid() is not null
+)
+with check (
+  public.is_admin(auth.uid()::text)
+  or public.is_staff(auth.uid()::text)
+);
+
+drop policy if exists "content delete" on public.app_documents;
+create policy "content delete"
+on public.app_documents
+for delete
+using (
+  public.is_admin(auth.uid()::text)
+  or public.is_staff(auth.uid()::text)
+);
+
+-- ================================
+-- STORAGE (FILES)
+-- ================================
 insert into storage.buckets (id, name, public)
 values ('a3hub', 'a3hub', true)
-on conflict (id) do update set public = excluded.public;
+on conflict (id) do nothing;
 
-drop policy if exists "a3hub storage read public" on storage.objects;
-create policy "a3hub storage read public"
+drop policy if exists "storage read" on storage.objects;
+create policy "storage read"
 on storage.objects
 for select
 using (bucket_id = 'a3hub');
 
-drop policy if exists "a3hub storage write authenticated" on storage.objects;
-create policy "a3hub storage write authenticated"
+drop policy if exists "storage write" on storage.objects;
+create policy "storage write"
 on storage.objects
 for insert
 to authenticated
 with check (bucket_id = 'a3hub');
 
-drop policy if exists "a3hub storage update authenticated" on storage.objects;
-create policy "a3hub storage update authenticated"
+drop policy if exists "storage update" on storage.objects;
+create policy "storage update"
 on storage.objects
 for update
 to authenticated

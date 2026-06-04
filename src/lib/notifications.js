@@ -12,7 +12,7 @@ import {
   where,
   writeBatch,
 } from "./supabaseData";
-import { auth } from "./supabase";
+import { auth, supabase } from "./supabase";
 
 const DEFAULT_CHANNELS = Object.freeze({
   inApp: true,
@@ -30,7 +30,7 @@ const WHATSAPP_SEND_CONCURRENCY = 12;
 const DEFAULT_PUSH_ENDPOINT = "/.netlify/functions/push-send";
 const MAX_PUSH_BULK_RECIPIENTS = 250;
 const PUSH_SEND_CONCURRENCY = 16;
-const DEFAULT_EMAIL_ENDPOINT = "/.netlify/functions/email-send";
+const DEFAULT_EMAIL_ENDPOINT = "supabase:functions:email-send";
 const MAX_EMAIL_BULK_RECIPIENTS = 180;
 const EMAIL_SEND_CONCURRENCY = 14;
 const MAX_EMAIL_SUBJECT_LENGTH = 160;
@@ -175,6 +175,17 @@ const getNetlifyAuthHeaders = async () => {
   } catch {
     return {};
   }
+};
+
+const parseSupabaseFunctionEndpoint = (endpoint) => {
+  const safeEndpoint = toSafeText(endpoint);
+  if (safeEndpoint.startsWith("supabase:functions:")) {
+    return toSafeText(safeEndpoint.slice("supabase:functions:".length));
+  }
+  if (safeEndpoint.startsWith("supabase://functions/")) {
+    return toSafeText(safeEndpoint.slice("supabase://functions/".length));
+  }
+  return "";
 };
 
 const normalizePhoneForWhatsApp = (rawValue, defaultCountryCode = "") => {
@@ -946,22 +957,53 @@ const sendEmailToRecipient = async ({
   const text = buildEmailText(payload);
   if (!text) return { status: "skipped", reason: "empty_message" };
 
+  const requestBody = {
+    to,
+    subject,
+    text,
+    title: toSafeText(payload?.title),
+    message: toSafeText(payload?.message),
+    link: toSafeText(payload?.link),
+    type: toSafeText(payload?.type),
+    recipientId,
+  };
+  const supabaseFunctionName = parseSupabaseFunctionEndpoint(emailConfig.endpoint);
+
+  if (supabaseFunctionName) {
+    if (!supabase?.functions?.invoke) {
+      return { status: "disabled", reason: "supabase_functions_unavailable" };
+    }
+
+    const { data, error } = await supabase.functions.invoke(supabaseFunctionName, {
+      body: requestBody,
+      headers: authHeaders,
+    });
+
+    if (error || data?.ok === false) {
+      const sendError = new Error(
+        error?.message ||
+          data?.error ||
+          `Email send failed${data?.details ? `: ${data.details}` : ""}`
+      );
+      sendError.status = error?.context?.status || data?.statusCode || 500;
+      throw sendError;
+    }
+
+    return {
+      status: "sent",
+      reason: "sent",
+      responseStatus: data?.statusCode || 200,
+      responseBody: data || {},
+    };
+  }
+
   const response = await fetch(emailConfig.endpoint, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       ...authHeaders,
     },
-    body: JSON.stringify({
-      to,
-      subject,
-      text,
-      title: toSafeText(payload?.title),
-      message: toSafeText(payload?.message),
-      link: toSafeText(payload?.link),
-      type: toSafeText(payload?.type),
-      recipientId,
-    }),
+    body: JSON.stringify(requestBody),
   });
 
   const responseText = await response.text().catch(() => "");

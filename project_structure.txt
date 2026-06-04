@@ -14,6 +14,7 @@ docs/service-portability.md
 eslint.config.js
 index.html
 netlify.toml
+netlify/functions/_utils/auth-email.cjs
 netlify/functions/_utils/capacity-guard.cjs
 netlify/functions/_utils/email-provider.cjs
 netlify/functions/_utils/load-env.cjs
@@ -21,6 +22,7 @@ netlify/functions/_utils/provider-chain.cjs
 netlify/functions/_utils/request-guard.cjs
 netlify/functions/ai-generate.cjs
 netlify/functions/auth-send-verification.cjs
+netlify/functions/auth-signup.cjs
 netlify/functions/code-run.cjs
 netlify/functions/email-send.cjs
 netlify/functions/push-send.cjs
@@ -38,6 +40,7 @@ public/email-config.js
 public/gemini-config.js
 public/icon.webp
 public/push-config.js
+public/push-sw.js
 public/vendor/skulpt/skulpt-stdlib.js
 public/vendor/skulpt/skulpt.min.js
 public/whatsapp-config.js
@@ -48,6 +51,10 @@ scripts/generate-runtime-config.mjs
 scripts/loadtest/k6-1500-smoke.js
 scripts/project-structure.mjs
 scripts/run-with-profile.mjs
+shared/supabase/auth.js
+shared/supabase/canteen.js
+shared/supabase/client.js
+shared/supabase/config.js
 shared/types/canteen.js
 shared/types/sampleMenuItems.js
 shared/utils/canteen.js
@@ -155,6 +162,9 @@ src/lib/pushNotifications.js
 src/lib/qr.js
 src/lib/routePrefetch.js
 src/lib/scheduleDate.js
+src/lib/supabase.js
+src/lib/supabaseData.js
+src/lib/supabaseStorage.js
 src/main.jsx
 src/pages/A3cadPage.jsx
 src/pages/AiChatPage.jsx
@@ -197,6 +207,7 @@ src/routes/studentRoutes.jsx
 src/state/auth.jsx
 src/state/toast-context.js
 src/types/runtime-globals.d.ts
+supabase/schema.sql
 tailwind.config.js
 test/chunkLoadRecovery.test.js
 test/cloudinaryUpload.test.js

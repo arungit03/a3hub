@@ -5,6 +5,7 @@ const TRANSFORM_KEY = "__a3hubTransform";
 const VALUE_TYPE_KEY = "__a3hubType";
 const TIMESTAMP_TYPE = "timestamp";
 const DEFAULT_FETCH_LIMIT = 10000;
+const snapshotListeners = new Set();
 
 const randomId = () => {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
@@ -30,6 +31,20 @@ const getParentCollectionPath = (path) => {
 const getDocumentId = (path) => {
   const segments = normalizePathSegments([path]);
   return segments[segments.length - 1] || "";
+};
+
+const shouldRefreshSnapshotListener = (listener, changedRef) => {
+  if (!listener || !changedRef?.path) return false;
+  if (listener.type === "doc") return listener.path === changedRef.path;
+  return listener.path === getParentCollectionPath(changedRef.path);
+};
+
+const notifyLocalSnapshotListeners = (changedRef) => {
+  snapshotListeners.forEach((listener) => {
+    if (shouldRefreshSnapshotListener(listener, changedRef)) {
+      listener.scheduleLoad();
+    }
+  });
 };
 
 const cloneJson = (value) => {
@@ -462,6 +477,7 @@ const writeDocumentData = async (ref, data) => {
     .from(supabaseConfig.documentsTable)
     .upsert(payload, { onConflict: "path" });
   if (error) throw error;
+  notifyLocalSnapshotListeners(ref);
 };
 
 export const setDoc = async (ref, input, options = {}) => {
@@ -505,6 +521,7 @@ export const deleteDoc = async (ref) => {
     .delete()
     .eq("path", ref.path);
   if (error) throw error;
+  notifyLocalSnapshotListeners(ref);
 };
 
 export const writeBatch = () => {
@@ -557,25 +574,39 @@ export const getCountFromServer = async (refOrQuery) => {
 export const onSnapshot = (refOrQuery, onNext, onError) => {
   let active = true;
   let debounceTimer = 0;
+  let loadRequestId = 0;
+  const { path } = getQueryParts(refOrQuery);
   const load = async () => {
+    const requestId = ++loadRequestId;
     try {
       const snapshot =
         refOrQuery?.type === "doc" ? await getDoc(refOrQuery) : await getDocs(refOrQuery);
-      if (active) onNext(snapshot);
+      if (active && requestId === loadRequestId) onNext(snapshot);
     } catch (error) {
-      if (active) onError?.(error);
+      if (active && requestId === loadRequestId) onError?.(error);
     }
   };
+  const listener = {
+    type: refOrQuery?.type === "doc" ? "doc" : "collection",
+    path: refOrQuery?.type === "doc" ? refOrQuery.path : path,
+    scheduleLoad: (delay = 0) => {
+      if (!active) return;
+      clearTimeout(debounceTimer);
+      debounceTimer = globalThis.setTimeout(load, delay);
+    },
+  };
+  snapshotListeners.add(listener);
 
   void load();
 
   if (!supabaseClientReady || !supabase) {
     return () => {
       active = false;
+      snapshotListeners.delete(listener);
+      clearTimeout(debounceTimer);
     };
   }
 
-  const { path } = getQueryParts(refOrQuery);
   const filter =
     refOrQuery?.type === "doc" ? `path=eq.${refOrQuery.path}` : `collection_path=eq.${path}`;
   const channel = supabase
@@ -589,14 +620,14 @@ export const onSnapshot = (refOrQuery, onNext, onError) => {
         filter,
       },
       () => {
-        clearTimeout(debounceTimer);
-        debounceTimer = globalThis.setTimeout(load, 120);
+        listener.scheduleLoad(120);
       }
     )
     .subscribe();
 
   return () => {
     active = false;
+    snapshotListeners.delete(listener);
     clearTimeout(debounceTimer);
     void supabase.removeChannel(channel);
   };

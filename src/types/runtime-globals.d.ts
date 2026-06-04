@@ -12,6 +12,7 @@ interface Window {
   __A3HUB_RUNTIME_CONFIG__?: Record<string, unknown>;
   __A3HUB_CLOUDINARY_CONFIG__?: Record<string, unknown>;
   __A3HUB_EMAIL_CONFIG__?: Record<string, unknown>;
+  __A3HUB_FIREBASE_CONFIG__?: Record<string, unknown>;
   __A3HUB_GEMINI_CONFIG__?: Record<string, unknown>;
   __A3HUB_OPENAI_CONFIG__?: Record<string, unknown>;
   __A3HUB_PUSH_CONFIG__?: Record<string, unknown>;
@@ -31,6 +32,13 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_ANON_KEY?: string;
   readonly VITE_SUPABASE_DOCUMENTS_TABLE?: string;
   readonly VITE_SUPABASE_STORAGE_BUCKET?: string;
+  readonly VITE_FIREBASE_API_KEY?: string;
+  readonly VITE_FIREBASE_AUTH_DOMAIN?: string;
+  readonly VITE_FIREBASE_PROJECT_ID?: string;
+  readonly VITE_FIREBASE_STORAGE_BUCKET?: string;
+  readonly VITE_FIREBASE_MESSAGING_SENDER_ID?: string;
+  readonly VITE_FIREBASE_APP_ID?: string;
+  readonly VITE_FIREBASE_MEASUREMENT_ID?: string;
   readonly VITE_PUSH_VAPID_KEY?: string;
   readonly VITE_PUSH_NOTIFY_ENABLED?: string;
   readonly VITE_PUSH_NOTIFY_ENDPOINT?: string;

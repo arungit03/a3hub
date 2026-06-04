@@ -1,16 +1,26 @@
 import { useMemo, useState } from "react";
 import {
+  createUserWithEmailAndPassword,
+  sendEmailVerification,
+  signOut,
+  updateProfile,
+} from "firebase/auth";
+import {
   collection,
   deleteDoc,
   doc,
   limit,
   query,
-  serverTimestamp,
   setDoc,
   updateDoc,
 } from "../../lib/supabaseData";
 import { useRealtimeCollection } from "../hooks/useRealtimeCollection";
-import { createEphemeralSupabaseClient, db, getAuthRedirectUrl } from "../../lib/supabase";
+import { db } from "../../lib/supabase";
+import {
+  createSecondaryFirebaseAuth,
+  getFirebaseAuthRedirectUrl,
+  toFirebaseAppUser,
+} from "../../lib/firebase";
 import { useAuth } from "../../state/auth";
 import { AUDIT_ACTIONS, logAuditEvent } from "../lib/auditLogs";
 import { normalizeRole, normalizeStatus } from "../lib/format";
@@ -43,28 +53,59 @@ const resolveAdminActionErrorMessage = (error, fallback) => {
 };
 
 const createSecondaryUserAuthAccount = async ({ email, password, name }) => {
-  const client = createEphemeralSupabaseClient();
+  const secondary = createSecondaryFirebaseAuth();
 
   try {
-    const result = await client.auth.signUp({
+    const credential = await createUserWithEmailAndPassword(
+      secondary.auth,
       email,
-      password,
-      options: {
-        data: {
-          name,
-          display_name: name,
-        },
-        emailRedirectTo: getAuthRedirectUrl("/"),
-      },
-    });
-    if (result.error) throw result.error;
-    const uid = result.data?.user?.id || "";
-    if (!uid) {
-      throw new Error("Supabase did not return the created account id.");
+      password
+    );
+    if (name) {
+      await updateProfile(credential.user, { displayName: name });
     }
-    return uid;
+    await sendEmailVerification(credential.user, {
+      url: getFirebaseAuthRedirectUrl("/"),
+    }).catch(() => {});
+    const uid = credential.user?.uid || "";
+    if (!uid) {
+      throw new Error("Firebase did not return the created account id.");
+    }
+    return {
+      uid,
+      user: toFirebaseAppUser(credential.user),
+    };
   } finally {
-    await client.auth.signOut().catch(() => {});
+    await signOut(secondary.auth).catch(() => {});
+    await secondary.dispose().catch(() => {});
+  }
+};
+
+const saveFirebaseProfile = async ({ actor, uid, profile }) => {
+  const token = await actor?.getIdToken?.();
+  if (!token) {
+    throw new Error("Firebase admin session token is unavailable.");
+  }
+
+  const response = await fetch("/.netlify/functions/firebase-profile", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      uid,
+      profile,
+    }),
+  });
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json")
+    ? await response.json().catch(() => ({}))
+    : {};
+  if (!response.ok || body?.ok === false) {
+    throw new Error(
+      body?.error || body?.message || "Unable to save Firebase profile."
+    );
   }
 };
 
@@ -146,9 +187,13 @@ export default function AdminUsersPage() {
     setStatusMessage("");
 
     try {
-      const uid = await createSecondaryUserAuthAccount({ email, password, name });
+      const { uid } = await createSecondaryUserAuthAccount({
+        email,
+        password,
+        name,
+      });
 
-      await setDoc(doc(db, "users", uid), {
+      const profilePayload = {
         name,
         email,
         role: "staff",
@@ -156,9 +201,17 @@ export default function AdminUsersPage() {
         department,
         departmentKey: department.toLowerCase(),
         designation,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         createdBy: user?.uid || null,
         createdByName: performedBy.name,
+      };
+
+      await saveFirebaseProfile({
+        actor: user,
+        uid,
+        profile: profilePayload,
+      }).catch(async () => {
+        await setDoc(doc(db, "users", uid), profilePayload);
       });
 
       await logAuditEvent({
@@ -180,7 +233,7 @@ export default function AdminUsersPage() {
         department: "",
         designation: "Faculty",
       });
-      setStatusMessage("Staff account created and verification email sent.");
+      setStatusMessage("Staff Firebase account created and verification email sent.");
     } catch (error) {
       setStatusMessage(
         resolveAdminActionErrorMessage(error, "Unable to create staff account.")
@@ -212,9 +265,13 @@ export default function AdminUsersPage() {
     setStatusMessage("");
 
     try {
-      const uid = await createSecondaryUserAuthAccount({ email, password, name });
+      const { uid } = await createSecondaryUserAuthAccount({
+        email,
+        password,
+        name,
+      });
 
-      await setDoc(doc(db, "users", uid), {
+      const profilePayload = {
         name,
         email,
         role: "admin",
@@ -222,9 +279,17 @@ export default function AdminUsersPage() {
         department: "Administration",
         departmentKey: "administration",
         designation: title,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
         createdBy: user?.uid || null,
         createdByName: performedBy.name,
+      };
+
+      await saveFirebaseProfile({
+        actor: user,
+        uid,
+        profile: profilePayload,
+      }).catch(async () => {
+        await setDoc(doc(db, "users", uid), profilePayload);
       });
 
       await logAuditEvent({
@@ -245,7 +310,7 @@ export default function AdminUsersPage() {
         password: "",
         title: "Administrator",
       });
-      setStatusMessage("Admin account created and verification email sent.");
+      setStatusMessage("Admin Firebase account created and verification email sent.");
     } catch (error) {
       setStatusMessage(
         resolveAdminActionErrorMessage(error, "Unable to create admin account.")
@@ -273,7 +338,7 @@ export default function AdminUsersPage() {
     try {
       await updateDoc(doc(db, "users", userItem.id), {
         status: nextStatus,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
         updatedBy: user?.uid || null,
       });
       await logAuditEvent({
@@ -305,7 +370,7 @@ export default function AdminUsersPage() {
     }
 
     const confirmed = window.confirm(
-      "Delete this user from Supabase profile data? Auth account removal requires a service-role backend."
+      "Delete this user from Supabase profile data? Firebase Auth account removal requires an admin backend."
     );
     if (!confirmed) return;
 
@@ -345,7 +410,7 @@ export default function AdminUsersPage() {
         <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="text-sm font-semibold text-slate-900">Create Staff Account</h3>
           <p className="text-xs text-slate-500">
-            Creates Supabase Auth account and profile data with `staff` role.
+            Creates Firebase Auth account and profile data with `staff` role.
           </p>
 
           <form className="mt-4 grid gap-3 md:grid-cols-2" onSubmit={handleCreateStaff}>
