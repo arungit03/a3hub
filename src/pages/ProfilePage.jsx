@@ -6,21 +6,38 @@ import {
   updateDoc,
 } from "../lib/supabaseData";
 import {
+  BadgeCheck,
+  Briefcase,
+  Building2,
   CalendarDays,
-  Code2,
-  Flame,
-  LogOut,
+  Droplet,
+  GraduationCap,
   LockKeyhole,
-  Medal,
-  TrendingUp,
+  LogOut,
+  Mail,
+  Phone,
   UserRound,
+  Users,
 } from "lucide-react";
 import { db } from "../lib/supabase";
 import { extractNumericQrValue } from "../lib/qr";
+import { formatDateTime } from "../../shared/utils/format.js";
 import { useAuth } from "../state/auth";
 
+const ROW_ICONS = {
+  "Roll No": GraduationCap,
+  "Email": Mail,
+  "Email ID": Mail,
+  "Department": Building2,
+  "Designation": Briefcase,
+  "Student's Mobile Number": Phone,
+  "Blood Group": Droplet,
+  "Father's Name": Users,
+  "Mother's Name": Users,
+  "Father or Mother Mobile Number": Phone,
+};
+
 const EMPTY_VALUE = "-";
-const DAILY_PYTHON_PROGRESS_COLLECTION = "dailyPythonProgress";
 
 const toDisplayValue = (value, fallback = EMPTY_VALUE) => {
   if (value === 0) return "0";
@@ -217,16 +234,8 @@ export default function ProfilePage({ forcedRole }) {
   const [isSavingStudentDetails, setIsSavingStudentDetails] = useState(false);
   const [studentDetailsStatus, setStudentDetailsStatus] = useState("");
   const [studentDetailsError, setStudentDetailsError] = useState("");
-  const [dailyStatsLoading, setDailyStatsLoading] = useState(false);
-  const [dailyStatsError, setDailyStatsError] = useState("");
-  const [dailyStats, setDailyStats] = useState({
-    solvedToday: 0,
-    dailyStreak: 0,
-    bestStreak: 0,
-    totalSolved: 0,
-    activeDays: 0,
-  });
   const [liveProfileData, setLiveProfileData] = useState(null);
+  const [isStaffDetailsModalOpen, setIsStaffDetailsModalOpen] = useState(false);
 
   const profileData = (liveProfileData && typeof liveProfileData === "object"
     ? liveProfileData
@@ -361,58 +370,6 @@ export default function ProfilePage({ forcedRole }) {
     isSavingStudentDetails,
   ]);
 
-  useEffect(() => {
-    if (role !== "student" || !user?.uid) {
-      setDailyStatsLoading(false);
-      setDailyStatsError("");
-      setDailyStats({
-        solvedToday: 0,
-        dailyStreak: 0,
-        bestStreak: 0,
-        totalSolved: 0,
-        activeDays: 0,
-      });
-      return undefined;
-    }
-
-    setDailyStatsLoading(true);
-    setDailyStatsError("");
-
-    const progressRef = doc(db, DAILY_PYTHON_PROGRESS_COLLECTION, user.uid);
-    const unsubscribe = onSnapshot(
-      progressRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          setDailyStats({
-            solvedToday: 0,
-            dailyStreak: 0,
-            bestStreak: 0,
-            totalSolved: 0,
-            activeDays: 0,
-          });
-          setDailyStatsLoading(false);
-          return;
-        }
-
-        const data = snapshot.data();
-        setDailyStats({
-          solvedToday: Number(data?.solvedCount || 0),
-          dailyStreak: Number(data?.dailyStreak || 0),
-          bestStreak: Number(data?.bestStreak || 0),
-          totalSolved: Number(data?.totalSolvedChallenges || 0),
-          activeDays: Number(data?.daysParticipated || 0),
-        });
-        setDailyStatsLoading(false);
-      },
-      () => {
-        setDailyStatsLoading(false);
-        setDailyStatsError("Unable to load challenge stats right now.");
-      }
-    );
-
-    return () => unsubscribe();
-  }, [role, user?.uid]);
-
   const handlePasswordChange = async () => {
     setResetError("");
     setResetMessage("");
@@ -544,11 +501,6 @@ export default function ProfilePage({ forcedRole }) {
     department !== EMPTY_VALUE ? department : "Department";
   const studentYearLabel = year !== EMPTY_VALUE ? `Year ${year}` : "Year -";
   const studentIdLabel = rollNo !== EMPTY_VALUE ? rollNo : "Not Available";
-  const solvedTodayTarget = 3;
-  const solvedTodayProgress = Math.min(
-    Math.max((dailyStats.solvedToday / solvedTodayTarget) * 100, 0),
-    100
-  );
   const staffName = name || "Campus Member";
   const staffDepartmentLabel =
     department !== EMPTY_VALUE ? department : "Department";
@@ -558,33 +510,37 @@ export default function ProfilePage({ forcedRole }) {
   const staffIdentityValue =
     rollNo !== EMPTY_VALUE ? rollNo : subtitle || "Staff Member";
   const accountRoleLabel = role ? formatDesignationLabel(role) : "Account";
+  const isEmailVerified = Boolean(user?.emailVerified);
+  const memberSinceLabel = profileData?.createdAt
+    ? formatDateTime(profileData.createdAt)
+    : null;
 
   if (role === "student") {
     return (
       <>
-        <section className="relative overflow-hidden rounded-3xl border border-white/50 bg-white/30 px-5 py-4 shadow-soft backdrop-blur-xl">
+        <section className="relative overflow-hidden rounded-3xl border border-clay/24 bg-white/60 px-5 py-4 shadow-soft backdrop-blur-xl">
           <div
-            className="absolute inset-0 bg-gradient-to-r from-blue-500/8 via-indigo-500/7 to-transparent"
+            className="absolute inset-0 bg-linear-to-r from-ocean/10 via-aurora/8 to-transparent"
             aria-hidden="true"
           />
           <div className="relative flex items-center justify-between gap-3">
-            <p className="text-lg font-semibold uppercase tracking-[0.1em] text-blue-700 sm:text-xl">
+            <p className="text-lg font-semibold uppercase tracking-[0.1em] text-ocean sm:text-xl">
               Campus Hub
             </p>
-            <span className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm sm:text-base">
+            <span className="inline-flex items-center rounded-xl bg-linear-to-r from-ocean to-aurora px-4 py-1.5 text-sm font-semibold text-white shadow-sm sm:text-base">
               Student
             </span>
           </div>
         </section>
 
-        <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-8">
+        <section className="relative mt-4 overflow-hidden rounded-3xl border border-clay/24 bg-white/70 p-5 shadow-soft backdrop-blur-xl sm:p-8">
           <div
-            className="absolute inset-0 bg-gradient-to-br from-white/30 via-blue-100/24 to-indigo-200/14"
+            className="absolute inset-0 bg-linear-to-br from-white/40 via-ocean/8 to-aurora/10"
             aria-hidden="true"
           />
           <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
             <div className="relative w-fit">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-float sm:h-24 sm:w-24">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-linear-to-br from-ocean to-aurora text-white shadow-float sm:h-24 sm:w-24">
                 <UserRound size={42} strokeWidth={2.1} />
               </div>
               <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-[3px] border-white bg-emerald-500 shadow-sm" />
@@ -592,20 +548,32 @@ export default function ProfilePage({ forcedRole }) {
 
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="truncate text-2xl font-bold text-slate-900 sm:text-3xl">
+                <h2 className="truncate text-2xl font-bold text-ink sm:text-3xl">
                   {studentName}
                 </h2>
-                <span className="rounded-xl border border-blue-300/55 bg-blue-100/48 px-2.5 py-0.5 text-xs font-semibold text-blue-700 sm:px-3 sm:py-1">
+                <span className="rounded-xl border border-ocean/30 bg-ocean/10 px-2.5 py-0.5 text-xs font-semibold text-ocean sm:px-3 sm:py-1">
                   {studentDepartment}
                 </span>
-                <span className="rounded-xl border border-indigo-300/55 bg-indigo-100/48 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 sm:px-3 sm:py-1">
+                <span className="rounded-xl border border-aurora/35 bg-aurora/12 px-2.5 py-0.5 text-xs font-semibold text-cocoa sm:px-3 sm:py-1">
                   {studentYearLabel}
                 </span>
+                {isEmailVerified ? (
+                  <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-300/55 bg-emerald-100/50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 sm:px-3 sm:py-1">
+                    <BadgeCheck size={13} strokeWidth={2.3} />
+                    Verified
+                  </span>
+                ) : null}
               </div>
-              <p className="mt-3 text-base text-slate-600 sm:text-xl">
-                <span className="font-medium text-slate-500">Student ID:</span>{" "}
-                <span className="font-semibold text-slate-800">{studentIdLabel}</span>
+              <p className="mt-3 text-base text-ink/65 sm:text-xl">
+                <span className="font-medium text-ink/55">Student ID:</span>{" "}
+                <span className="font-semibold text-ink">{studentIdLabel}</span>
               </p>
+              {memberSinceLabel ? (
+                <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-ink/45 sm:text-sm">
+                  <CalendarDays size={14} strokeWidth={2} />
+                  Member since {memberSinceLabel}
+                </p>
+              ) : null}
             </div>
           </div>
         </section>
@@ -613,7 +581,7 @@ export default function ProfilePage({ forcedRole }) {
         <button
           type="button"
           onClick={handleOpenStudentDetailsModal}
-          className="group relative mt-4 w-full overflow-hidden rounded-3xl border border-blue-400/45 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 px-4 py-5 text-center text-xl font-semibold text-white shadow-float sm:py-6 sm:text-2xl"
+          className="group relative mt-4 w-full overflow-hidden rounded-3xl border border-ocean/45 bg-linear-to-r from-ocean via-ocean to-aurora px-4 py-5 text-center text-xl font-semibold text-white shadow-float transition hover:brightness-105 sm:py-6 sm:text-2xl"
         >
           <span
             className="absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
@@ -624,125 +592,12 @@ export default function ProfilePage({ forcedRole }) {
           </span>
         </button>
 
-        <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-6">
-          <div
-            className="absolute inset-0 bg-gradient-to-br from-white/28 via-blue-100/20 to-indigo-100/14"
-            aria-hidden="true"
-          />
-          <div className="relative">
-            <div className="flex items-center gap-4">
-              <span className="inline-flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 text-white shadow-sm">
-                <Code2 size={24} strokeWidth={2.2} />
-              </span>
-              <h3 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-                Daily Python Progress
-              </h3>
-            </div>
-
-            {dailyStatsLoading ? (
-              <p className="mt-6 text-sm font-medium text-slate-600">
-                Loading challenge stats...
-              </p>
-            ) : (
-              <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <article className="rounded-2xl border border-emerald-300/45 bg-gradient-to-br from-emerald-50/70 via-emerald-100/45 to-emerald-200/22 p-3 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">
-                      Solved Today
-                    </p>
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-700 ring-1 ring-emerald-400/35">
-                      <Code2 size={15} strokeWidth={2} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold leading-none text-emerald-900 sm:text-3xl">
-                    {dailyStats.solvedToday}/{solvedTodayTarget}
-                  </p>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-emerald-200/70">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-500"
-                      style={{ width: `${solvedTodayProgress}%` }}
-                    />
-                  </div>
-                </article>
-
-                <article className="rounded-2xl border border-blue-300/45 bg-gradient-to-br from-blue-50/70 via-blue-100/45 to-blue-200/22 p-3 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-blue-700">
-                      Current Streak
-                    </p>
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-700 ring-1 ring-blue-400/35">
-                      <Flame size={15} strokeWidth={2} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold leading-none text-blue-900 sm:text-3xl">
-                    {dailyStats.dailyStreak}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-blue-700/85">days</p>
-                </article>
-
-                <article className="rounded-2xl border border-amber-300/45 bg-gradient-to-br from-amber-50/70 via-amber-100/45 to-amber-200/22 p-3 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-amber-700">
-                      Best Streak
-                    </p>
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/15 text-amber-700 ring-1 ring-amber-400/35">
-                      <Medal size={15} strokeWidth={2} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold leading-none text-amber-900 sm:text-3xl">
-                    {dailyStats.bestStreak}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-amber-700/85">days</p>
-                </article>
-
-                <article className="rounded-2xl border border-purple-300/45 bg-gradient-to-br from-purple-50/70 via-purple-100/45 to-purple-200/22 p-3 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-purple-700">
-                      Total Solved
-                    </p>
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/15 text-purple-700 ring-1 ring-purple-400/35">
-                      <TrendingUp size={15} strokeWidth={2} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold leading-none text-purple-900 sm:text-3xl">
-                    {dailyStats.totalSolved}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-purple-700/85">
-                    problems
-                  </p>
-                </article>
-
-                <article className="rounded-2xl border border-rose-300/45 bg-gradient-to-br from-rose-50/70 via-rose-100/45 to-rose-200/22 p-3 shadow-sm backdrop-blur-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-rose-700">
-                      Active Days
-                    </p>
-                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/15 text-rose-700 ring-1 ring-rose-400/35">
-                      <CalendarDays size={15} strokeWidth={2} />
-                    </span>
-                  </div>
-                  <p className="mt-3 text-2xl font-bold leading-none text-rose-900 sm:text-3xl">
-                    {dailyStats.activeDays}
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-rose-700/85">days</p>
-                </article>
-              </div>
-            )}
-
-            {dailyStatsError ? (
-              <p className="mt-4 rounded-xl border border-red-200 bg-red-50/90 px-3 py-2 text-xs font-semibold text-red-700">
-                {dailyStatsError}
-              </p>
-            ) : null}
-          </div>
-        </section>
-
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <button
             type="button"
             onClick={handlePasswordChange}
             disabled={isSendingReset || !accountEmail}
-            className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-slate-200/60 bg-white/58 px-4 py-4 text-lg font-semibold text-slate-800 shadow-soft backdrop-blur-md transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[70px] sm:text-xl"
+            className="inline-flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-clay/24 bg-white/70 px-4 py-4 text-lg font-semibold text-ink shadow-soft backdrop-blur-md transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[70px] sm:text-xl"
           >
             <LockKeyhole size={20} strokeWidth={2} />
             {isSendingReset ? "Sending reset link..." : "Change Password"}
@@ -751,7 +606,7 @@ export default function ProfilePage({ forcedRole }) {
           <button
             type="button"
             onClick={logout}
-            className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-indigo-400/45 bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-4 text-lg font-semibold text-white shadow-float transition-transform hover:-translate-y-0.5 sm:min-h-[70px] sm:text-xl"
+            className="inline-flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-aurora/45 bg-linear-to-r from-ocean to-aurora px-4 py-4 text-lg font-semibold text-white shadow-float transition-transform hover:-translate-y-0.5 sm:min-h-[70px] sm:text-xl"
           >
             <LogOut size={20} strokeWidth={2} />
             Logout
@@ -959,19 +814,27 @@ export default function ProfilePage({ forcedRole }) {
                 ) : (
                   <div className="mt-4">
                     <dl className="divide-y divide-clay/20">
-                      {profileRows.map((row) => (
-                        <div
-                          key={row.label}
-                          className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[144px_minmax(0,1fr)] sm:items-center sm:gap-3"
-                        >
-                          <dt className="text-sm text-ink/70">{row.label}</dt>
-                          <dd
-                            className={`break-words text-left text-sm font-semibold leading-tight text-ink sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
+                      {profileRows.map((row) => {
+                        const RowIcon = ROW_ICONS[row.label];
+                        return (
+                          <div
+                            key={row.label}
+                            className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[144px_minmax(0,1fr)] sm:items-center sm:gap-3"
                           >
-                            {row.value}
-                          </dd>
-                        </div>
-                      ))}
+                            <dt className="flex items-center gap-2 text-sm text-ink/70">
+                              {RowIcon ? (
+                                <RowIcon size={15} strokeWidth={2} className="text-ocean/70" />
+                              ) : null}
+                              {row.label}
+                            </dt>
+                            <dd
+                              className={`break-words text-left text-sm font-semibold leading-tight text-ink sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
+                            >
+                              {row.value}
+                            </dd>
+                          </div>
+                        );
+                      })}
                     </dl>
                     {studentDetailsStatus ? (
                       <p className="mt-3 rounded-xl border border-ink/10 bg-sand/80 px-3 py-2 text-xs font-medium text-ink/80">
@@ -1011,29 +874,29 @@ export default function ProfilePage({ forcedRole }) {
 
   return (
     <>
-      <section className="relative overflow-hidden rounded-3xl border border-white/50 bg-white/30 px-5 py-4 shadow-soft backdrop-blur-xl">
+      <section className="relative overflow-hidden rounded-3xl border border-clay/24 bg-white/60 px-5 py-4 shadow-soft backdrop-blur-xl">
         <div
-          className="absolute inset-0 bg-gradient-to-r from-blue-500/8 via-indigo-500/7 to-transparent"
+          className="absolute inset-0 bg-linear-to-r from-ocean/10 via-aurora/8 to-transparent"
           aria-hidden="true"
         />
         <div className="relative flex items-center justify-between gap-3">
-          <p className="text-lg font-semibold uppercase tracking-[0.1em] text-blue-700 sm:text-xl">
+          <p className="text-lg font-semibold uppercase tracking-[0.1em] text-ocean sm:text-xl">
             Campus Hub
           </p>
-          <span className="inline-flex items-center rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-1.5 text-sm font-semibold text-white shadow-sm sm:text-base">
+          <span className="inline-flex items-center rounded-xl bg-linear-to-r from-ocean to-aurora px-4 py-1.5 text-sm font-semibold text-white shadow-sm sm:text-base">
             {accountRoleLabel}
           </span>
         </div>
       </section>
 
-      <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-8">
+      <section className="relative mt-4 overflow-hidden rounded-3xl border border-clay/24 bg-white/70 p-5 shadow-soft backdrop-blur-xl sm:p-8">
         <div
-          className="absolute inset-0 bg-gradient-to-br from-white/30 via-blue-100/24 to-indigo-200/14"
+          className="absolute inset-0 bg-linear-to-br from-white/40 via-ocean/8 to-aurora/10"
           aria-hidden="true"
         />
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
           <div className="relative w-fit">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-float sm:h-24 sm:w-24">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-linear-to-br from-ocean to-aurora text-white shadow-float sm:h-24 sm:w-24">
               <UserRound size={42} strokeWidth={2.1} />
             </div>
             <span className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full border-[3px] border-white bg-emerald-500 shadow-sm" />
@@ -1041,65 +904,56 @@ export default function ProfilePage({ forcedRole }) {
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-2xl font-bold text-slate-900 sm:text-3xl">
+              <h2 className="truncate text-2xl font-bold text-ink sm:text-3xl">
                 {staffName}
               </h2>
-              <span className="rounded-xl border border-blue-300/55 bg-blue-100/48 px-2.5 py-0.5 text-xs font-semibold text-blue-700 sm:px-3 sm:py-1">
+              <span className="rounded-xl border border-ocean/30 bg-ocean/10 px-2.5 py-0.5 text-xs font-semibold text-ocean sm:px-3 sm:py-1">
                 {staffDepartmentLabel}
               </span>
-              <span className="rounded-xl border border-indigo-300/55 bg-indigo-100/48 px-2.5 py-0.5 text-xs font-semibold text-indigo-700 sm:px-3 sm:py-1">
+              <span className="rounded-xl border border-aurora/35 bg-aurora/12 px-2.5 py-0.5 text-xs font-semibold text-cocoa sm:px-3 sm:py-1">
                 {staffDesignationLabel}
               </span>
+              {isEmailVerified ? (
+                <span className="inline-flex items-center gap-1 rounded-xl border border-emerald-300/55 bg-emerald-100/50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 sm:px-3 sm:py-1">
+                  <BadgeCheck size={13} strokeWidth={2.3} />
+                  Verified
+                </span>
+              ) : null}
             </div>
-            <p className="mt-3 text-base text-slate-600 sm:text-xl">
-              <span className="font-medium text-slate-500">{staffIdentityLabel}</span>{" "}
-              <span className="font-semibold text-slate-800">{staffIdentityValue}</span>
+            <p className="mt-3 text-base text-ink/65 sm:text-xl">
+              <span className="font-medium text-ink/55">{staffIdentityLabel}</span>{" "}
+              <span className="font-semibold text-ink">{staffIdentityValue}</span>
             </p>
+            {memberSinceLabel ? (
+              <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-ink/45 sm:text-sm">
+                <CalendarDays size={14} strokeWidth={2} />
+                Member since {memberSinceLabel}
+              </p>
+            ) : null}
           </div>
         </div>
       </section>
 
-      <section className="relative mt-4 overflow-hidden rounded-3xl border border-blue-400/45 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 px-4 py-5 text-center text-xl font-semibold text-white shadow-float sm:py-6 sm:text-2xl">
-        <div
-          className="absolute inset-0 bg-white/10"
+      <button
+        type="button"
+        onClick={() => setIsStaffDetailsModalOpen(true)}
+        className="group relative mt-4 w-full overflow-hidden rounded-3xl border border-ocean/45 bg-linear-to-r from-ocean via-ocean to-aurora px-4 py-5 text-center text-xl font-semibold text-white shadow-float transition hover:brightness-105 sm:py-6 sm:text-2xl"
+      >
+        <span
+          className="absolute inset-0 bg-white/10 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
           aria-hidden="true"
         />
-        <span className="relative inline-flex items-center">Staff&apos;s Details</span>
-      </section>
-
-      <section className="relative mt-4 overflow-hidden rounded-3xl border border-white/50 bg-white/38 p-5 shadow-soft backdrop-blur-xl sm:p-6">
-        <div
-          className="absolute inset-0 bg-gradient-to-br from-white/28 via-blue-100/20 to-indigo-100/14"
-          aria-hidden="true"
-        />
-        <div className="relative">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700/85">
-            Account Details
-          </p>
-          <dl className="mt-4 divide-y divide-slate-200/55 overflow-hidden rounded-2xl border border-white/55 bg-white/58 backdrop-blur-sm">
-            {profileRows.map((row) => (
-              <div
-                key={row.label}
-                className="grid grid-cols-1 gap-1 px-4 py-4 sm:grid-cols-[150px_minmax(0,1fr)] sm:items-center sm:gap-4 sm:px-5"
-              >
-                <dt className="text-sm font-medium text-slate-500">{row.label}</dt>
-                <dd
-                  className={`break-words text-left text-sm font-semibold leading-tight text-slate-900 sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
-                >
-                  {row.value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </section>
+        <span className="relative inline-flex items-center">
+          {accountRoleLabel}&apos;s Details
+        </span>
+      </button>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <button
           type="button"
           onClick={handlePasswordChange}
           disabled={isSendingReset || !accountEmail}
-          className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-slate-200/60 bg-white/58 px-4 py-4 text-lg font-semibold text-slate-800 shadow-soft backdrop-blur-md transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[70px] sm:text-xl"
+          className="inline-flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-clay/24 bg-white/70 px-4 py-4 text-lg font-semibold text-ink shadow-soft backdrop-blur-md transition-transform hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60 sm:min-h-[70px] sm:text-xl"
         >
           <LockKeyhole size={20} strokeWidth={2} />
           {isSendingReset ? "Sending reset link..." : "Change Password"}
@@ -1108,7 +962,7 @@ export default function ProfilePage({ forcedRole }) {
         <button
           type="button"
           onClick={logout}
-          className="inline-flex min-h-[64px] items-center justify-center gap-2 rounded-2xl border border-indigo-400/45 bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-4 text-lg font-semibold text-white shadow-float transition-transform hover:-translate-y-0.5 sm:min-h-[70px] sm:text-xl"
+          className="inline-flex min-h-16 items-center justify-center gap-2 rounded-2xl border border-aurora/45 bg-linear-to-r from-ocean to-aurora px-4 py-4 text-lg font-semibold text-white shadow-float transition-transform hover:-translate-y-0.5 sm:min-h-[70px] sm:text-xl"
         >
           <LogOut size={20} strokeWidth={2} />
           Logout
@@ -1130,6 +984,68 @@ export default function ProfilePage({ forcedRole }) {
         >
           {resetMessage}
         </p>
+      ) : null}
+
+      {isStaffDetailsModalOpen ? (
+        <div
+          className="ui-modal ui-modal--compact"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Account details"
+        >
+          <button
+            type="button"
+            onClick={() => setIsStaffDetailsModalOpen(false)}
+            aria-label="Close account details"
+            className="ui-modal__scrim"
+            tabIndex={-1}
+          />
+          <div tabIndex={-1} className="ui-modal__panel w-full max-w-xl">
+            <div className="ui-modal__body pb-[calc(11rem+env(safe-area-inset-bottom))]">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-ink/75">
+                    {accountRoleLabel}&apos;s Details
+                  </p>
+                  <h3 className="text-xl font-semibold text-ink">Account Details</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsStaffDetailsModalOpen(false)}
+                  className="ui-modal__close"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mt-4">
+                <dl className="divide-y divide-clay/20">
+                  {profileRows.map((row) => {
+                    const RowIcon = ROW_ICONS[row.label];
+                    return (
+                      <div
+                        key={row.label}
+                        className="grid grid-cols-1 gap-1 py-3 sm:grid-cols-[144px_minmax(0,1fr)] sm:items-center sm:gap-3"
+                      >
+                        <dt className="flex items-center gap-2 text-sm text-ink/70">
+                          {RowIcon ? (
+                            <RowIcon size={15} strokeWidth={2} className="text-ocean/70" />
+                          ) : null}
+                          {row.label}
+                        </dt>
+                        <dd
+                          className={`break-words text-left text-sm font-semibold leading-tight text-ink sm:text-right ${row.mono ? "break-all font-mono text-[13px] sm:text-sm" : ""}`}
+                        >
+                          {row.value}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
       ) : null}
     </>
   );
