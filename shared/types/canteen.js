@@ -20,6 +20,11 @@ export const ORDER_STATUS = Object.freeze({
   CANCELLED: "cancelled",
 });
 
+export const ORDER_STATUS_SEQUENCE = Object.freeze([
+  ORDER_STATUS.PLACED,
+  ORDER_STATUS.COLLECTED,
+]);
+
 export const LOW_STOCK_THRESHOLD = 5;
 
 export const MENU_CATEGORIES = Object.freeze([

@@ -41,8 +41,6 @@ import {
 import { uploadFileWithFallbacks } from "../lib/mediaUpload";
 import {
   getGeminiApiKey,
-  requestGeminiDailyPythonChallenges,
-  requestGeminiDailyPythonSolution,
   requestGeminiInterviewQuizAndContactPlaces,
 } from "../lib/geminiClient";
 import {
@@ -55,13 +53,13 @@ import {
   onSnapshot,
   orderBy,
   query,
-  runTransaction,
   serverTimestamp,
   setDoc,
   Timestamp,
   where,
 } from "../lib/supabaseData";
 import { getDownloadURL, ref, uploadBytes } from "../lib/supabaseStorage";
+import QuizGeneratorModal from "../components/QuizGeneratorModal";
 import {
   ACTION_BADGE_CLASS,
   ASSIGNMENT_FILE_MAX_SIZE_BYTES,
@@ -69,12 +67,6 @@ import {
   ASSIGNMENT_TYPE_VALUE,
   buildStudentDetails,
   calendarTypeOptions,
-  clearDailyPythonChallengeCache,
-  DAILY_CHALLENGE_TTL_MS,
-  DAILY_PYTHON_CHALLENGE_COUNT,
-  DAILY_PYTHON_CHALLENGE_COLLECTION,
-  DAILY_PYTHON_PROGRESS_COLLECTION,
-  formatChallengeDateTime,
   formatDateKey,
   formatDateTimeLabel,
   formatFileSize,
@@ -85,23 +77,12 @@ import {
   getCalendarTypeMeta,
   getMillis,
   getNoticeMeta,
-  getPreviousDateKey,
-  hasValidDailyPythonChallenges,
-  isValidDailyPythonChallenge,
   isAssignmentClosed,
-  loadDailyPythonChallengeCache,
   normalizeDepartment,
-  saveDailyPythonChallengeCache,
   SERVICE_CARD_META,
   toDisplayValue,
   toInputValue,
 } from "../features/menuGrid/menuGridHelpers.js";
-import {
-  executePythonWithInput,
-  generateDailyPythonChallenges,
-  getDailyPythonCorrectCode,
-  outputsMatch,
-} from "../features/menuGrid/menuGridDailyPython.js";
 
 const semesterOptions = Array.from({ length: 8 }, (_, index) => `Semester ${index + 1}`);
 
@@ -458,8 +439,8 @@ export default function MenuGridPage({ forcedStaff }) {
   const [loadingStaffSubmissions, setLoadingStaffSubmissions] = useState(false);
   const [staffSubmissionsError, setStaffSubmissionsError] = useState("");
   const [codeLearningOpen, setCodeLearningOpen] = useState(false);
-  const [dailyPythonOpen, setDailyPythonOpen] = useState(false);
   const [studentDetailsOpen, setStudentDetailsOpen] = useState(false);
+  const [quizGeneratorOpen, setQuizGeneratorOpen] = useState(false);
   const [staffStudentsDirectory, setStaffStudentsDirectory] = useState([]);
   const [loadingStaffStudentsDirectory, setLoadingStaffStudentsDirectory] =
     useState(false);
@@ -471,24 +452,6 @@ export default function MenuGridPage({ forcedStaff }) {
   const [studentDetailsStudentsError, setStudentDetailsStudentsError] =
     useState("");
   const [studentDetailsStudentId, setStudentDetailsStudentId] = useState("");
-  const [dailyPythonChallenges, setDailyPythonChallenges] = useState([]);
-  const [loadingDailyPythonChallenges, setLoadingDailyPythonChallenges] = useState(false);
-  const [dailyPythonError, setDailyPythonError] = useState("");
-  const [dailyPythonExpiresAt, setDailyPythonExpiresAt] = useState(null);
-  const [dailyPythonGeneratedAtKey, setDailyPythonGeneratedAtKey] = useState("");
-  const [dailyPythonSolvedIds, setDailyPythonSolvedIds] = useState([]);
-  const [dailyPythonStreak, setDailyPythonStreak] = useState(0);
-  const [dailyPythonBestStreak, setDailyPythonBestStreak] = useState(0);
-  const [dailyPythonTotalSolved, setDailyPythonTotalSolved] = useState(0);
-  const [dailyPythonDaysParticipated, setDailyPythonDaysParticipated] = useState(0);
-  const [dailyPythonProgressError, setDailyPythonProgressError] = useState("");
-  const [dailyPythonStatus, setDailyPythonStatus] = useState("");
-  const [savingDailyPythonChallengeId, setSavingDailyPythonChallengeId] = useState("");
-  const [checkingDailyPythonChallengeId, setCheckingDailyPythonChallengeId] = useState("");
-  const [dailyPythonCodeByChallengeId, setDailyPythonCodeByChallengeId] = useState({});
-  const [dailyPythonReviewByChallengeId, setDailyPythonReviewByChallengeId] = useState({});
-  const [dailyPythonCheckedIds, setDailyPythonCheckedIds] = useState([]);
-  const [dailyPythonReloadToken, setDailyPythonReloadToken] = useState(0);
   const [interviewQuizOpen, setInterviewQuizOpen] = useState(false);
   const [interviewQuizLoading, setInterviewQuizLoading] = useState(false);
   const [interviewQuizError, setInterviewQuizError] = useState("");
@@ -541,13 +504,14 @@ export default function MenuGridPage({ forcedStaff }) {
   const examSchedulePath = isStaff ? "/staff/exam-schedule" : "/student/exam-schedule";
   const basePath = isStaff ? "/staff" : "/student";
   const isAssignmentsPageRoute = /\/menu\/assignments\/?$/.test(location.pathname);
-  const isDailyPythonPageRoute = /\/menu\/daily-python-challenges\/?$/.test(
+  const isStudentDetailsPageRoute = /\/menu\/student-details\/?$/.test(location.pathname);
+  const isQuizGeneratorPageRoute = /\/menu\/quiz-paper-generator\/?$/.test(
     location.pathname
   );
-  const isStudentDetailsPageRoute = /\/menu\/student-details\/?$/.test(location.pathname);
   const isAssignmentsVisible = assignmentsOpen || isAssignmentsPageRoute;
-  const isDailyPythonVisible = !isStaff && (dailyPythonOpen || isDailyPythonPageRoute);
   const isStudentDetailsVisible = studentDetailsOpen || isStudentDetailsPageRoute;
+  const isQuizGeneratorVisible =
+    isStaff && (quizGeneratorOpen || isQuizGeneratorPageRoute);
   const shouldLoadStaffStudents = isStaff && (isStudentDetailsVisible || feesOpen);
 
   useEffect(() => {
@@ -569,17 +533,17 @@ export default function MenuGridPage({ forcedStaff }) {
       openValue === "assignments" ||
       hashValue === "assignments" ||
       isAssignmentsPageRoute;
-    const shouldOpenDailyPython =
-      (!isStaff &&
-        (openValue === "daily-python-challenges" ||
-          openValue === "daily-python" ||
-          hashValue === "daily-python-challenges" ||
-          hashValue === "daily-python")) ||
-      isDailyPythonPageRoute;
     const shouldOpenStudentDetails =
       openValue === "student-details" ||
       hashValue === "student-details" ||
       isStudentDetailsPageRoute;
+    const shouldOpenQuizGenerator =
+      isStaff &&
+      (openValue === "quiz-paper-generator" ||
+        openValue === "quiz-generator" ||
+        hashValue === "quiz-paper-generator" ||
+        hashValue === "quiz-generator" ||
+        isQuizGeneratorPageRoute);
     if (shouldOpenCodeLearning) {
       navigate(`${basePath}/learning`, { replace: true });
       return;
@@ -587,15 +551,15 @@ export default function MenuGridPage({ forcedStaff }) {
     if (
       !shouldOpenFees &&
       !shouldOpenAssignments &&
-      !shouldOpenDailyPython &&
       !shouldOpenCirculars &&
-      !shouldOpenStudentDetails
+      !shouldOpenStudentDetails &&
+      !shouldOpenQuizGenerator
     ) {
       setAssignmentsOpen(false);
-      setDailyPythonOpen(false);
       setCircularsOpen(false);
       setCodeLearningOpen(false);
       setStudentDetailsOpen(false);
+      setQuizGeneratorOpen(false);
       return;
     }
 
@@ -605,9 +569,9 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsOpen(shouldOpenAssignments);
     setCircularsOpen(shouldOpenCirculars);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(shouldOpenDailyPython);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(shouldOpenStudentDetails);
+    setQuizGeneratorOpen(shouldOpenQuizGenerator);
     setFeesOpen(shouldOpenFees);
     setFeeSemesterFilter("all");
     setFeesStatus("");
@@ -617,7 +581,7 @@ export default function MenuGridPage({ forcedStaff }) {
   }, [
     basePath,
     isAssignmentsPageRoute,
-    isDailyPythonPageRoute,
+    isQuizGeneratorPageRoute,
     isStaff,
     isStudentDetailsPageRoute,
     location.hash,
@@ -732,10 +696,6 @@ export default function MenuGridPage({ forcedStaff }) {
 
     return () => unsubscribe();
   }, [isStaff, user?.uid]);
-
-  useEffect(() => {
-    setDailyPythonCheckedIds([]);
-  }, [user?.uid]);
 
   useEffect(() => {
     let alive = true;
@@ -1129,380 +1089,6 @@ export default function MenuGridPage({ forcedStaff }) {
 
     return () => unsubscribe();
   }, [feesOpen, isStaff, feeStudentId, user?.uid]);
-
-  useEffect(() => {
-    if (isStaff || !user?.uid) return undefined;
-    let cancelled = false;
-
-    const cleanupExpiredDailyChallenges = async () => {
-      const challengeRef = doc(
-        db,
-        DAILY_PYTHON_CHALLENGE_COLLECTION,
-        user.uid
-      );
-
-      try {
-        const snapshot = await getDoc(challengeRef);
-        if (!snapshot.exists() || cancelled) return;
-
-        const expiresMs = getMillis(snapshot.data()?.expiresAt);
-        if (expiresMs && expiresMs <= Date.now()) {
-          await deleteDoc(challengeRef);
-        }
-      } catch {
-        // Best-effort cleanup only.
-      }
-    };
-
-    cleanupExpiredDailyChallenges();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [isStaff, user?.uid]);
-
-  useEffect(() => {
-    if (!dailyPythonOpen || isStaff) return undefined;
-    let cancelled = false;
-
-    const loadDailyChallenges = async () => {
-      if (!user?.uid) {
-        if (cancelled) return;
-        setDailyPythonChallenges([]);
-        setDailyPythonExpiresAt(null);
-        setDailyPythonGeneratedAtKey("");
-        setDailyPythonSolvedIds([]);
-        setDailyPythonStatus("");
-        setDailyPythonError("Sign in to load daily Python challenges.");
-        return;
-      }
-
-      if (!cancelled) {
-        setLoadingDailyPythonChallenges(true);
-        setDailyPythonError("");
-      }
-
-      const challengeRef = doc(
-        db,
-        DAILY_PYTHON_CHALLENGE_COLLECTION,
-        user.uid
-      );
-      const nowMs = Date.now();
-      const dateKey = formatDateKey(new Date());
-
-      try {
-        const snapshot = await getDoc(challengeRef);
-        if (cancelled) return;
-
-        if (snapshot.exists()) {
-          const data = snapshot.data();
-          const expiresMs = getMillis(data?.expiresAt);
-          const generatedAtKey =
-            typeof data?.generatedAtKey === "string" ? data.generatedAtKey : "";
-          const hasValidChallenges =
-            hasValidDailyPythonChallenges(data?.challenges) &&
-            expiresMs > nowMs &&
-            generatedAtKey === dateKey;
-
-          if (hasValidChallenges) {
-            setDailyPythonChallenges(data.challenges);
-            setDailyPythonExpiresAt(data.expiresAt);
-            setDailyPythonGeneratedAtKey(
-              generatedAtKey
-            );
-            setLoadingDailyPythonChallenges(false);
-            return;
-          }
-
-          if (expiresMs && expiresMs <= nowMs) {
-            try {
-              await deleteDoc(challengeRef);
-            } catch {
-              // Cleanup failure should not block regeneration.
-            }
-          } else if (expiresMs > nowMs) {
-            try {
-              await deleteDoc(challengeRef);
-            } catch {
-              // Ignore delete failure and continue with local regeneration.
-            }
-          }
-        }
-
-        const cachedChallenges = loadDailyPythonChallengeCache({
-          userId: user.uid,
-          expectedDateKey: dateKey,
-          nowMs,
-        });
-        if (cachedChallenges) {
-          setDailyPythonChallenges(cachedChallenges.challenges);
-          setDailyPythonExpiresAt(cachedChallenges.expiresAt);
-          setDailyPythonGeneratedAtKey(cachedChallenges.generatedAtKey);
-          setDailyPythonStatus("");
-          setLoadingDailyPythonChallenges(false);
-          return;
-        }
-
-        let generatedChallenges = [];
-        let generationSource = "template";
-        const apiKey = getGeminiApiKey();
-
-        if (apiKey) {
-          try {
-            const aiResult = await requestGeminiDailyPythonChallenges({
-              apiKey,
-              dateKey,
-              count: DAILY_PYTHON_CHALLENGE_COUNT,
-            });
-
-            const normalizedAiChallenges = [];
-
-            for (let index = 0; index < aiResult.challenges.length; index += 1) {
-              const challenge = aiResult.challenges[index] || {};
-              const normalizedChallenge = {
-                id: `${dateKey}-ai-generated-${index + 1}`,
-                title: String(challenge.title || "").trim(),
-                topic: String(challenge.topic || "Python").trim(),
-                difficulty: String(challenge.difficulty || "Medium").trim(),
-                statement: String(challenge.statement || "").trim(),
-                inputFormat: String(challenge.inputFormat || "").trim(),
-                outputFormat: String(challenge.outputFormat || "").trim(),
-                sampleInput: String(challenge.sampleInput || "").trim(),
-                sampleOutput: String(challenge.sampleOutput || "").trim(),
-                hint: String(challenge.hint || "").trim(),
-                solutionCode: String(challenge.solutionCode || "").trim(),
-              };
-
-              if (!isValidDailyPythonChallenge(normalizedChallenge)) {
-                continue;
-              }
-
-              try {
-                const computedOutput = await executePythonWithInput({
-                  sourceCode: normalizedChallenge.solutionCode,
-                  stdin: normalizedChallenge.sampleInput || "",
-                });
-                const finalizedOutput = String(computedOutput).trim();
-                if (finalizedOutput) {
-                  normalizedChallenge.sampleOutput = finalizedOutput;
-                }
-              } catch {
-                // Keep model-provided output as fallback.
-              }
-
-              normalizedAiChallenges.push(normalizedChallenge);
-            }
-
-            if (normalizedAiChallenges.length >= DAILY_PYTHON_CHALLENGE_COUNT) {
-              generatedChallenges = normalizedAiChallenges.slice(
-                0,
-                DAILY_PYTHON_CHALLENGE_COUNT
-              );
-              generationSource = "ai";
-              if (!cancelled) {
-                setDailyPythonStatus("Generated fresh AI quizzes for today.");
-              }
-            }
-          } catch {
-            if (!cancelled) {
-              setDailyPythonStatus(
-                "AI generation unavailable right now. Using fallback challenge set."
-              );
-            }
-          }
-        }
-
-        if (!hasValidDailyPythonChallenges(generatedChallenges)) {
-          generatedChallenges = generateDailyPythonChallenges(dateKey);
-          generationSource = "template";
-        }
-
-        const createdAt = new Date();
-        const expiresAt = new Date(createdAt.getTime() + DAILY_CHALLENGE_TTL_MS);
-
-        const payload = {
-          generatedAtKey: dateKey,
-          source: generationSource,
-          generatedBy: user.uid,
-          generatedByName: profile?.name || (isStaff ? "Staff" : "Student"),
-          createdAt,
-          expiresAt,
-          challenges: generatedChallenges,
-        };
-
-        try {
-          await setDoc(challengeRef, payload);
-        } catch (error) {
-          console.error("Daily Python challenge sync failed:", error);
-          if (!cancelled) {
-            setDailyPythonError(
-              "Showing local AI challenges. Apply Supabase policies to sync 24h rotation."
-            );
-          }
-        }
-
-        saveDailyPythonChallengeCache({
-          userId: user.uid,
-          generatedAtKey: dateKey,
-          challenges: generatedChallenges,
-          expiresAt,
-        });
-
-        if (cancelled) return;
-        setDailyPythonChallenges(generatedChallenges);
-        setDailyPythonExpiresAt(expiresAt);
-        setDailyPythonGeneratedAtKey(dateKey);
-      } catch {
-        if (cancelled) return;
-        const cachedChallenges = loadDailyPythonChallengeCache({
-          userId: user?.uid,
-          expectedDateKey: dateKey,
-          nowMs,
-        });
-        if (cachedChallenges) {
-          setDailyPythonChallenges(cachedChallenges.challenges);
-          setDailyPythonExpiresAt(cachedChallenges.expiresAt);
-          setDailyPythonGeneratedAtKey(cachedChallenges.generatedAtKey);
-          setDailyPythonStatus("");
-          setDailyPythonError("");
-        } else {
-          clearDailyPythonChallengeCache(user?.uid);
-          setDailyPythonChallenges([]);
-          setDailyPythonExpiresAt(null);
-          setDailyPythonGeneratedAtKey("");
-          setDailyPythonSolvedIds([]);
-          setDailyPythonStatus("");
-          setDailyPythonError("Unable to load daily Python challenges.");
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingDailyPythonChallenges(false);
-        }
-      }
-    };
-
-    loadDailyChallenges();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [dailyPythonOpen, dailyPythonReloadToken, isStaff, profile?.name, user?.uid]);
-
-  useEffect(() => {
-    if (!dailyPythonOpen || isStaff || !user?.uid) {
-      setDailyPythonSolvedIds([]);
-      setDailyPythonStreak(0);
-      setDailyPythonBestStreak(0);
-      setDailyPythonTotalSolved(0);
-      setDailyPythonDaysParticipated(0);
-      setDailyPythonProgressError("");
-      return undefined;
-    }
-
-    const progressRef = doc(db, DAILY_PYTHON_PROGRESS_COLLECTION, user.uid);
-    setDailyPythonProgressError("");
-
-    const unsubscribe = onSnapshot(
-      progressRef,
-      (snapshot) => {
-        if (!snapshot.exists()) {
-          setDailyPythonSolvedIds([]);
-          setDailyPythonStreak(0);
-          setDailyPythonBestStreak(0);
-          setDailyPythonTotalSolved(0);
-          setDailyPythonDaysParticipated(0);
-          return;
-        }
-
-        const data = snapshot.data();
-        const currentDayKey =
-          typeof data?.currentDayKey === "string" ? data.currentDayKey : "";
-        const rawSolvedIds = Array.isArray(data?.solvedChallengeIds)
-          ? data.solvedChallengeIds.filter((value) => typeof value === "string")
-          : [];
-        const solvedIdsForCurrentDay =
-          dailyPythonGeneratedAtKey && currentDayKey === dailyPythonGeneratedAtKey
-            ? rawSolvedIds
-            : [];
-
-        setDailyPythonSolvedIds(solvedIdsForCurrentDay);
-        setDailyPythonStreak(Number(data?.dailyStreak || 0));
-        setDailyPythonBestStreak(Number(data?.bestStreak || 0));
-        setDailyPythonTotalSolved(Number(data?.totalSolvedChallenges || 0));
-        setDailyPythonDaysParticipated(Number(data?.daysParticipated || 0));
-      },
-      () => {
-        setDailyPythonProgressError("Unable to load solved tracking right now.");
-      }
-    );
-
-    return () => unsubscribe();
-  }, [dailyPythonOpen, dailyPythonGeneratedAtKey, isStaff, user?.uid]);
-
-  useEffect(() => {
-    if (!dailyPythonOpen || !dailyPythonExpiresAt) return undefined;
-
-    const expiresMs = getMillis(dailyPythonExpiresAt);
-    if (!expiresMs) return undefined;
-
-    const delayMs = Math.max(0, expiresMs - Date.now() + 1000);
-    const timerId = window.setTimeout(() => {
-      setDailyPythonReloadToken((prev) => prev + 1);
-    }, delayMs);
-
-    return () => {
-      window.clearTimeout(timerId);
-    };
-  }, [dailyPythonOpen, dailyPythonExpiresAt]);
-
-  useEffect(() => {
-    if (!dailyPythonOpen || dailyPythonChallenges.length === 0) return;
-
-    setDailyPythonCodeByChallengeId((prev) => {
-      const validIds = new Set(
-        dailyPythonChallenges
-          .map((challenge) => challenge?.id)
-          .filter(Boolean)
-      );
-      const next = {};
-      Object.keys(prev).forEach((key) => {
-        if (validIds.has(key)) {
-          next[key] = prev[key];
-        }
-      });
-      dailyPythonChallenges.forEach((challenge) => {
-        if (!challenge?.id) return;
-        if (!next[challenge.id]) {
-          next[challenge.id] = "# Write your Python solution here\n";
-        }
-      });
-      return next;
-    });
-
-    setDailyPythonReviewByChallengeId((prev) => {
-      const validIds = new Set(
-        dailyPythonChallenges
-          .map((challenge) => challenge?.id)
-          .filter(Boolean)
-      );
-      const next = {};
-      Object.keys(prev).forEach((key) => {
-        if (validIds.has(key)) {
-          next[key] = prev[key];
-        }
-      });
-      return next;
-    });
-
-    setDailyPythonCheckedIds((prev) => {
-      const validIds = new Set(
-        dailyPythonChallenges
-          .map((challenge) => challenge?.id)
-          .filter(Boolean)
-      );
-      return prev.filter((challengeId) => validIds.has(challengeId));
-    });
-  }, [dailyPythonOpen, dailyPythonChallenges]);
 
   useEffect(() => {
     if (!interviewQuizOpen || !isStudent) {
@@ -1936,9 +1522,9 @@ export default function MenuGridPage({ forcedStaff }) {
     setCalendarOpen(false);
     setCircularsOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(false);
     setFeesOpen(false);
     setAssignmentsOpen(true);
     setAssignmentsStatus("");
@@ -1979,9 +1565,9 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsOpen(false);
     setFeesOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(false);
     setCircularsOpen(true);
     setCircularsError("");
     setNoticeStatus("");
@@ -2031,9 +1617,9 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsOpen(false);
     setFeesOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(false);
     setCalendarOpen(true);
     setCalendarStatus("");
     setCalendarError("");
@@ -2050,9 +1636,9 @@ export default function MenuGridPage({ forcedStaff }) {
     setCircularsOpen(false);
     setAssignmentsOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setInterviewQuizOpen(false);
     setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(false);
     setFeesOpen(true);
     setFeeSemesterFilter("all");
     setFeesStatus("");
@@ -2139,23 +1725,6 @@ export default function MenuGridPage({ forcedStaff }) {
     navigate(`${basePath}/code/${language}`);
   };
 
-  const openDailyPythonModal = () => {
-    if (isStaff) return;
-    setActiveModule(null);
-    setCalendarOpen(false);
-    setCircularsOpen(false);
-    setAssignmentsOpen(false);
-    setFeesOpen(false);
-    setCodeLearningOpen(false);
-    setInterviewQuizOpen(false);
-    setStudentDetailsOpen(false);
-    setDailyPythonOpen(false);
-    setDailyPythonError("");
-    setDailyPythonProgressError("");
-    setDailyPythonStatus("");
-    navigate(`${basePath}/menu/daily-python-challenges`);
-  };
-
   const openInterviewQuizModal = () => {
     if (!isStudent) return;
     setActiveModule(null);
@@ -2164,8 +1733,8 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsOpen(false);
     setFeesOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(false);
     setInterviewQuizOpen(true);
     setInterviewQuizError("");
   };
@@ -2182,8 +1751,8 @@ export default function MenuGridPage({ forcedStaff }) {
     setAssignmentsOpen(false);
     setFeesOpen(false);
     setCodeLearningOpen(false);
-    setDailyPythonOpen(false);
     setInterviewQuizOpen(false);
+    setQuizGeneratorOpen(false);
     setStudentDetailsOpen(true);
     setStudentDetailsStudentsError("");
     navigate(`${basePath}/menu/student-details`);
@@ -2205,14 +1774,24 @@ export default function MenuGridPage({ forcedStaff }) {
     }
   };
 
-  const closeDailyPythonModal = () => {
-    setDailyPythonOpen(false);
-    setDailyPythonStatus("");
-    setSavingDailyPythonChallengeId("");
-    setCheckingDailyPythonChallengeId("");
-    setDailyPythonReviewByChallengeId({});
+  const openQuizGeneratorModal = () => {
+    if (!isStaff) return;
+    setActiveModule(null);
+    setCalendarOpen(false);
+    setCircularsOpen(false);
+    setAssignmentsOpen(false);
+    setFeesOpen(false);
+    setCodeLearningOpen(false);
+    setInterviewQuizOpen(false);
+    setStudentDetailsOpen(false);
+    setQuizGeneratorOpen(true);
+    navigate(`${basePath}/menu/quiz-paper-generator`);
+  };
 
-    if (isDailyPythonPageRoute) {
+  const closeQuizGeneratorModal = () => {
+    setQuizGeneratorOpen(false);
+
+    if (isQuizGeneratorPageRoute) {
       navigate(`${basePath}/menu`);
       return;
     }
@@ -2220,254 +1799,14 @@ export default function MenuGridPage({ forcedStaff }) {
     const params = new URLSearchParams(location.search);
     const openValue = (params.get("open") || "").trim().toLowerCase();
     const hashValue = (location.hash || "").replace(/^#/, "").trim().toLowerCase();
-    const hasDailyOpenParam =
-      openValue === "daily-python-challenges" || openValue === "daily-python";
-    const hasDailyHash =
-      hashValue === "daily-python-challenges" || hashValue === "daily-python";
 
-    if (hasDailyOpenParam || hasDailyHash) {
+    if (
+      openValue === "quiz-paper-generator" ||
+      openValue === "quiz-generator" ||
+      hashValue === "quiz-paper-generator" ||
+      hashValue === "quiz-generator"
+    ) {
       navigate(`${basePath}/menu`, { replace: true });
-    }
-  };
-
-  const handleDailyPythonCodeChange = (challengeId, value) => {
-    if (!challengeId) return;
-    setDailyPythonCodeByChallengeId((prev) => ({
-      ...prev,
-      [challengeId]: value,
-    }));
-    setDailyPythonReviewByChallengeId((prev) => {
-      if (!prev[challengeId]) return prev;
-      const next = { ...prev };
-      delete next[challengeId];
-      return next;
-    });
-  };
-
-  const handleCheckDailyPythonChallenge = async (challenge) => {
-    if (!challenge?.id || isStaff || !user?.uid) return;
-    if (dailyPythonCheckedIds.includes(challenge.id)) return;
-
-    const submittedCode = (dailyPythonCodeByChallengeId[challenge.id] || "").trim();
-    const expectedOutput = String(challenge.sampleOutput || "").trim();
-    if (!submittedCode) {
-      setDailyPythonReviewByChallengeId((prev) => ({
-        ...prev,
-        [challenge.id]: {
-          status: "error",
-          message: "Enter your code before checking.",
-        },
-      }));
-      return;
-    }
-
-    setDailyPythonCheckedIds((prev) =>
-      prev.includes(challenge.id) ? prev : [...prev, challenge.id]
-    );
-    setCheckingDailyPythonChallengeId(challenge.id);
-    setDailyPythonProgressError("");
-    setDailyPythonStatus("");
-
-    const resolveCorrectPythonCode = async () => {
-      let correctPythonCode = getDailyPythonCorrectCode(challenge);
-      if (correctPythonCode) {
-        return correctPythonCode;
-      }
-
-      const apiKey = getGeminiApiKey();
-      if (!apiKey) {
-        return "";
-      }
-
-      try {
-        const aiSolution = await requestGeminiDailyPythonSolution({
-          apiKey,
-          challenge: {
-            ...challenge,
-            sampleOutput: expectedOutput,
-          },
-        });
-        const generatedCode = String(aiSolution?.solutionCode || "").trim();
-        if (!generatedCode) {
-          return "";
-        }
-
-        let isValidGeneratedCode = false;
-        try {
-          const generatedOutput = await executePythonWithInput({
-            sourceCode: generatedCode,
-            stdin: challenge.sampleInput || "",
-          });
-          isValidGeneratedCode = outputsMatch(generatedOutput, expectedOutput);
-        } catch {
-          isValidGeneratedCode = false;
-        }
-
-        if (!isValidGeneratedCode) {
-          return "";
-        }
-
-        setDailyPythonChallenges((prev) =>
-          prev.map((item) =>
-            item?.id === challenge.id
-              ? {
-                  ...item,
-                  solutionCode: generatedCode,
-                }
-              : item
-          )
-        );
-        return generatedCode;
-      } catch {
-        return "";
-      }
-    };
-
-    try {
-      const actualOutput = await executePythonWithInput({
-        sourceCode: submittedCode,
-        stdin: challenge.sampleInput || "",
-      });
-      const passed = outputsMatch(actualOutput, expectedOutput);
-
-      if (passed) {
-        setDailyPythonReviewByChallengeId((prev) => ({
-          ...prev,
-          [challenge.id]: {
-            status: "pass",
-            message: "AI check passed for sample test. Progress updated.",
-          },
-        }));
-        await handleMarkDailyPythonChallengeSolved(challenge);
-      } else {
-        let correctPythonCode = await resolveCorrectPythonCode();
-
-        if (!correctPythonCode) {
-          correctPythonCode = "Unable to generate correct Python code right now. Try checking again.";
-        }
-
-        setDailyPythonReviewByChallengeId((prev) => ({
-          ...prev,
-          [challenge.id]: {
-            status: "fail",
-            message: "AI check failed. Output does not match expected result.",
-            correctAnswer: String(expectedOutput),
-            actualOutput: String(actualOutput).trim() || "(no output)",
-            correctPythonCode,
-          },
-        }));
-      }
-    } catch (error) {
-      const runtimeError =
-        String(error?.message || "").trim() || "Unable to run code.";
-      let correctPythonCode = await resolveCorrectPythonCode();
-      if (!correctPythonCode) {
-        correctPythonCode = "Unable to generate correct Python code right now. Try checking again.";
-      }
-
-      setDailyPythonReviewByChallengeId((prev) => ({
-        ...prev,
-        [challenge.id]: {
-          status: "fail",
-          message: "AI check failed. Code could not run on sample input.",
-          correctAnswer: expectedOutput || "(no expected output)",
-          actualOutput: `Runtime error: ${runtimeError}`,
-          correctPythonCode,
-        },
-      }));
-    } finally {
-      setCheckingDailyPythonChallengeId("");
-    }
-  };
-
-  const handleMarkDailyPythonChallengeSolved = async (challenge) => {
-    if (!user?.uid || isStaff || !challenge?.id || !dailyPythonGeneratedAtKey) return;
-    if (dailyPythonSolvedIds.includes(challenge.id)) {
-      setDailyPythonStatus("Already marked as solved.");
-      return;
-    }
-
-    setSavingDailyPythonChallengeId(challenge.id);
-    setDailyPythonProgressError("");
-    setDailyPythonStatus("");
-
-    try {
-      const progressRef = doc(db, DAILY_PYTHON_PROGRESS_COLLECTION, user.uid);
-      const txResult = await runTransaction(db, async (transaction) => {
-        const snapshot = await transaction.get(progressRef);
-        const existing = snapshot.exists() ? snapshot.data() : {};
-
-        const currentDayKey =
-          typeof existing?.currentDayKey === "string" ? existing.currentDayKey : "";
-        const existingSolvedIds =
-          currentDayKey === dailyPythonGeneratedAtKey &&
-          Array.isArray(existing?.solvedChallengeIds)
-            ? existing.solvedChallengeIds.filter((value) => typeof value === "string")
-            : [];
-
-        if (existingSolvedIds.includes(challenge.id)) {
-          return {
-            alreadySolved: true,
-            nextStreak: Number(existing?.dailyStreak || 0),
-          };
-        }
-
-        const nextSolvedIds = [...existingSolvedIds, challenge.id];
-        const existingStreak = Number(existing?.dailyStreak || 0);
-        const existingBestStreak = Number(existing?.bestStreak || 0);
-        const existingDaysParticipated = Number(existing?.daysParticipated || 0);
-        const existingTotalSolved = Number(existing?.totalSolvedChallenges || 0);
-        const lastSolvedDayKey =
-          typeof existing?.lastSolvedDayKey === "string" ? existing.lastSolvedDayKey : "";
-
-        let nextStreak = existingStreak;
-        let nextDaysParticipated = existingDaysParticipated;
-        if (lastSolvedDayKey !== dailyPythonGeneratedAtKey) {
-          const previousDayKey = getPreviousDateKey(dailyPythonGeneratedAtKey);
-          nextStreak = lastSolvedDayKey === previousDayKey ? existingStreak + 1 : 1;
-          nextDaysParticipated = existingDaysParticipated + 1;
-        }
-
-        const nextBestStreak = Math.max(existingBestStreak, nextStreak);
-        const nextTotalSolved = existingTotalSolved + 1;
-
-        transaction.set(
-          progressRef,
-          {
-            studentId: user.uid,
-            currentDayKey: dailyPythonGeneratedAtKey,
-            solvedChallengeIds: nextSolvedIds,
-            solvedCount: nextSolvedIds.length,
-            totalSolvedChallenges: nextTotalSolved,
-            daysParticipated: nextDaysParticipated,
-            dailyStreak: nextStreak,
-            bestStreak: nextBestStreak,
-            lastSolvedDayKey: dailyPythonGeneratedAtKey,
-            lastSolvedAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          },
-          { merge: true }
-        );
-
-        return {
-          alreadySolved: false,
-          nextStreak,
-        };
-      });
-
-      if (txResult?.alreadySolved) {
-        setDailyPythonStatus("Already marked as solved.");
-      } else {
-        setDailyPythonStatus(
-          `Solved saved. Current streak: ${txResult?.nextStreak || 1} day${
-            (txResult?.nextStreak || 1) === 1 ? "" : "s"
-          }.`
-        );
-      }
-    } catch {
-      setDailyPythonProgressError("Unable to save solved progress. Please try again.");
-    } finally {
-      setSavingDailyPythonChallengeId("");
     }
   };
 
@@ -2939,16 +2278,16 @@ export default function MenuGridPage({ forcedStaff }) {
       openCodeLearningModal();
       return;
     }
-    if (destination === "__daily_python_challenges__") {
-      openDailyPythonModal();
-      return;
-    }
     if (destination === "__interview_quiz__") {
       openInterviewQuizModal();
       return;
     }
     if (destination === "__student_details__") {
       openStudentDetailsModal();
+      return;
+    }
+    if (destination === "__quiz_generator__") {
+      openQuizGeneratorModal();
       return;
     }
     navigate(destination);
@@ -3003,11 +2342,13 @@ export default function MenuGridPage({ forcedStaff }) {
 
   return (
     <div className="menu-grid-page">
-      {!isAssignmentsPageRoute && !isDailyPythonPageRoute && !isStudentDetailsPageRoute ? (
+      {!isAssignmentsPageRoute &&
+      !isStudentDetailsPageRoute &&
+      !isQuizGeneratorPageRoute ? (
         <>
-      <section className="relative overflow-hidden rounded-[1.8rem] border border-white/35 bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 p-5 text-white shadow-lg shadow-indigo-900/30 sm:p-6">
+      <section className="relative overflow-hidden rounded-[1.8rem] border border-white/35 bg-linear-to-br from-[#5a189a] via-[#7b2cbf] to-[#3c096c] p-5 text-white shadow-lg shadow-[#240046]/30 sm:p-6">
         <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/20 blur-3xl" />
-        <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-cyan-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-[#c77dff]/20 blur-3xl" />
 
         <div className="relative rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-xl sm:p-5">
           <div
@@ -3016,7 +2357,7 @@ export default function MenuGridPage({ forcedStaff }) {
             }`}
           >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/90">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e9d5ff]/90">
                 A3 Hub - Campus Services
               </p>
               <h1 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
@@ -3041,7 +2382,7 @@ export default function MenuGridPage({ forcedStaff }) {
           </div>
 
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-blue-100/90">
+            <p className="text-sm text-[#e9d5ff]/90">
               Premium academic workspace with quick access to all services.
             </p>
             <button
@@ -3065,23 +2406,24 @@ export default function MenuGridPage({ forcedStaff }) {
             const isAssignments = item.id === "assignments";
             const isSpaciousService =
               item.id === "test" ||
+              item.id === "quiz-paper-generator" ||
               item.id === "assignments" ||
               item.id === "exam" ||
               item.id === "marks-progress";
             const isFees = item.id === "fees";
             const isCirculars = item.id === "circulars";
             const isCodeLearning = item.id === "code-learning";
-            const isDailyPythonChallenges = item.id === "daily-python-challenges";
             const isInterviewQuizContact = item.id === "interview-quiz-contact";
             const isMyTodoList = item.id === "my-todo-list";
             const isStudentDetails = item.id === "student-details";
             const isStudentAssignments = item.id === "student-assignments";
             const isParentReplies = item.id === "parent-replies";
-            if (isStaff && isDailyPythonChallenges) return null;
+            const isQuizPaperGenerator = item.id === "quiz-paper-generator";
             if (isStaff && isInterviewQuizContact) return null;
             if (isStaff && isMyTodoList) return null;
             if (!isStudent && isInterviewQuizContact) return null;
             if (!isStaff && isStudentDetails) return null;
+            if (!isStaff && isQuizPaperGenerator) return null;
             if (isStudentAssignments) return null;
             if (!isStaff && isParentReplies) return null;
 
@@ -3102,12 +2444,12 @@ export default function MenuGridPage({ forcedStaff }) {
               ? "__circulars__"
               : isCodeLearning
               ? "__code_learning__"
-              : isDailyPythonChallenges
-              ? "__daily_python_challenges__"
               : isInterviewQuizContact
               ? "__interview_quiz__"
               : isStudentDetails
               ? "__student_details__"
+              : isQuizPaperGenerator
+              ? "__quiz_generator__"
               : "";
             const actionLabel = isLeave
               ? "Open"
@@ -3133,12 +2475,12 @@ export default function MenuGridPage({ forcedStaff }) {
                 : "View"
               : isCodeLearning
               ? "Open"
-              : isDailyPythonChallenges
-              ? "Practice"
               : isInterviewQuizContact
               ? "AI"
               : isStudentDetails
               ? "Open"
+              : isQuizPaperGenerator
+              ? "Generate"
               : isLink
               ? "Open"
               : item.staffEditable && isStaff
@@ -3174,7 +2516,7 @@ export default function MenuGridPage({ forcedStaff }) {
               >
                 <span className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-indigo-200/70 opacity-0 blur-2xl transition duration-300 group-hover:opacity-100" />
                 <div className="relative flex items-start justify-between gap-2">
-                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-indigo-50 text-indigo-600 shadow-sm transition group-hover:shadow-md">
+                  <span className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-linear-to-br from-slate-50 to-indigo-50 text-indigo-600 shadow-sm transition group-hover:shadow-md">
                     <Icon className="h-5 w-5" />
                   </span>
                   <ArrowUpRight className="h-4 w-4 text-slate-300 transition duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-indigo-500" />
@@ -3395,7 +2737,7 @@ export default function MenuGridPage({ forcedStaff }) {
         <div
           className={
             isAssignmentsPageRoute
-              ? "rounded-[1.8rem] border border-white/35 bg-gradient-to-br from-[#dfe8f7] via-[#dbe5f6] to-[#cbd8ee] p-4 shadow-lg shadow-indigo-900/20 sm:p-5"
+              ? "rounded-[1.8rem] border border-white/35 bg-linear-to-br from-[#dfe8f7] via-[#dbe5f6] to-[#cbd8ee] p-4 shadow-lg shadow-indigo-900/20 sm:p-5"
               : "ui-modal"
           }
           role={isAssignmentsPageRoute ? undefined : "dialog"}
@@ -3885,266 +3227,6 @@ export default function MenuGridPage({ forcedStaff }) {
         </section>
       ) : null}
 
-      {isDailyPythonVisible ? (
-        <div
-          className={
-            isDailyPythonPageRoute
-              ? "rounded-[1.8rem] border border-white/35 bg-gradient-to-br from-[#dfe8f7] via-[#dbe5f6] to-[#cbd8ee] p-4 shadow-lg shadow-indigo-900/20 sm:p-5"
-              : "ui-modal"
-          }
-          role={isDailyPythonPageRoute ? undefined : "dialog"}
-          aria-modal={isDailyPythonPageRoute ? undefined : "true"}
-          aria-label="Daily python challenges"
-        >
-          {!isDailyPythonPageRoute ? (
-            <button
-              type="button"
-              aria-label="Close daily python challenges"
-              onClick={closeDailyPythonModal}
-              className="ui-modal__scrim"
-              tabIndex={-1}
-            />
-          ) : null}
-          <div
-            tabIndex={-1}
-            className={
-              isDailyPythonPageRoute
-                ? "w-full"
-                : "ui-modal__panel w-full max-w-4xl"
-            }
-          >
-            <div
-              className={
-                isDailyPythonPageRoute
-                  ? "pb-[calc(2rem+env(safe-area-inset-bottom))]"
-                  : "ui-modal__body pb-[calc(8rem+env(safe-area-inset-bottom))]"
-              }
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-ink/75">
-                    AI Challenge Zone
-                  </p>
-                  <h3 className="text-xl font-semibold text-ink">
-                    Daily {DAILY_PYTHON_CHALLENGE_COUNT} Python Challenges
-                  </h3>
-                  <p className="text-xs text-ink/75">
-                    Auto-rotates every 24 hours with a fresh AI challenge set.
-                  </p>
-                  {dailyPythonExpiresAt ? (
-                    <p className="mt-1 text-[11px] text-ink/70">
-                      Current set expires: {formatChallengeDateTime(dailyPythonExpiresAt)}
-                    </p>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={closeDailyPythonModal}
-                  className="ui-modal__close"
-                >
-                  Close
-                </button>
-              </div>
-
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setDailyPythonOpen(false);
-                    navigate(`${basePath}/code/python`);
-                  }}
-                  className="rounded-xl border border-clay/25 bg-white px-4 py-2 text-sm font-semibold text-ink/80 transition hover:border-clay/45"
-                >
-                  Open Python Editor
-                </button>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                <div className="rounded-xl border border-clay/25 bg-white/90 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink/65">Solved Today</p>
-                  <p className="text-sm font-semibold text-ink">
-                    {dailyPythonSolvedIds.length}/{DAILY_PYTHON_CHALLENGE_COUNT}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-clay/25 bg-white/90 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink/65">Current Streak</p>
-                  <p className="text-sm font-semibold text-ink">{dailyPythonStreak}</p>
-                </div>
-                <div className="rounded-xl border border-clay/25 bg-white/90 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink/65">Best Streak</p>
-                  <p className="text-sm font-semibold text-ink">{dailyPythonBestStreak}</p>
-                </div>
-                <div className="rounded-xl border border-clay/25 bg-white/90 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink/65">Total Solved</p>
-                  <p className="text-sm font-semibold text-ink">{dailyPythonTotalSolved}</p>
-                </div>
-                <div className="rounded-xl border border-clay/25 bg-white/90 px-3 py-2 text-center">
-                  <p className="text-[10px] uppercase tracking-[0.08em] text-ink/65">Active Days</p>
-                  <p className="text-sm font-semibold text-ink">{dailyPythonDaysParticipated}</p>
-                </div>
-              </div>
-
-              {dailyPythonError ? (
-                <p className="mt-3 text-xs font-semibold text-ink/80">
-                  {dailyPythonError}
-                </p>
-              ) : null}
-              {dailyPythonProgressError ? (
-                <p className="mt-2 text-xs font-semibold text-ink/80">
-                  {dailyPythonProgressError}
-                </p>
-              ) : null}
-              {dailyPythonStatus ? (
-                <p className="mt-2 text-xs font-semibold text-ink/80">
-                  {dailyPythonStatus}
-                </p>
-              ) : null}
-
-              {loadingDailyPythonChallenges ? (
-                <p className="mt-4 text-sm text-ink/75">Loading daily challenges...</p>
-              ) : dailyPythonChallenges.length === 0 ? (
-                <p className="mt-4 text-sm text-ink/75">No challenges available right now.</p>
-              ) : (
-                <div className="mt-4 grid gap-3">
-                  {dailyPythonChallenges.map((challenge, index) => {
-                    const isSolved = dailyPythonSolvedIds.includes(challenge.id);
-                    const isCheckedOnce = dailyPythonCheckedIds.includes(challenge.id);
-                    const isSaving = savingDailyPythonChallengeId === challenge.id;
-                    const isChecking = checkingDailyPythonChallengeId === challenge.id;
-                    const challengeCode = dailyPythonCodeByChallengeId[challenge.id] || "";
-                    const challengeReview = dailyPythonReviewByChallengeId[challenge.id] || null;
-
-                    return (
-                      <article
-                        key={challenge.id || `${challenge.title}-${index}`}
-                        className="rounded-2xl border border-clay/25 bg-white/90 p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <h4 className="text-sm font-semibold text-ink">
-                            {index + 1}. {challenge.title}
-                          </h4>
-                          <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.08em]">
-                            <span className="rounded-full border border-clay/30 bg-cream px-2 py-1 text-ink/75">
-                              {challenge.topic || "Python"}
-                            </span>
-                            <span className="rounded-full border border-clay/30 bg-mist px-2 py-1 text-ink/75">
-                              {challenge.difficulty || "Easy"}
-                            </span>
-                            {isSolved ? (
-                              <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-1 text-emerald-900">
-                                Solved
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-
-                        <p className="mt-2 text-sm text-ink/80">{challenge.statement}</p>
-
-                        <div className="mt-3 grid gap-3 text-xs text-ink/80">
-                          <div>
-                            <p className="font-semibold text-ink">Input Format:</p>
-                            <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-clay/20 bg-white/80 p-2 font-mono text-[11px] text-ink/85">{challenge.inputFormat}</pre>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-ink">Output Format:</p>
-                            <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-clay/20 bg-white/80 p-2 font-mono text-[11px] text-ink/85">{challenge.outputFormat}</pre>
-                          </div>
-                          <div>
-                            <p className="font-semibold text-ink">Sample Input:</p>
-                            <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-clay/20 bg-cream/70 p-2 font-mono text-[11px] text-ink/85">{challenge.sampleInput}</pre>
-                          </div>
-                          {isStaff ? (
-                            <div>
-                              <p className="font-semibold text-ink">Sample Output:</p>
-                              <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-clay/20 bg-mist/80 p-2 font-mono text-[11px] text-ink/85">{challenge.sampleOutput}</pre>
-                            </div>
-                          ) : null}
-                          <p>
-                            <span className="font-semibold text-ink">Hint: </span>
-                            {challenge.hint}
-                          </p>
-                        </div>
-
-                        <div className="mt-3 grid gap-1">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ink/70">
-                            Your Python Code
-                          </p>
-                          <textarea
-                            value={challengeCode}
-                            onChange={(event) =>
-                              handleDailyPythonCodeChange(challenge.id, event.target.value)
-                            }
-                            rows={8}
-                            spellCheck="false"
-                            autoCapitalize="off"
-                            autoCorrect="off"
-                            placeholder="Write your Python solution..."
-                            className="w-full rounded-xl border border-clay/20 bg-cream/70 px-3 py-2 font-mono text-xs text-ink/85 placeholder:text-ink/50"
-                          />
-                        </div>
-
-                        {challengeReview ? (
-                          <div
-                            className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
-                              challengeReview.status === "pass"
-                                ? "border-emerald-300 bg-emerald-50 text-emerald-900"
-                                : challengeReview.status === "fail"
-                                ? "border-amber-300 bg-amber-50 text-amber-900"
-                                : "border-rose-300 bg-rose-50 text-rose-900"
-                            }`}
-                          >
-                            <p className="font-semibold">{challengeReview.message}</p>
-                            {challengeReview.status === "fail" &&
-                            challengeReview.correctAnswer !== undefined &&
-                            challengeReview.actualOutput !== undefined ? (
-                              <div className="mt-2 grid gap-2">
-                                <div>
-                                  <p className="font-semibold">Correct Answer:</p>
-                                  <pre className="mt-1 whitespace-pre-wrap rounded-md border border-amber-300/60 bg-white/75 p-2 font-mono text-[11px] text-amber-950">{challengeReview.correctAnswer}</pre>
-                                </div>
-                                <div>
-                                  <p className="font-semibold">Output:</p>
-                                  <pre className="mt-1 whitespace-pre-wrap rounded-md border border-amber-300/60 bg-white/75 p-2 font-mono text-[11px] text-amber-950">{challengeReview.actualOutput}</pre>
-                                </div>
-                                {challengeReview.correctPythonCode ? (
-                                  <div>
-                                    <p className="font-semibold">Correct Python Code:</p>
-                                    <pre className="mt-1 whitespace-pre-wrap rounded-md border border-amber-300/60 bg-white/75 p-2 font-mono text-[11px] text-amber-950">{challengeReview.correctPythonCode}</pre>
-                                  </div>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        ) : null}
-
-                        <div className="mt-3 flex justify-end">
-                          <button
-                            type="button"
-                            onClick={() => handleCheckDailyPythonChallenge(challenge)}
-                            disabled={isSolved || isCheckedOnce || isSaving || isChecking}
-                            className="rounded-xl border border-clay/25 bg-white px-3 py-1.5 text-xs font-semibold text-ink/80 transition hover:border-clay/45 disabled:cursor-not-allowed disabled:opacity-60"
-                          >
-                            {isChecking
-                              ? "Checking..."
-                              : isSaving
-                              ? "Saving..."
-                              : isSolved
-                              ? "Solved"
-                              : isCheckedOnce
-                              ? "Checked"
-                              : "Check Answer"}
-                          </button>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       {isStudent && interviewQuizOpen ? (
         <div
           className="ui-modal"
@@ -4520,7 +3602,7 @@ export default function MenuGridPage({ forcedStaff }) {
               })}
             </div>
 
-            <div className="mt-4 rounded-2xl border border-clay/30 bg-gradient-to-b from-sand/65 to-cream/70 p-4">
+            <div className="mt-4 rounded-2xl border border-clay/30 bg-linear-to-b from-sand/65 to-cream/70 p-4">
               <div className="flex items-center justify-between">
                 <button
                   type="button"
@@ -5111,6 +4193,14 @@ export default function MenuGridPage({ forcedStaff }) {
           </div>
         </div>
       ) : null}
+
+      <QuizGeneratorModal
+        open={isQuizGeneratorVisible}
+        onClose={closeQuizGeneratorModal}
+        createdBy={user?.uid || ""}
+        createdByName={profile?.name || user?.displayName || user?.email || "Staff"}
+        renderAsPage={isQuizGeneratorPageRoute}
+      />
 
       {activeNotice ? (() => {
         const { dateLabel, author, audienceMeta, showMeta } =

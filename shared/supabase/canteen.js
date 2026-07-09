@@ -30,9 +30,9 @@ import {
   sortOrdersByNewest,
 } from "../utils/canteen";
 import {
+  isAllowedOrderStatusTransition,
   validateCheckoutItems,
   validateMenuItemForm,
-  validateOrderStatus,
 } from "../utils/validation";
 import { assertSupabaseReady, auth, db } from "./client";
 
@@ -191,11 +191,11 @@ export const deleteMenuItem = async (itemId) => {
   return deleteDoc(doc(db, MENU_ITEMS_COLLECTION, itemId));
 };
 
-export const updateOrderStatus = async (orderId, status) => {
+export const updateOrderStatus = async (orderId, status, currentStatus) => {
   assertSupabaseReady();
   const safeStatus = normalizeText(status).toLowerCase();
-  if (!validateOrderStatus(safeStatus) || safeStatus === ORDER_STATUS.PLACED) {
-    throw new Error("Only collected or cancelled are allowed here.");
+  if (!isAllowedOrderStatusTransition(currentStatus, safeStatus)) {
+    throw new Error("That order can't move to this stage.");
   }
 
   return updateDoc(doc(db, ORDERS_COLLECTION, orderId), {

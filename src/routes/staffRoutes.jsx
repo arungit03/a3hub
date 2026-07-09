@@ -83,6 +83,11 @@ const STAFF_PAGE_ROUTES = [
   },
   { path: "/staff/menu/student-details", element: <MenuGridPage forcedStaff /> },
   {
+    path: "/staff/menu/quiz-paper-generator",
+    element: <MenuGridPage forcedStaff />,
+    feature: "tests",
+  },
+  {
     path: "/staff/menu/books",
     element: <BooksPage forcedRole="staff" />,
     feature: "books",

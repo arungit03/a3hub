@@ -24,6 +24,13 @@ const rawMenuItems = [
     feature: "tests",
   },
   {
+    id: "quiz-paper-generator",
+    label: "Quiz Paper Generator",
+    icon: "\uD83D\uDCDD",
+    staffEditable: false,
+    feature: "tests",
+  },
+  {
     id: "assignments",
     label: "Assignments",
     icon: "\uD83D\uDCDA",
@@ -88,13 +95,6 @@ const rawMenuItems = [
     label: "Student's Details",
     icon: "\uD83D\uDC64",
     staffEditable: false,
-  },
-  {
-    id: "daily-python-challenges",
-    label: "Daily Python",
-    icon: "\uD83D\uDD25",
-    staffEditable: false,
-    feature: "compilers",
   },
   {
     id: "learning",

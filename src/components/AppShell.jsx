@@ -160,7 +160,6 @@ const SEARCH_ALIASES = Object.freeze({
   tests: ["test", "tests", "quiz"],
   results: ["result", "results", "test results"],
   fees: ["fee", "fees", "payment", "dues"],
-  "daily-python": ["daily python", "python challenge", "coding challenge"],
   "student-details": ["student", "students", "student details", "student info"],
   "student-assignments": ["student assignments", "submission review", "student submissions"],
   "parent-replies": ["parent replies", "parent reply", "parent responses"],
@@ -553,15 +552,6 @@ const buildQuickSearchEntries = ({ base, role, sections, bottomItems }) => {
   }
 
   if (role === "student") {
-    if (isFeatureEnabled("compilers")) {
-      extraEntries.push({
-        id: "daily-python",
-        label: "Daily Python",
-        to: `${base}/menu/daily-python-challenges`,
-        aliases: SEARCH_ALIASES["daily-python"],
-      });
-    }
-
     if (isFeatureEnabled("todo")) {
       extraEntries.push({
         id: "todo",

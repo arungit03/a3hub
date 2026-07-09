@@ -8,6 +8,7 @@ import {
   ClipboardCheck,
   Code2,
   FileText,
+  FileQuestion,
   GraduationCap,
   Landmark,
   Megaphone,
@@ -27,6 +28,10 @@ export const SERVICE_CARD_META = Object.freeze({
   test: {
     icon: ClipboardCheck,
     description: "Attend tests and review performance quickly.",
+  },
+  "quiz-paper-generator": {
+    icon: FileQuestion,
+    description: "Generate structured quiz papers from existing question banks.",
   },
   assignments: {
     icon: FileText,
@@ -64,10 +69,6 @@ export const SERVICE_CARD_META = Object.freeze({
     icon: NotebookPen,
     description: "Access student profile and department details.",
   },
-  "daily-python-challenges": {
-    icon: Code2,
-    description: "Practice daily coding with guided challenges.",
-  },
   learning: {
     icon: BookOpen,
     description: "Learn Python, C, C++, HTML, and CSS with lessons, quizzes, practice, previews, and progress tracking.",
@@ -101,6 +102,7 @@ export const ACTION_BADGE_CLASS = Object.freeze({
   Practice: "bg-emerald-50 text-emerald-700",
   AI: "bg-violet-50 text-violet-700",
   Edit: "bg-amber-50 text-amber-700",
+  Generate: "bg-emerald-50 text-emerald-700",
 });
 
 export const formatFileSize = (bytes) => {
@@ -347,24 +349,6 @@ export const getCalendarDateParts = (dateKey) => {
   return { month, day };
 };
 
-export const DAILY_PYTHON_CHALLENGE_COLLECTION = "dailyPythonChallenges";
-export const DAILY_PYTHON_CHALLENGE_COUNT = 5;
-const DAILY_PYTHON_LOCAL_CACHE_PREFIX = "a3hub.dailyPythonChallenges";
-const DAILY_PYTHON_CHALLENGE_REQUIRED_FIELDS = [
-  "id",
-  "title",
-  "topic",
-  "difficulty",
-  "statement",
-  "inputFormat",
-  "outputFormat",
-  "sampleInput",
-  "sampleOutput",
-  "hint",
-];
-export const DAILY_CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
-export const DAILY_PYTHON_PROGRESS_COLLECTION = "dailyPythonProgress";
-
 export const getMillis = (value) => {
   if (!value) return 0;
   if (typeof value?.toMillis === "function") return value.toMillis();
@@ -492,108 +476,4 @@ export const getPreviousDateKey = (dateKey) => {
   return formatDateKey(date);
 };
 
-export const isValidDailyPythonChallenge = (challenge) => {
-  if (!challenge || typeof challenge !== "object") return false;
-
-  const hasRequiredText = DAILY_PYTHON_CHALLENGE_REQUIRED_FIELDS.every((field) => {
-    const value = challenge[field];
-    return typeof value === "string" && value.trim().length > 0;
-  });
-  if (!hasRequiredText) return false;
-
-  const sampleInput = String(challenge.sampleInput || "").trim();
-  const sampleOutput = String(challenge.sampleOutput || "").trim();
-
-  if (sampleInput.includes("\n") && sampleOutput === sampleInput) {
-    return false;
-  }
-
-  return true;
-};
-
-export const hasValidDailyPythonChallenges = (challenges) =>
-  Array.isArray(challenges) &&
-  challenges.length === DAILY_PYTHON_CHALLENGE_COUNT &&
-  challenges.every((challenge) => isValidDailyPythonChallenge(challenge));
-
-const getDailyPythonLocalCacheKey = (userId) => {
-  const safeUserId = String(userId || "").trim();
-  return safeUserId ? `${DAILY_PYTHON_LOCAL_CACHE_PREFIX}.${safeUserId}` : "";
-};
-
-export const clearDailyPythonChallengeCache = (userId) => {
-  if (typeof window === "undefined") return;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return;
-  try {
-    window.localStorage.removeItem(storageKey);
-  } catch {
-    // Ignore storage cleanup errors.
-  }
-};
-
-export const loadDailyPythonChallengeCache = ({
-  userId,
-  expectedDateKey,
-  nowMs,
-}) => {
-  if (typeof window === "undefined") return null;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return null;
-
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    const cachedDateKey = String(parsed?.generatedAtKey || "").trim();
-    const cachedChallenges = parsed?.challenges;
-    const cachedExpiresMs = getMillis(parsed?.expiresAt);
-
-    const isValid =
-      cachedDateKey === expectedDateKey &&
-      hasValidDailyPythonChallenges(cachedChallenges) &&
-      cachedExpiresMs > nowMs;
-
-    if (!isValid) {
-      window.localStorage.removeItem(storageKey);
-      return null;
-    }
-
-    return {
-      challenges: cachedChallenges,
-      generatedAtKey: cachedDateKey,
-      expiresAt: new Date(cachedExpiresMs),
-    };
-  } catch {
-    return null;
-  }
-};
-
-export const saveDailyPythonChallengeCache = ({
-  userId,
-  generatedAtKey,
-  challenges,
-  expiresAt,
-}) => {
-  if (typeof window === "undefined") return;
-  const storageKey = getDailyPythonLocalCacheKey(userId);
-  if (!storageKey) return;
-  if (!hasValidDailyPythonChallenges(challenges)) return;
-
-  const expiresMs = getMillis(expiresAt);
-  if (!expiresMs) return;
-
-  const payload = {
-    generatedAtKey: String(generatedAtKey || "").trim(),
-    challenges,
-    expiresAt: new Date(expiresMs).toISOString(),
-  };
-
-  try {
-    window.localStorage.setItem(storageKey, JSON.stringify(payload));
-  } catch {
-    // Ignore storage write errors.
-  }
-};
 

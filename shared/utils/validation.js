@@ -48,6 +48,19 @@ export const validateMenuItemForm = (values = {}) => {
 export const validateOrderStatus = (status) =>
   Object.values(ORDER_STATUS).includes(normalizeText(status).toLowerCase());
 
+export const ORDER_STATUS_TRANSITIONS = Object.freeze({
+  [ORDER_STATUS.PLACED]: [ORDER_STATUS.COLLECTED, ORDER_STATUS.CANCELLED],
+  [ORDER_STATUS.COLLECTED]: [],
+  [ORDER_STATUS.CANCELLED]: [],
+});
+
+export const isAllowedOrderStatusTransition = (currentStatus, nextStatus) => {
+  const safeCurrent = normalizeText(currentStatus).toLowerCase();
+  const safeNext = normalizeText(nextStatus).toLowerCase();
+  if (!validateOrderStatus(safeNext)) return false;
+  return (ORDER_STATUS_TRANSITIONS[safeCurrent] || []).includes(safeNext);
+};
+
 export const validateCheckoutItems = (items = []) => {
   if (!Array.isArray(items) || items.length === 0) {
     return "Add at least one item before checkout.";

@@ -79,11 +79,6 @@ const STUDENT_PAGE_ROUTES = [
     feature: "assignments",
   },
   {
-    path: "/student/menu/daily-python-challenges",
-    element: <MenuGridPage forcedStaff={false} />,
-    feature: "compilers",
-  },
-  {
     path: "/student/menu/my-to-do-list",
     element: <StudentTodoListPage />,
     feature: "todo",

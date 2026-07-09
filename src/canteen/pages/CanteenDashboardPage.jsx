@@ -1,5 +1,7 @@
+import { Package, PackageX, ShoppingBag, TriangleAlert } from "lucide-react";
 import { getLocalDateKey } from "../../../shared/utils/canteen.js";
 import { EmptyState } from "../components/EmptyState";
+import { LiveIndicator } from "../components/LiveIndicator";
 import { LoadingState } from "../components/LoadingState";
 import { StatCard } from "../components/StatCard";
 import { StatusBadge } from "../components/StatusBadge";
@@ -29,68 +31,94 @@ export default function CanteenDashboardPage() {
   );
 
   return (
-    <div className="ops-page-stack">
-      <section className="ops-card">
-        <span className="ops-eyebrow">Live overview</span>
-        <h2>Counter operations at a glance</h2>
-        <p className="ops-muted">
-          Track ready-made stock, spot low inventory quickly, and watch today&apos;s
-          pickup load without opening multiple screens.
-        </p>
+    <div className="grid gap-5">
+      <section className="flex flex-col gap-3 rounded-[28px] border border-clay/18 bg-white/95 p-6 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.16)] sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean">
+            Live overview
+          </span>
+          <h2 className="mt-2 text-2xl font-semibold text-ink">
+            Counter operations at a glance
+          </h2>
+          <p className="mt-2 max-w-2xl text-sm text-ink/65">
+            Track ready-made stock, spot low inventory quickly, and watch today&apos;s
+            pickup load without opening multiple screens.
+          </p>
+        </div>
+        <LiveIndicator />
       </section>
 
-      <section className="ops-stat-grid">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Total items"
           value={totalItems}
           description="All visible and hidden menu records."
+          tone="ocean"
+          icon={Package}
         />
         <StatCard
           label="Available now"
           value={availableItems}
           description="Items users can order immediately."
+          tone="aurora"
+          icon={ShoppingBag}
         />
         <StatCard
           label="Sold out"
           value={soldOutItems}
           description="Items that need restocking or republishing."
+          tone="rose"
+          icon={PackageX}
         />
         <StatCard
           label="Orders today"
           value={todayOrders}
           description="Placed orders since today started."
+          tone="sunset"
+          icon={TriangleAlert}
         />
       </section>
 
       {menuError || ordersError ? (
-        <div className="ops-message ops-message-error">{menuError || ordersError}</div>
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700">
+          {menuError || ordersError}
+        </div>
       ) : null}
 
-      <section className="ops-two-col">
-        <div className="ops-card">
-          <div className="ops-section-head">
+      <section className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-[28px] border border-clay/18 bg-white/95 p-6 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.16)]">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <span className="ops-eyebrow">Low stock</span>
-              <h3>Items needing attention</h3>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean">
+                Low stock
+              </span>
+              <h3 className="mt-1 text-lg font-semibold text-ink">
+                Items needing attention
+              </h3>
             </div>
           </div>
 
           {lowStockItems.length === 0 ? (
-            <EmptyState
-              title="No low-stock items"
-              description="Everything currently visible has healthy stock."
-            />
+            <div className="mt-4">
+              <EmptyState
+                title="No low-stock items"
+                description="Everything currently visible has healthy stock."
+              />
+            </div>
           ) : (
-            <div className="ops-list">
+            <div className="mt-4 grid gap-3">
               {lowStockItems.map((item) => (
-                <article key={item.id} className="ops-list-card">
+                <article
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-clay/16 bg-sand/50 p-4"
+                >
                   <div>
-                    <strong>{item.name}</strong>
-                    <p className="ops-muted">{item.category}</p>
+                    <strong className="text-sm text-ink">{item.name}</strong>
+                    <p className="mt-0.5 text-xs text-ink/55">{item.category}</p>
                   </div>
-                  <div className="ops-inline">
+                  <div className="flex items-center gap-2">
                     <StatusBadge status={item.status} />
-                    <strong>{item.quantity} left</strong>
+                    <strong className="text-sm text-ink">{item.quantity} left</strong>
                   </div>
                 </article>
               ))}
@@ -98,26 +126,35 @@ export default function CanteenDashboardPage() {
           )}
         </div>
 
-        <div className="ops-card">
-          <div className="ops-section-head">
+        <div className="rounded-[28px] border border-clay/18 bg-white/95 p-6 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.16)]">
+          <div className="flex items-center justify-between gap-3">
             <div>
-              <span className="ops-eyebrow">Incoming orders</span>
-              <h3>Latest tokens</h3>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean">
+                Incoming orders
+              </span>
+              <h3 className="mt-1 text-lg font-semibold text-ink">Latest tokens</h3>
             </div>
           </div>
 
           {orders.length === 0 ? (
-            <EmptyState
-              title="No orders yet"
-              description="Incoming orders will appear here in realtime."
-            />
+            <div className="mt-4">
+              <EmptyState
+                title="No orders yet"
+                description="Incoming orders will appear here in realtime."
+              />
+            </div>
           ) : (
-            <div className="ops-list">
+            <div className="mt-4 grid gap-3">
               {orders.slice(0, 5).map((order) => (
-                <article key={order.id} className="ops-order-preview">
+                <article
+                  key={order.id}
+                  className="flex items-center justify-between gap-3 rounded-2xl border border-clay/16 bg-sand/50 p-4"
+                >
                   <div>
-                    <strong>Token {order.tokenNumber || "Pending"}</strong>
-                    <p className="ops-muted">{order.userName}</p>
+                    <strong className="text-sm text-ink">
+                      Token {order.tokenNumber || "Pending"}
+                    </strong>
+                    <p className="mt-0.5 text-xs text-ink/55">{order.userName}</p>
                   </div>
                   <StatusBadge status={order.status} mode="order" />
                 </article>

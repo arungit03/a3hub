@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Search, ShoppingBag, ReceiptText, UtensilsCrossed } from "lucide-react";
 import { RemoteImage } from "../components/RemoteImage.jsx";
+import { OrderProgressStepper } from "../components/OrderProgressStepper.jsx";
+import { Skeleton } from "../components/Skeleton.jsx";
 import { useAuth } from "../state/auth";
 import { useToast } from "../hooks/useToast";
 import {
   calculateCartCount,
   calculateCartTotal,
+  getMenuStatusTone,
 } from "../../shared/utils/canteen.js";
 import {
   formatCurrency,
@@ -61,44 +64,32 @@ const toCartItem = (item, quantity = 1) => ({
   status: item.status || "available",
 });
 
-const getStatusTone = (status, quantity = 0) => {
-  if (status === "cancelled") {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-  if (status === "collected") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (status === "sold_out" || quantity <= 0) {
-    return "border-rose-200 bg-rose-50 text-rose-700";
-  }
-  if (status === "limited" || quantity <= 5) {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  return "border-sky-200 bg-sky-50 text-sky-700";
+const MENU_TONE_CLASSES = {
+  success: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  warning: "border-amber-200 bg-amber-50 text-amber-700",
+  danger: "border-rose-200 bg-rose-50 text-rose-700",
+  neutral: "border-ocean/25 bg-ocean/10 text-ocean",
 };
 
-const StatusBadge = ({ status, quantity, order = false }) => (
+const MenuStatusBadge = ({ status, quantity }) => (
   <span
-    className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${getStatusTone(
-      status,
-      quantity
-    )}`}
+    className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+      MENU_TONE_CLASSES[getMenuStatusTone(status)] || MENU_TONE_CLASSES.neutral
+    }`}
   >
-    {order
-      ? normalizeText(status) || "placed"
-      : formatQuantityHint(quantity, status)}
+    {formatQuantityHint(quantity, status)}
   </span>
 );
 
 const pageShellClass =
-  "relative overflow-hidden rounded-[36px] border border-clay/24 bg-gradient-to-br from-white via-[#fbfdff] to-[#f1f7fc] p-4 shadow-[0_30px_80px_-52px_rgba(15,23,42,0.2)] sm:p-6";
+  "relative overflow-hidden rounded-[36px] border border-clay/24 bg-linear-to-br from-white via-[#fbfdff] to-[#f1f7fc] p-4 shadow-[0_30px_80px_-52px_rgba(15,23,42,0.2)] sm:p-6";
 const surfaceClass =
   "rounded-[28px] border border-clay/18 bg-white/95 shadow-[0_22px_48px_-38px_rgba(15,23,42,0.16)]";
 const softSurfaceClass = "rounded-2xl border border-clay/14 bg-[#f7fafc]";
-const eyebrowClass = "text-[11px] font-semibold uppercase tracking-[0.2em] text-sky-600";
+const eyebrowClass = "text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean";
 const mutedTextClass = "text-ink/70";
 const strongButtonClass =
-  "rounded-full bg-gradient-to-r from-sky-500 to-emerald-400 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50";
+  "rounded-full bg-linear-to-r from-ocean to-aurora px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-50";
 const quantityControlClass =
   "inline-flex items-center rounded-full border border-clay/18 bg-white shadow-[0_10px_24px_-20px_rgba(15,23,42,0.3)]";
 
@@ -276,11 +267,11 @@ export default function FoodPage({ forcedRole }) {
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 text-ink">
       <div className={pageShellClass}>
         <div
-          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-400/12 blur-3xl"
+          className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-ocean/12 blur-3xl"
           aria-hidden="true"
         />
         <div
-          className="pointer-events-none absolute -bottom-24 left-0 h-72 w-72 rounded-full bg-emerald-400/12 blur-3xl"
+          className="pointer-events-none absolute -bottom-24 left-0 h-72 w-72 rounded-full bg-aurora/12 blur-3xl"
           aria-hidden="true"
         />
 
@@ -299,47 +290,63 @@ export default function FoodPage({ forcedRole }) {
               </div>
 
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className={`${softSurfaceClass} px-4 py-3`}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
-                    Visible Items
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-ink">{menuItems.length}</p>
+                <div className={`${softSurfaceClass} flex items-center gap-3 px-4 py-3`}>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-ocean/10 text-ocean">
+                    <UtensilsCrossed className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
+                      Visible Items
+                    </p>
+                    <p className="mt-0.5 text-2xl font-semibold text-ink">{menuItems.length}</p>
+                  </div>
                 </div>
-                <div className={`${softSurfaceClass} px-4 py-3`}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
-                    Cart Items
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-ink">{totalItems}</p>
+                <div className={`${softSurfaceClass} flex items-center gap-3 px-4 py-3`}>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-aurora/12 text-aurora">
+                    <ShoppingBag className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
+                      Cart Items
+                    </p>
+                    <p className="mt-0.5 text-2xl font-semibold text-ink">{totalItems}</p>
+                  </div>
                 </div>
-                <div className={`${softSurfaceClass} px-4 py-3`}>
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
-                    Open Orders
-                  </p>
-                  <p className="mt-1 text-2xl font-semibold text-ink">{openOrdersCount}</p>
+                <div className={`${softSurfaceClass} flex items-center gap-3 px-4 py-3`}>
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-sunset/12 text-sunset">
+                    <ReceiptText className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-ink/55">
+                      Open Orders
+                    </p>
+                    <p className="mt-0.5 text-2xl font-semibold text-ink">{openOrdersCount}</p>
+                  </div>
                 </div>
               </div>
             </div>
           </section>
 
           {successOrder ? (
-            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 px-5 py-4 text-emerald-900">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <section className={`${surfaceClass} px-5 py-5`}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-emerald-700">
-                    Order placed
-                  </p>
-                  <p className="mt-1 text-sm">
-                    Token <span className="font-bold">{formatToken(successOrder.tokenNumber)}</span>
-                    {" "}is ready. Show this at the canteen counter.
+                  <p className={eyebrowClass}>Order placed</p>
+                  <p className="mt-1 text-sm text-ink/75">
+                    Token <span className="font-bold text-ink">{formatToken(successOrder.tokenNumber)}</span>
+                    {" "}is confirmed. We'll update this live as it's prepared.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSuccessOrder(null)}
-                  className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700"
+                  className="rounded-full border border-clay/20 bg-white px-3 py-1.5 text-xs font-semibold text-ink/70 transition hover:border-ocean/40 hover:text-ocean"
                 >
                   Dismiss
                 </button>
+              </div>
+              <div className="mt-4">
+                <OrderProgressStepper status={successOrder.status || "placed"} />
               </div>
             </section>
           ) : null}
@@ -365,7 +372,7 @@ export default function FoodPage({ forcedRole }) {
                   onClick={() => setActiveTab(tab.id)}
                   className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
                     active
-                      ? "border-sky-200 bg-sky-50 text-sky-700 shadow-[0_12px_28px_-22px_rgba(14,165,233,0.8)]"
+                      ? "border-ocean/30 bg-ocean/10 text-ocean shadow-[0_12px_28px_-22px_rgba(123,44,191,0.5)]"
                       : "border-clay/18 bg-white/75 text-ink/70 hover:border-clay/40 hover:text-ink"
                   }`}
                 >
@@ -400,7 +407,7 @@ export default function FoodPage({ forcedRole }) {
                           onClick={() => setCategory(item)}
                           className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                             category === item
-                              ? "border-sky-200 bg-sky-50 text-sky-700"
+                              ? "border-ocean/30 bg-ocean/10 text-ocean"
                               : "border-clay/18 bg-white/70 text-ink/70 hover:border-clay/40 hover:text-ink"
                           }`}
                         >
@@ -412,11 +419,25 @@ export default function FoodPage({ forcedRole }) {
                 </div>
 
                 {menuLoading ? (
-                  <div className={`${surfaceClass} p-8 text-sm ${mutedTextClass}`}>
-                    Loading food items...
+                  <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, index) => (
+                      <div key={index} className={`${surfaceClass} overflow-hidden`}>
+                        <Skeleton className="h-48 w-full rounded-none" />
+                        <div className="grid gap-3 p-5">
+                          <Skeleton className="h-3 w-1/3" />
+                          <Skeleton className="h-5 w-2/3" />
+                          <Skeleton className="h-3 w-full" />
+                          <div className="flex items-center justify-between gap-3">
+                            <Skeleton className="h-3 w-1/4" />
+                            <Skeleton className="h-9 w-28 rounded-full" />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 ) : filteredItems.length === 0 ? (
-                  <div className={`${surfaceClass} p-8 text-sm ${mutedTextClass}`}>
+                  <div className={`${surfaceClass} p-8 text-center text-sm ${mutedTextClass}`}>
+                    <UtensilsCrossed className="mx-auto mb-3 h-8 w-8 text-ink/30" />
                     No food items match your current filter.
                   </div>
                 ) : (
@@ -427,19 +448,19 @@ export default function FoodPage({ forcedRole }) {
                       return (
                         <article
                           key={item.id}
-                          className={`${surfaceClass} overflow-hidden`}
+                          className={`${surfaceClass} group overflow-hidden transition duration-200 hover:-translate-y-1 hover:shadow-[0_28px_56px_-32px_rgba(123,44,191,0.28)]`}
                         >
-                          <div className="relative h-48 bg-sand">
+                          <div className="relative h-48 overflow-hidden bg-sand">
                             <RemoteImage
                               src={item.image}
                               alt={item.name}
-                              className="h-full w-full object-cover"
-                              fallbackClassName="flex h-full w-full items-center justify-center bg-gradient-to-br from-sky-100 via-white to-emerald-100 text-2xl font-semibold text-ink/55"
+                              className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                              fallbackClassName="flex h-full w-full items-center justify-center bg-linear-to-br from-ocean/15 via-white to-aurora/15 text-2xl font-semibold text-ink/55"
                               fallbackLabel={item.name}
                               fallbackLabelClassName="tracking-[0.08em]"
                             />
                             <div className="absolute left-4 top-4">
-                              <StatusBadge status={item.status} quantity={item.quantity} />
+                              <MenuStatusBadge status={item.status} quantity={item.quantity} />
                             </div>
                           </div>
 
@@ -498,7 +519,8 @@ export default function FoodPage({ forcedRole }) {
 
                 <div className="mt-5 space-y-3">
                   {cartItems.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-6 text-sm text-ink/60">
+                    <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-6 text-center text-sm text-ink/60">
+                      <ShoppingBag className="mx-auto mb-2 h-6 w-6 text-ink/30" />
                       Your cart is empty.
                     </div>
                   ) : (
@@ -551,7 +573,7 @@ export default function FoodPage({ forcedRole }) {
                   )}
                 </div>
 
-                <div className="mt-5 rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-50 to-emerald-50 px-4 py-4 text-ink">
+                <div className="mt-5 rounded-2xl border border-ocean/20 bg-linear-to-br from-ocean/8 to-aurora/8 px-4 py-4 text-ink">
                   <div className="flex items-center justify-between text-sm">
                     <span>Total items</span>
                     <span>{totalItems}</span>
@@ -588,7 +610,8 @@ export default function FoodPage({ forcedRole }) {
 
             <div className="mt-5 space-y-4">
               {cartItems.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-8 text-sm text-ink/60">
+                <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-8 text-center text-sm text-ink/60">
+                  <ShoppingBag className="mx-auto mb-2 h-8 w-8 text-ink/30" />
                   Your cart is empty. Add items from the menu first.
                 </div>
               ) : (
@@ -602,7 +625,7 @@ export default function FoodPage({ forcedRole }) {
                         src={item.image}
                         alt={item.name}
                         className="h-full w-full object-cover"
-                        fallbackClassName="flex h-full w-full items-center justify-center bg-gradient-to-br from-sky-100 via-white to-emerald-100 text-sm font-semibold text-ink/55"
+                        fallbackClassName="flex h-full w-full items-center justify-center bg-linear-to-br from-ocean/15 via-white to-aurora/15 text-sm font-semibold text-ink/55"
                         fallbackLabel={item.name}
                         fallbackLabelClassName="tracking-[0.08em]"
                       />
@@ -613,7 +636,7 @@ export default function FoodPage({ forcedRole }) {
                           <h3 className="text-lg font-semibold text-ink">{item.name}</h3>
                           <p className="text-sm text-ink/60">{item.category}</p>
                         </div>
-                        <StatusBadge status={item.status} quantity={item.availableQuantity} />
+                        <MenuStatusBadge status={item.status} quantity={item.availableQuantity} />
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -697,11 +720,22 @@ export default function FoodPage({ forcedRole }) {
 
           <div className="mt-5 space-y-4">
             {ordersLoading ? (
-              <div className="rounded-2xl border border-clay/18 bg-sand/55 px-4 py-8 text-sm text-ink/60">
-                Loading your orders...
+              <div className="grid gap-4">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <div key={index} className="rounded-3xl border border-clay/18 bg-sand/55 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="grid gap-2">
+                        <Skeleton className="h-3 w-24" />
+                        <Skeleton className="h-4 w-40" />
+                      </div>
+                      <Skeleton className="h-8 w-24 rounded-full" />
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : orders.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-8 text-sm text-ink/60">
+              <div className="rounded-2xl border border-dashed border-clay/28 bg-sand/60 px-4 py-10 text-center text-sm text-ink/60">
+                <ReceiptText className="mx-auto mb-3 h-8 w-8 text-ink/30" />
                 No food orders yet.
               </div>
             ) : (
@@ -722,7 +756,7 @@ export default function FoodPage({ forcedRole }) {
                         Order ID: {order.id}
                       </p>
                     </div>
-                    <StatusBadge status={order.status} quantity={1} order />
+                    <OrderProgressStepper status={order.status} compact />
                   </div>
 
                   <div className="mt-4 space-y-2">

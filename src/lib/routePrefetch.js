@@ -59,12 +59,6 @@ const ROUTE_PREFETCH_ENTRIES = [
     load: () => import("../pages/MenuGridPage"),
   },
   {
-    key: "student-menu-daily-python",
-    match: isExact("/student/menu/daily-python-challenges"),
-    load: () => import("../pages/MenuGridPage"),
-    feature: "compilers",
-  },
-  {
     key: "student-code",
     match: isExact("/student/code"),
     load: () => import("../pages/CodeLabPage"),
