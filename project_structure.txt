@@ -14,19 +14,8 @@ docs/service-portability.md
 eslint.config.js
 index.html
 netlify.toml
-netlify/functions/_utils/auth-email.cjs
-netlify/functions/_utils/capacity-guard.cjs
-netlify/functions/_utils/email-provider.cjs
-netlify/functions/_utils/load-env.cjs
-netlify/functions/_utils/provider-chain.cjs
-netlify/functions/_utils/request-guard.cjs
-netlify/functions/ai-generate.cjs
-netlify/functions/auth-send-verification.cjs
-netlify/functions/auth-signup.cjs
-netlify/functions/code-run.cjs
-netlify/functions/email-send.cjs
-netlify/functions/push-send.cjs
-netlify/functions/whatsapp-send.cjs
+netlify/functions/_shared.cjs
+netlify/functions/firebase-profile.cjs
 package-lock.json
 package.json
 postcss.config.js
@@ -77,7 +66,6 @@ src/admin/pages/AdminUsersPage.jsx
 src/App.jsx
 src/assets/logic-gate-symbols.svg
 src/assets/react.svg
-src/canteen/canteenConsole.css
 src/canteen/components/CanteenSidebar.jsx
 src/canteen/components/EmptyState.jsx
 src/canteen/components/LoadingState.jsx
@@ -141,7 +129,6 @@ src/features/learning/pages/LearningPracticePage.jsx
 src/features/learning/pages/LearningProgressPage.jsx
 src/features/learning/pages/LearningQuizPage.jsx
 src/features/learning/pages/LearningTopicPage.jsx
-src/features/menuGrid/menuGridDailyPython.js
 src/features/menuGrid/menuGridHelpers.js
 src/hooks/useAutosaveDraft.js
 src/hooks/useDirtyPrompt.js
@@ -153,6 +140,7 @@ src/lib/codeChallengeProgress.js
 src/lib/codeLearningChallenges.js
 src/lib/codingTools.js
 src/lib/events.js
+src/lib/firebase.js
 src/lib/gemini/normalize.js
 src/lib/geminiClient.js
 src/lib/mediaUpload.js
@@ -207,6 +195,8 @@ src/routes/studentRoutes.jsx
 src/state/auth.jsx
 src/state/toast-context.js
 src/types/runtime-globals.d.ts
+supabase/config.toml
+supabase/functions/email-send/index.ts
 supabase/schema.sql
 tailwind.config.js
 test/chunkLoadRecovery.test.js
@@ -219,7 +209,6 @@ test/featuresConfig.test.js
 test/integration/aiGenerateFunction.integration.test.js
 test/integration/codeRunFunction.integration.test.js
 test/integration/functionRoleDefaults.integration.test.js
-test/integration/notificationFunctions.integration.test.js
 test/learningProgress.test.js
 test/nativeCodeRunner.test.js
 test/projectStructureSync.test.js

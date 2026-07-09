@@ -4,7 +4,6 @@ import test from "node:test";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
-const emailSendFunction = require("../../netlify/functions/email-send.cjs");
 const pushSendFunction = require("../../netlify/functions/push-send.cjs");
 const whatsappSendFunction = require("../../netlify/functions/whatsapp-send.cjs");
 
@@ -62,50 +61,6 @@ const installStudentAuthFetchMock = (token, onUnexpectedProviderCall) => {
     globalThis.fetch = originalFetch;
   };
 };
-
-test("email-send enforces secure default roles when env is blank", async () => {
-  const previousEnv = {
-    SUPABASE_PUBLISHABLE_KEY: process.env.SUPABASE_PUBLISHABLE_KEY,
-    EMAIL_SEND_ALLOWED_ROLES: process.env.EMAIL_SEND_ALLOWED_ROLES,
-  };
-  process.env.SUPABASE_PUBLISHABLE_KEY = "test-supabase-key";
-  process.env.EMAIL_SEND_ALLOWED_ROLES = "   ";
-
-  const token = createMockIdToken();
-  let providerCalled = false;
-  const restoreFetch = installStudentAuthFetchMock(token, () => {
-    providerCalled = true;
-  });
-
-  try {
-    const result = await emailSendFunction.handler({
-      httpMethod: "POST",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "x-nf-client-connection-ip": "21.21.21.21",
-      },
-      body: JSON.stringify({
-        to: "student@example.com",
-        subject: "test",
-        message: "test",
-      }),
-    });
-    const payload = JSON.parse(result.body || "{}");
-
-    assert.equal(result.statusCode, 403);
-    assert.equal(payload.code, "auth/forbidden-role");
-    assert.equal(providerCalled, false);
-  } finally {
-    restoreFetch();
-    Object.entries(previousEnv).forEach(([key, value]) => {
-      if (value === undefined) {
-        delete process.env[key];
-      } else {
-        process.env[key] = value;
-      }
-    });
-  }
-});
 
 test("push-send enforces secure default roles when env is unset", async () => {
   const previousEnv = {
