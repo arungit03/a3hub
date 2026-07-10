@@ -53,14 +53,14 @@ export default function CssLearningDashboardPage() {
           {recommendedTopic ? (
             <Link
               to={describeTopicRoute(basePath, recommendedTopic)}
-              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-cocoa transition hover:-translate-y-0.5 hover:brightness-95"
             >
               Continue Learning
             </Link>
           ) : null}
           <Link
             to={`${basePath}/learning/css/progress`}
-            className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
           >
             CSS Progress Report
           </Link>
@@ -99,36 +99,36 @@ export default function CssLearningDashboardPage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             Current topic
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900">
+          <h2 className="mt-1 text-2xl font-bold text-ink">
             {currentTopic?.title || "Start the CSS course"}
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-ink/65">
             {currentTopic?.summary ||
               "Open the CSS course to begin with the introduction lesson and your dashboard will start tracking the latest topic here."}
           </p>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <div className="rounded-2xl border border-clay/50 bg-white/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
                 Recommended next topic
               </p>
-              <p className="mt-2 text-base font-semibold text-slate-900">
+              <p className="mt-2 text-base font-semibold text-ink">
                 {recommendedTopic?.title || "Choose a CSS lesson"}
               </p>
-              <p className="mt-2 text-sm text-slate-600">
+              <p className="mt-2 text-sm text-ink/65">
                 {recommendedTopic?.summary ||
                   "The next suggested lesson appears here after you begin the course."}
               </p>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <div className="rounded-2xl border border-clay/50 bg-white/70 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
                 Progress formula
               </p>
-              <p className="mt-2 text-sm text-slate-700">
+              <p className="mt-2 text-sm text-ink/75">
                 Lesson completion gives 50% and quiz pass gives 50% for each CSS topic.
               </p>
             </div>
@@ -138,7 +138,7 @@ export default function CssLearningDashboardPage() {
             {currentTopic ? (
               <Link
                 to={describeTopicRoute(basePath, currentTopic)}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                className="rounded-full bg-linear-to-r from-cocoa to-ocean px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition hover:-translate-y-0.5 hover:brightness-105"
               >
                 Open Current Topic
               </Link>
@@ -146,7 +146,7 @@ export default function CssLearningDashboardPage() {
             {recommendedTopic && recommendedTopic.id !== currentTopic?.id ? (
               <Link
                 to={describeTopicRoute(basePath, recommendedTopic)}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-full border border-clay/60 bg-white px-4 py-2 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
               >
                 Open Recommended Topic
               </Link>
@@ -154,8 +154,8 @@ export default function CssLearningDashboardPage() {
           </div>
         </div>
 
-        <aside className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <aside className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             Recent topics viewed
           </p>
           <div className="mt-4 grid gap-3">
@@ -164,13 +164,13 @@ export default function CssLearningDashboardPage() {
                 <Link
                   key={topic.id}
                   to={describeTopicRoute(basePath, topic)}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
                 >
                   {topic.title}
                 </Link>
               ))
             ) : (
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <p className="rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm text-ink/65">
                 Open CSS topics and they will appear here.
               </p>
             )}

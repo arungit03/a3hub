@@ -24,14 +24,14 @@ const getOptionClassName = ({
   }
 
   if (isAnswered) {
-    return "w-full cursor-not-allowed rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm text-slate-500 transition";
+    return "w-full cursor-not-allowed rounded-2xl border border-clay/50 bg-sand px-4 py-3 text-left text-sm text-ink/50 transition";
   }
 
   if (isSelected) {
-    return "w-full rounded-2xl border border-slate-900 bg-slate-900 px-4 py-3 text-left text-sm text-white transition";
+    return "w-full rounded-2xl border border-transparent bg-linear-to-r from-cocoa to-ocean px-4 py-3 text-left text-sm text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition";
   }
 
-  return "w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left text-sm text-slate-700 transition hover:border-slate-300";
+  return "w-full rounded-2xl border border-clay/60 bg-white px-4 py-3 text-left text-sm text-ink/80 transition hover:border-ocean/40";
 };
 
 const toSafeAnswerMap = (value) =>
@@ -52,7 +52,7 @@ const getCodeQuestionStatusMeta = ({
   if (isChecking) {
     return {
       label: "Checking with AI",
-      badgeClass: "border-sky-200 bg-sky-50 text-sky-700",
+      badgeClass: "border-ocean/25 bg-ocean/10 text-cocoa",
       helperText: "AI is reviewing the answer now.",
     };
   }
@@ -84,14 +84,14 @@ const getCodeQuestionStatusMeta = ({
   if (quizCompleted) {
     return {
       label: "Locked",
-      badgeClass: "border-slate-200 bg-slate-100 text-slate-700",
+      badgeClass: "border-clay/60 bg-sand text-ink/65",
       helperText: "This quiz attempt is already complete.",
     };
   }
 
   return {
     label: "Ready to write",
-    badgeClass: "border-indigo-200 bg-indigo-50 text-indigo-700",
+    badgeClass: "border-ocean/25 bg-ocean/10 text-cocoa",
     helperText: "Write a short answer and check it when you are ready.",
   };
 };
@@ -285,8 +285,8 @@ export default function LearningQuizPanel({
       <div
         className={`rounded-2xl border px-4 py-4 text-sm ${
           codeResponses[question.id].isCorrect
-            ? "border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-emerald-100/70 text-emerald-800"
-            : "border-rose-200 bg-gradient-to-br from-rose-50 via-white to-rose-100/70 text-rose-800"
+            ? "border-emerald-200 bg-linear-to-br from-emerald-50 via-white to-emerald-100/70 text-emerald-800"
+            : "border-rose-200 bg-linear-to-br from-rose-50 via-white to-rose-100/70 text-rose-800"
         }`}
       >
         <p className="text-xs font-semibold uppercase tracking-[0.14em]">
@@ -305,11 +305,11 @@ export default function LearningQuizPanel({
         </p>
         {!codeResponses[question.id].isCorrect &&
         codeResponses[question.id].expectedAnswer ? (
-          <div className="mt-4 overflow-hidden rounded-2xl border border-rose-200 bg-slate-950 shadow-inner">
-            <div className="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+          <div className="mt-4 overflow-hidden rounded-2xl border border-rose-200 bg-[#10002b] shadow-inner">
+            <div className="border-b border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
               AI reference answer
             </div>
-            <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-slate-100">
+            <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-white/90">
               <code>{codeResponses[question.id].expectedAnswer}</code>
             </pre>
           </div>
@@ -320,31 +320,31 @@ export default function LearningQuizPanel({
   const renderCodeQuestionEditor = (question, { modal = false } = {}) => (
     <div className={modal ? "space-y-4" : "mt-4 space-y-4"}>
       {question.code ? (
-        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-inner">
-          <div className="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+        <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#10002b] shadow-inner">
+          <div className="border-b border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
             {getCodeLanguageLabel(question.codeLanguage)} code
           </div>
-          <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-slate-100">
+          <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-white/90">
             <code>{question.code}</code>
           </pre>
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-[1.6rem] border border-slate-200/80 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/90 px-4 py-3">
+      <div className="overflow-hidden rounded-3xl border border-clay/50 bg-white shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-clay/50 bg-sand/70 px-4 py-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
               Your {getCodeLanguageLabel(question.codeLanguage)} answer
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-ink/50">
               Keep it short and focused on the lesson concept.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/50">
+            <span className="rounded-full border border-clay/60 bg-white px-3 py-1">
               {getDraftMetrics(question).lineCount} lines
             </span>
-            <span className="rounded-full border border-slate-200 bg-white px-3 py-1">
+            <span className="rounded-full border border-clay/60 bg-white px-3 py-1">
               {getDraftMetrics(question).charCount} chars
             </span>
           </div>
@@ -366,7 +366,7 @@ export default function LearningQuizPanel({
           }}
           disabled={Boolean(codeResponses[question.id]) || quizCompleted}
           spellCheck="false"
-          className={`w-full resize-y border-0 bg-[linear-gradient(180deg,#f8fbff_0%,#f2f6fd_100%)] px-4 py-4 font-mono text-[14px] leading-7 text-slate-900 outline-none ${
+          className={`w-full resize-y border-0 bg-[linear-gradient(180deg,#faf7ff_0%,#f3ecfc_100%)] px-4 py-4 font-mono text-[14px] leading-7 text-ink outline-none ${
             modal ? "min-h-[340px]" : "min-h-[200px]"
           }`}
           placeholder={
@@ -376,12 +376,12 @@ export default function LearningQuizPanel({
         />
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-slate-200 bg-slate-50/80 px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.4rem] border border-clay/50 bg-sand/60 px-4 py-3">
         <div className="space-y-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/55">
             Review Flow
           </p>
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink/65">
             {getCodeQuestionStatusMeta({
               response: codeResponses[question.id],
               isChecking: Boolean(checkingQuestions[question.id]),
@@ -395,7 +395,7 @@ export default function LearningQuizPanel({
             <button
               type="button"
               onClick={() => handleResetCodeDraft(question)}
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-white"
+              className="rounded-full border border-clay/60 px-4 py-2 text-sm font-semibold text-ink/70 transition hover:bg-white"
             >
               Reset Draft
             </button>
@@ -408,9 +408,9 @@ export default function LearningQuizPanel({
             quizCompleted
           }
           onClick={() => void handleCheckCodeQuestion(question)}
-          className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+          className="rounded-full bg-linear-to-r from-cocoa to-ocean px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:cursor-not-allowed disabled:translate-y-0 disabled:bg-clay disabled:bg-none disabled:shadow-none"
         >
-          {checkingQuestions[question.id] ? "Summit..." : "Summit"}
+          {checkingQuestions[question.id] ? "Submitting..." : "Submit"}
         </button>
         </div>
       </div>
@@ -427,37 +427,37 @@ export default function LearningQuizPanel({
 
   return (
     <section className="space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink/55">
               Saved Answers
             </p>
-            <h2 className="mt-1 text-xl font-bold text-slate-900">{topic.title} Quiz</h2>
+            <h2 className="mt-1 text-xl font-bold text-ink">{topic.title} Quiz</h2>
           </div>
-          <div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700">
+          <div className="rounded-full border border-ocean/25 bg-ocean/10 px-4 py-2 text-sm font-semibold text-cocoa">
             Pass mark: {passPercentage}%
           </div>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <div className="rounded-2xl border border-clay/50 bg-white/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
               Best score
             </p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{previousBestScore}%</p>
+            <p className="mt-2 text-2xl font-bold text-ink">{previousBestScore}%</p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <div className="rounded-2xl border border-clay/50 bg-white/70 p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
               Status
             </p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">
+            <p className="mt-2 text-sm font-semibold text-ink">
               {quizCompleted
                 ? previousPassed
                   ? "Saved and passed"
                   : "Saved and locked"
                 : `${answeredCount}/${questions.length} answered`}
             </p>
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-ink/50">
               Attempts saved: {quizAttempts}
             </p>
           </div>
@@ -467,11 +467,11 @@ export default function LearningQuizPanel({
             <button
               type="button"
               onClick={() => void onRetryQuiz()}
-              className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="rounded-full border border-clay/60 bg-white px-4 py-2 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
             >
               Retry Quiz
             </button>
-            <span className="inline-flex items-center text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+            <span className="inline-flex items-center text-xs font-medium uppercase tracking-[0.12em] text-ink/50">
               Best score stays saved even after a retry
             </span>
           </div>
@@ -481,18 +481,18 @@ export default function LearningQuizPanel({
       {questions.map((question, index) => (
         <article
           key={question.id}
-          className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]"
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/55">
             Question {index + 1}
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-900">{question.question}</h3>
+          <h3 className="mt-2 text-lg font-semibold text-ink">{question.question}</h3>
           {question.code ? (
-            <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-950 shadow-inner">
-              <div className="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/10 bg-[#10002b] shadow-inner">
+              <div className="border-b border-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white/50">
                 {getCodeLanguageLabel(question.codeLanguage)} code
               </div>
-              <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-slate-100">
+              <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-white/90">
                 <code>{question.code}</code>
               </pre>
             </div>
@@ -500,13 +500,13 @@ export default function LearningQuizPanel({
           {isCodeQuizQuestion(question) ? (
             isCssQuiz ? (
               <div className="mt-4 space-y-4">
-                <div className="rounded-[1.7rem] border border-sky-200 bg-gradient-to-br from-sky-50 via-white to-indigo-50 p-5 shadow-sm">
+                <div className="rounded-[1.7rem] border border-ocean/25 bg-linear-to-br from-ocean/10 via-white to-rose/15 p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="max-w-2xl">
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-sky-700">
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-cocoa">
                         Focused Code Challenge
                       </p>
-                      <p className="mt-2 text-sm leading-6 text-slate-700">
+                      <p className="mt-2 text-sm leading-6 text-ink/70">
                         Open a dedicated CSS workspace with a larger editor, quick guidance,
                         and AI review.
                       </p>
@@ -535,7 +535,7 @@ export default function LearningQuizPanel({
                     {getCodeQuestionTips(question).map((tip) => (
                       <span
                         key={`${question.id}-${tip}`}
-                        className="rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-medium text-slate-600 shadow-sm"
+                        className="rounded-full border border-white/70 bg-white/90 px-3 py-1 text-xs font-medium text-ink/65 shadow-sm"
                       >
                         {tip}
                       </span>
@@ -545,13 +545,13 @@ export default function LearningQuizPanel({
                     <button
                       type="button"
                       onClick={() => setOpenCodeQuestionId(question.id)}
-                      className="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800"
+                      className="rounded-full bg-linear-to-r from-cocoa to-ocean px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition hover:-translate-y-0.5 hover:brightness-105"
                     >
                       {codeResponses[question.id]
                         ? "Open Code Workspace"
                         : "Write CSS Answer"}
                     </button>
-                    <span className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">
+                    <span className="text-xs font-medium uppercase tracking-[0.12em] text-ink/50">
                       Question {index + 1} uses a focused code workspace
                     </span>
                   </div>
@@ -595,7 +595,7 @@ export default function LearningQuizPanel({
                 })}
               </div>
               {answers[question.id] !== undefined ? (
-                <p className="mt-3 text-sm font-medium text-slate-600">
+                <p className="mt-3 text-sm font-medium text-ink/65">
                   {question.explanation || "The correct answer is highlighted in green."}
                 </p>
               ) : null}
@@ -629,20 +629,20 @@ export default function LearningQuizPanel({
             tabIndex={-1}
             className="ui-modal__panel max-h-[calc(100dvh-1.5rem)] w-full max-w-6xl rounded-[2rem] border-0 bg-transparent p-0 shadow-none outline-none"
           >
-            <div className="relative overflow-hidden rounded-[2rem] border border-sky-200/70 bg-gradient-to-br from-white via-sky-50/80 to-indigo-100/70 shadow-[0_36px_120px_rgba(15,23,42,0.22)]">
-              <div className="pointer-events-none absolute -left-16 top-0 h-48 w-48 rounded-full bg-sky-300/25 blur-3xl" />
-              <div className="pointer-events-none absolute bottom-0 right-0 h-56 w-56 rounded-full bg-indigo-300/25 blur-3xl" />
+            <div className="relative overflow-hidden rounded-[2rem] border border-ocean/20 bg-linear-to-br from-white via-ocean/5 to-rose/15 shadow-[0_36px_120px_rgba(36,0,70,0.28)]">
+              <div className="pointer-events-none absolute -left-16 top-0 h-48 w-48 rounded-full bg-ocean/20 blur-3xl" />
+              <div className="pointer-events-none absolute bottom-0 right-0 h-56 w-56 rounded-full bg-rose/25 blur-3xl" />
 
               <div className="relative border-b border-white/70 bg-white/80 px-5 py-5 backdrop-blur sm:px-6">
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                   <div className="max-w-3xl">
-                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-700">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cocoa">
                       CSS Code Workspace
                     </p>
-                    <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-900 sm:text-[2rem]">
+                    <h3 className="mt-3 text-2xl font-black tracking-tight text-ink sm:text-[2rem]">
                       {openCodeQuestion.question}
                     </h3>
-                    <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+                    <p className="mt-3 max-w-2xl text-sm leading-6 text-ink/65">
                       Write a short CSS answer, check it with AI, and review the result
                       here before moving back to the quiz.
                     </p>
@@ -668,14 +668,14 @@ export default function LearningQuizPanel({
                         }).label
                       }
                     </span>
-                    <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-slate-600">
+                    <span className="rounded-full border border-clay/60 bg-white/90 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-ink/65">
                       Question {questions.findIndex((item) => item.id === openCodeQuestion.id) + 1} of{" "}
                       {questions.length}
                     </span>
                     <button
                       type="button"
                       aria-label="Close code input modal"
-                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-sky-200 bg-white/90 text-sky-700 shadow-sm transition hover:border-sky-300 hover:bg-white"
+                      className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-ocean/25 bg-white/90 text-cocoa shadow-sm transition hover:border-ocean/40 hover:bg-white"
                       onClick={() => setOpenCodeQuestionId("")}
                     >
                       <svg
@@ -695,58 +695,58 @@ export default function LearningQuizPanel({
 
               <div className="relative grid gap-5 px-5 pb-5 pt-5 sm:px-6 sm:pb-6 lg:grid-cols-[minmax(0,1.7fr)_320px]">
                 <div className="space-y-5">
-                  <div className="rounded-[1.7rem] border border-slate-200/80 bg-white/92 p-5 shadow-sm backdrop-blur">
+                  <div className="rounded-[1.7rem] border border-clay/50 bg-white/92 p-5 shadow-sm backdrop-blur">
                     {renderCodeQuestionEditor(openCodeQuestion, { modal: true })}
                   </div>
                 </div>
 
                 <aside className="space-y-4">
-                  <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-4 shadow-sm backdrop-blur">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <div className="rounded-[1.6rem] border border-clay/50 bg-white/92 p-4 shadow-sm backdrop-blur">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
                       Quick Guide
                     </p>
                     <div className="mt-4 space-y-3">
                       {getCodeQuestionTips(openCodeQuestion).map((tip) => (
                         <div
                           key={`${openCodeQuestion.id}-tip-${tip}`}
-                          className="flex items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/90 px-3 py-3"
+                          className="flex items-start gap-3 rounded-2xl border border-clay/40 bg-sand/60 px-3 py-3"
                         >
-                          <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-sky-100 text-[11px] font-bold text-sky-700">
+                          <span className="mt-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full bg-ocean/15 text-[11px] font-bold text-cocoa">
                             +
                           </span>
-                          <p className="text-sm leading-6 text-slate-700">{tip}</p>
+                          <p className="text-sm leading-6 text-ink/75">{tip}</p>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="rounded-[1.6rem] border border-slate-200/80 bg-white/92 p-4 shadow-sm backdrop-blur">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  <div className="rounded-[1.6rem] border border-clay/50 bg-white/92 p-4 shadow-sm backdrop-blur">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
                       Workspace Details
                     </p>
                     <div className="mt-4 grid gap-3">
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-3 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      <div className="rounded-2xl border border-clay/40 bg-sand/60 px-3 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/50">
                           Language
                         </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-900">
+                        <p className="mt-2 text-sm font-semibold text-ink">
                           {getCodeLanguageLabel(openCodeQuestion.codeLanguage)}
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-3 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      <div className="rounded-2xl border border-clay/40 bg-sand/60 px-3 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/50">
                           Draft Size
                         </p>
-                        <p className="mt-2 text-sm font-semibold text-slate-900">
+                        <p className="mt-2 text-sm font-semibold text-ink">
                           {getDraftMetrics(openCodeQuestion).lineCount} lines and{" "}
                           {getDraftMetrics(openCodeQuestion).charCount} characters
                         </p>
                       </div>
-                      <div className="rounded-2xl border border-slate-100 bg-slate-50/90 px-3 py-3">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                      <div className="rounded-2xl border border-clay/40 bg-sand/60 px-3 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/50">
                           Reminder
                         </p>
-                        <p className="mt-2 text-sm leading-6 text-slate-700">
+                        <p className="mt-2 text-sm leading-6 text-ink/75">
                           After AI review, the answer stays locked for this attempt. Press
                           `Esc` anytime to close the workspace.
                         </p>
@@ -755,11 +755,11 @@ export default function LearningQuizPanel({
                   </div>
 
                   {openCodeQuestion.code ? (
-                    <div className="overflow-hidden rounded-[1.6rem] border border-slate-200/80 bg-slate-950 shadow-sm">
-                      <div className="border-b border-slate-800 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-slate-300">
+                    <div className="overflow-hidden rounded-[1.6rem] border border-white/10 bg-[#10002b] shadow-sm">
+                      <div className="border-b border-white/10 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-white/50">
                         Question code
                       </div>
-                      <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-slate-100">
+                      <pre className="overflow-x-auto px-4 py-4 text-sm leading-6 text-white/90">
                         <code>{openCodeQuestion.code}</code>
                       </pre>
                     </div>

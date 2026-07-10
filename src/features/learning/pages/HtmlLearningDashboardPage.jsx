@@ -50,14 +50,14 @@ export default function HtmlLearningDashboardPage() {
           {recommendedTopic ? (
             <Link
               to={describeTopicRoute(basePath, recommendedTopic)}
-              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+              className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-cocoa transition hover:-translate-y-0.5 hover:brightness-95"
             >
               Continue Learning
             </Link>
           ) : null}
           <Link
             to={`${basePath}/html-editor`}
-            className="rounded-full border border-white/30 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            className="rounded-full border border-white/25 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
           >
             Open HTML Editor
           </Link>
@@ -96,14 +96,14 @@ export default function HtmlLearningDashboardPage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             Recommended Next Topic
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900">
+          <h2 className="mt-1 text-2xl font-bold text-ink">
             {recommendedTopic?.title || "Start HTML"}
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-ink/65">
             {recommendedTopic?.summary ||
               "Open the HTML course and begin with the introduction lesson."}
           </p>
@@ -111,13 +111,13 @@ export default function HtmlLearningDashboardPage() {
             <div className="mt-4 flex flex-wrap gap-3">
               <Link
                 to={describeTopicRoute(basePath, recommendedTopic)}
-                className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                className="rounded-full bg-linear-to-r from-cocoa to-ocean px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition hover:-translate-y-0.5 hover:brightness-105"
               >
                 Open Topic
               </Link>
               <Link
                 to={`${basePath}/html-editor/${recommendedTopic.slug}?topicId=${recommendedTopic.id}`}
-                className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                className="rounded-full border border-clay/60 bg-white px-4 py-2 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
               >
                 Try In Editor
               </Link>
@@ -125,8 +125,8 @@ export default function HtmlLearningDashboardPage() {
           ) : null}
         </div>
 
-        <aside className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <aside className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             Recent Topics Viewed
           </p>
           <div className="mt-4 grid gap-3">
@@ -135,13 +135,13 @@ export default function HtmlLearningDashboardPage() {
                 <Link
                   key={topic.id}
                   to={describeTopicRoute(basePath, topic)}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
                 >
                   {topic.title}
                 </Link>
               ))
             ) : (
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <p className="rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm text-ink/65">
                 Open HTML topics and they will appear here.
               </p>
             )}

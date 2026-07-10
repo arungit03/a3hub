@@ -117,7 +117,7 @@ export default function PasswordChangePage() {
   };
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-br from-mist via-sand to-mist px-4 pb-12 pt-8">
+    <div className="relative min-h-screen bg-linear-to-br from-mist via-sand to-mist px-4 pb-12 pt-8">
       <div className="pointer-events-none absolute -left-10 top-10 h-40 w-40 rounded-full bg-clay/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-10 bottom-10 h-40 w-40 rounded-full bg-ocean/20 blur-3xl" />
 
@@ -138,7 +138,7 @@ export default function PasswordChangePage() {
               <button
                 type="button"
                 onClick={() => navigate("/", { replace: true })}
-                className="rounded-xl bg-gradient-to-r from-clay to-rose px-4 py-2.5 text-sm font-semibold text-black shadow-glow transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                className="rounded-xl bg-linear-to-r from-clay to-rose px-4 py-2.5 text-sm font-semibold text-black shadow-glow transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
               >
                 Back to Login
               </button>
@@ -151,7 +151,7 @@ export default function PasswordChangePage() {
               <button
                 type="button"
                 onClick={() => navigate("/", { replace: true })}
-                className="rounded-xl bg-gradient-to-r from-clay to-rose px-4 py-2.5 text-sm font-semibold text-black shadow-glow transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
+                className="rounded-xl bg-linear-to-r from-clay to-rose px-4 py-2.5 text-sm font-semibold text-black shadow-glow transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.98]"
               >
                 Login
               </button>
@@ -197,7 +197,7 @@ export default function PasswordChangePage() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="rounded-2xl bg-gradient-to-r from-clay via-ocean to-rose px-4 py-3 text-sm font-bold text-ink shadow-[0_12px_30px_-12px_rgb(var(--ocean)_/_0.45)] shadow-glow transition-all hover:-translate-y-0.5 hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay/40 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 dark:text-white"
+                className="rounded-2xl bg-linear-to-r from-clay via-ocean to-rose px-4 py-3 text-sm font-bold text-ink shadow-[0_12px_30px_-12px_rgb(var(--ocean)_/_0.45)] shadow-glow transition-all hover:-translate-y-0.5 hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-clay/40 active:translate-y-0 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70 dark:text-white"
               >
                 {submitting ? "Updating password..." : "Update Password"}
               </button>

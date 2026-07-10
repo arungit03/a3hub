@@ -432,7 +432,7 @@ export function GateSymbol({ type, size = 14 }) {
 export function ComponentGlyph({ type, compact = false }) {
   return (
     <span
-      className={`inline-flex items-center justify-center rounded-md border bg-gradient-to-br font-bold tracking-wide ${
+      className={`inline-flex items-center justify-center rounded-md border bg-linear-to-br font-bold tracking-wide ${
         compact ? "h-6 w-6" : "h-8 min-w-[3.25rem] gap-1.5 px-2 text-[10px]"
       } ${COMPONENT_GLYPH_CLASS[type] || COMPONENT_GLYPH_CLASS.and}`}
       aria-hidden="true"

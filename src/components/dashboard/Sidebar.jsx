@@ -4,7 +4,7 @@ function SidebarItem({ item, isActive, onNavigate }) {
   const baseClasses =
     "group flex w-full items-center gap-3.5 rounded-2xl px-3.5 py-3 text-left text-sm font-medium transition";
   const activeClasses =
-    "bg-white/14 text-white shadow-[0_10px_30px_-20px_rgba(255,255,255,0.85)]";
+    "bg-[#7b2cbf]/20 text-white shadow-[0_10px_30px_-20px_rgba(199,125,255,0.9)]";
   const idleClasses = "text-slate-200/90 hover:bg-white/10 hover:text-white";
 
   return (
@@ -17,7 +17,7 @@ function SidebarItem({ item, isActive, onNavigate }) {
       <span
         className={`inline-flex h-9 w-9 items-center justify-center rounded-xl border text-[12px] transition ${
           isActive
-            ? "border-white/20 bg-white/20 text-white"
+            ? "border-[#9d4edd]/40 bg-[#7b2cbf]/25 text-[#f5ebff]"
             : "border-white/15 bg-white/5 text-slate-200/90 group-hover:border-white/25 group-hover:bg-white/15 group-hover:text-white"
         }`}
         aria-hidden="true"
@@ -60,7 +60,7 @@ export default function Sidebar({
       />
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-[290px] max-w-[88vw] flex-col bg-[#0B1F3A] p-5 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-10 lg:w-72 lg:max-w-none lg:translate-x-0 lg:shadow-none ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-[290px] max-w-[88vw] flex-col bg-[#240046] p-5 text-white shadow-2xl transition-transform duration-300 lg:static lg:z-10 lg:w-72 lg:max-w-none lg:translate-x-0 lg:shadow-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
         aria-label="Sidebar"

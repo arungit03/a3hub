@@ -500,7 +500,7 @@ export default function EventsPage({ forcedRole }) {
                         src={getEventImageUrl(item)}
                         alt={item.title || "Event"}
                         className="h-full w-full object-cover"
-                        fallbackClassName="flex h-full w-full items-center justify-center bg-gradient-to-br from-ocean/10 via-white to-aurora/15 text-sm font-semibold text-ink/65"
+                        fallbackClassName="flex h-full w-full items-center justify-center bg-linear-to-br from-ocean/10 via-white to-aurora/15 text-sm font-semibold text-ink/65"
                         fallbackLabel={item.title || "Event"}
                       />
                     </div>
@@ -551,7 +551,7 @@ export default function EventsPage({ forcedRole }) {
                       src={getEventImageUrl(selectedEvent)}
                       alt={selectedEvent.title || "Event"}
                       className="h-full w-full object-cover"
-                      fallbackClassName="flex h-full min-h-[220px] w-full items-center justify-center bg-gradient-to-br from-ocean/15 via-white to-aurora/20 text-3xl font-semibold text-ink/60"
+                      fallbackClassName="flex h-full min-h-[220px] w-full items-center justify-center bg-linear-to-br from-ocean/15 via-white to-aurora/20 text-3xl font-semibold text-ink/60"
                       fallbackLabel={selectedEvent.title || "Event"}
                     />
                   </div>

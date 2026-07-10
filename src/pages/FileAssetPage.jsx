@@ -190,7 +190,7 @@ export default function FileAssetPage() {
   }, [fileId, searchParams]);
 
   return (
-    <div className="inner-theme min-h-screen bg-gradient-to-br from-mist via-sand to-mist px-4 py-8">
+    <div className="inner-theme min-h-screen bg-linear-to-br from-mist via-sand to-mist px-4 py-8">
       <div className="mx-auto w-full max-w-lg rounded-2xl border border-clay/30 bg-white/90 p-5 shadow-soft">
         <p className="text-xs uppercase tracking-[0.2em] text-ink/70">File Access</p>
         <h1 className="mt-2 text-xl font-semibold text-ink">Open / Download File</h1>

@@ -164,6 +164,12 @@ GEMINI_API_KEY=
 OPENAI_API_KEY=
 ```
 
+The `firebase-profile` Netlify function is required for Firebase login/signup to
+save and load A3 Hub profiles when Supabase row-level security is enabled. Set
+`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `FIREBASE_PROJECT_ID`, and
+`FIREBASE_SERVICE_ACCOUNT_JSON` in Netlify before deploying. For local testing
+of this endpoint, run the app through Netlify Dev instead of plain Vite.
+
 ---
 
 ## 🧩 Deploy Profiles

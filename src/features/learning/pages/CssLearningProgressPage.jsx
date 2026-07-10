@@ -39,7 +39,7 @@ export default function CssLearningProgressPage() {
       actions={
         <Link
           to={`${basePath}/learning/css/dashboard`}
-          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
+          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-cocoa transition hover:-translate-y-0.5 hover:brightness-95"
         >
           Back To CSS Dashboard
         </Link>
@@ -70,19 +70,19 @@ export default function CssLearningProgressPage() {
         />
       </section>
 
-      <section className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
               Topic-wise progress
             </p>
-            <h2 className="mt-1 text-2xl font-bold text-slate-900">
+            <h2 className="mt-1 text-2xl font-bold text-ink">
               CSS learning report
             </h2>
           </div>
           <Link
             to={`${basePath}/learning/css`}
-            className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            className="rounded-full border border-clay/60 bg-white px-4 py-2 text-sm font-semibold text-ink/75 transition hover:border-ocean/40 hover:text-ink"
           >
             Open CSS Course
           </Link>
@@ -96,35 +96,35 @@ export default function CssLearningProgressPage() {
             return (
               <div
                 key={topic.id}
-                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                className="rounded-2xl border border-clay/50 bg-white/70 p-4"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-lg font-semibold text-slate-900">{topic.title}</h3>
+                      <h3 className="text-lg font-semibold text-ink">{topic.title}</h3>
                       {topic.level ? (
-                        <span className="rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-sky-700">
+                        <span className="rounded-full border border-ocean/25 bg-ocean/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.12em] text-cocoa">
                           {topic.level}
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-sm text-slate-600">{topic.summary}</p>
+                    <p className="mt-1 text-sm text-ink/65">{topic.summary}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+                      <div className="inline-flex rounded-full border border-clay/50 bg-white px-4 py-2 text-sm text-ink/70">
                         Topic Progress:{" "}
-                        <span className="font-semibold text-slate-900">
+                        <span className="font-semibold text-ink">
                           {topicProgress}%
                         </span>
                       </div>
-                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+                      <div className="inline-flex rounded-full border border-clay/50 bg-white px-4 py-2 text-sm text-ink/70">
                         Lesson:{" "}
-                        <span className="font-semibold text-slate-900">
+                        <span className={`font-semibold ${topicState.lessonCompleted ? "text-emerald-700" : "text-ink"}`}>
                           {topicState.lessonCompleted ? "Done" : "Pending"}
                         </span>
                       </div>
-                      <div className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm text-slate-700">
+                      <div className="inline-flex rounded-full border border-clay/50 bg-white px-4 py-2 text-sm text-ink/70">
                         Quiz:{" "}
-                        <span className="font-semibold text-slate-900">
+                        <span className={`font-semibold ${topicState.quizPassed ? "text-emerald-700" : "text-ink"}`}>
                           {topicState.quizPassed ? "Passed" : "Pending"}
                         </span>
                       </div>
@@ -132,7 +132,7 @@ export default function CssLearningProgressPage() {
                   </div>
                   <Link
                     to={describeTopicRoute(basePath, topic)}
-                    className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+                    className="rounded-full bg-linear-to-r from-cocoa to-ocean px-4 py-2 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.5)] transition hover:-translate-y-0.5 hover:brightness-105"
                   >
                     Open Topic
                   </Link>

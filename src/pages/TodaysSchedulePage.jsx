@@ -192,97 +192,138 @@ export default function TodaysSchedulePage({ forcedRole }) {
     }
   };
 
+  const isErrorStatus = status.startsWith("Unable") || status.includes("are required");
+
   return (
     <section className="space-y-5">
-      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.35)]">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-          Today's Schedule
-        </p>
-        <h2 className="mt-1 text-xl font-semibold text-slate-900">{todayLabel || "Today"}</h2>
-        <p className="mt-1 text-sm text-slate-500">
-          {isStaff
-            ? "Add and manage today's classes, labs, and events."
-            : "View today's classes, labs, and campus schedule."}
-        </p>
+      <div className="relative overflow-hidden rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)] sm:p-6">
+        <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-ocean/10 blur-2xl" />
+        <div className="relative flex items-center gap-4">
+          <span className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-cocoa to-ocean text-white shadow-[0_10px_22px_-10px_rgb(var(--ocean)/0.6)]">
+            <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" aria-hidden="true">
+              <rect x="3.5" y="5" width="17" height="15.5" rx="3" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M8 3v3.2M16 3v3.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              <circle cx="12" cy="15" r="2.6" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M12 13.7v1.4l0.9 0.7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </span>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60">
+              Today's Schedule
+            </p>
+            <h2 className="mt-0.5 text-xl font-semibold text-ink sm:text-2xl">
+              {todayLabel || "Today"}
+            </h2>
+            <p className="mt-1 text-sm text-ink/65">
+              {isStaff
+                ? "Add and manage today's classes, labs, and events."
+                : "View today's classes, labs, and campus schedule."}
+            </p>
+          </div>
+        </div>
       </div>
 
       {isStaff ? (
         <form
           onSubmit={handleCreate}
-          className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.35)]"
+          className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)] sm:p-6"
         >
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/60">
             Add Item
           </p>
           <div className="mt-3 grid gap-3 md:grid-cols-3">
-            <input
-              type="text"
-              value={form.period}
-              onChange={(event) => handleFormChange("period", event.target.value)}
-              placeholder="Which period"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:outline-none"
-            />
-            <input
-              type="text"
-              value={form.subjectName}
-              onChange={(event) => handleFormChange("subjectName", event.target.value)}
-              placeholder="Subject Name"
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:outline-none"
-            />
-            <input
-              type="time"
-              value={form.time}
-              onChange={(event) => handleFormChange("time", event.target.value)}
-              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:outline-none"
-            />
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink/55">Which period</span>
+              <input
+                type="text"
+                value={form.period}
+                onChange={(event) => handleFormChange("period", event.target.value)}
+                placeholder="e.g. Period 3"
+                className="w-full rounded-xl border border-clay/60 bg-white px-3 py-2.5 text-sm text-ink placeholder:text-ink/40 transition focus:border-ocean/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-ocean/15"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink/55">Subject name</span>
+              <input
+                type="text"
+                value={form.subjectName}
+                onChange={(event) => handleFormChange("subjectName", event.target.value)}
+                placeholder="e.g. Data Structures"
+                className="w-full rounded-xl border border-clay/60 bg-white px-3 py-2.5 text-sm text-ink placeholder:text-ink/40 transition focus:border-ocean/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-ocean/15"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-semibold text-ink/55">Time</span>
+              <input
+                type="time"
+                value={form.time}
+                onChange={(event) => handleFormChange("time", event.target.value)}
+                className="w-full rounded-xl border border-clay/60 bg-white px-3 py-2.5 text-sm text-ink placeholder:text-ink/40 transition focus:border-ocean/60 focus:bg-white focus:outline-none focus:ring-2 focus:ring-ocean/15"
+              />
+            </label>
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-slate-500">{status}</p>
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <p className={`text-xs font-medium ${isErrorStatus ? "text-rose-600" : "text-ink/60"}`}>
+              {status}
+            </p>
             <button
               type="submit"
               disabled={creating}
-              className="rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70"
+              className="inline-flex items-center gap-2 rounded-xl bg-linear-to-r from-cocoa to-ocean px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_20px_-10px_rgb(var(--ocean)/0.55)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70 disabled:hover:translate-y-0"
             >
               {creating ? "Adding..." : "Add Schedule"}
             </button>
           </div>
         </form>
       ) : status ? (
-        <p className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600">
+        <p className="rounded-2xl border border-clay/50 bg-cream px-4 py-3 text-sm text-ink/70">
           {status}
         </p>
       ) : null}
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-[0_18px_34px_-28px_rgba(15,23,42,0.35)]">
+      <section className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <p className="text-sm font-semibold text-slate-900">Schedule Items</p>
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+          <p className="text-sm font-semibold text-ink">Schedule Items</p>
+          <span className="rounded-full border border-clay/60 bg-white px-2.5 py-1 text-xs font-semibold text-ink/70">
             {entries.length}
           </span>
         </div>
 
         {loading ? (
-          <p className="text-sm text-slate-500">Loading today's schedule...</p>
+          <p className="text-sm text-ink/60">Loading today's schedule...</p>
         ) : entries.length === 0 ? (
-          <p className="text-sm text-slate-500">No schedule items for today.</p>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-clay/70 bg-white/60 px-4 py-10 text-center">
+            <span className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-ocean/10 text-ocean">
+              <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" aria-hidden="true">
+                <rect x="3.5" y="5" width="17" height="15.5" rx="3" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M3.5 9.5h17" stroke="currentColor" strokeWidth="1.6" />
+                <path d="M8 3v3.2M16 3v3.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </span>
+            <p className="text-sm font-medium text-ink/70">No schedule items for today.</p>
+            {isStaff ? (
+              <p className="text-xs text-ink/50">Add a period, subject, and time above to get started.</p>
+            ) : null}
+          </div>
         ) : (
           <div className="space-y-3">
             {entries.map((item) => (
               <article
                 key={item.id}
-                className="group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md"
+                className="group rounded-2xl border border-clay/50 bg-white p-4 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-ocean/30 hover:shadow-md"
               >
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
-                      <span className="inline-flex min-w-[72px] items-center justify-center rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-semibold tracking-tight text-indigo-700">
+                      <span className="inline-flex min-w-[72px] items-center justify-center rounded-xl border border-ocean/25 bg-ocean/10 px-3 py-1.5 text-sm font-semibold tracking-tight text-cocoa">
                         {item.time || "--:--"}
                       </span>
-                      <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900">
+                      <h3 className="min-w-0 flex-1 truncate text-base font-semibold text-ink">
                         {item.subjectName}
                       </h3>
                       {item.period ? (
-                        <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-600">
+                        <span className="inline-flex rounded-full border border-clay/60 bg-sand px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-ink/65">
                           {item.period}
                         </span>
                       ) : null}

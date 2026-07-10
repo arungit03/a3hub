@@ -545,12 +545,13 @@ export function AuthProvider({ children }) {
         return;
       }
 
+      const selectedRole = normalizeSessionRole(
+        sessionStorage.getItem("roleSelection")
+      );
+
       try {
         const profileSnapshot = await loadUserProfile(currentUser);
         if (profileSnapshot.exists) {
-          const selectedRole = normalizeSessionRole(
-            sessionStorage.getItem("roleSelection")
-          );
           const {
             accountStatus,
             effectiveRole,
@@ -600,11 +601,21 @@ export function AuthProvider({ children }) {
               { merge: true }
             ).catch(() => {});
           }
+        } else if (selectedRole === "staff") {
+          resetSignedOutState();
+          await signOutFirebase(firebaseAuth).catch(() => {});
+          setSupabaseAuthUser(null);
         } else {
           applyFallbackProfile(currentUser);
         }
       } catch {
-        applyFallbackProfile(currentUser);
+        if (selectedRole === "staff") {
+          resetSignedOutState();
+          await signOutFirebase(firebaseAuth).catch(() => {});
+          setSupabaseAuthUser(null);
+        } else {
+          applyFallbackProfile(currentUser);
+        }
       } finally {
         setLoading(false);
       }
@@ -835,6 +846,13 @@ export function AuthProvider({ children }) {
             );
           }
 
+          if (selectedRole === "staff" && canonicalAccountRole !== "staff") {
+            await logout();
+            throw new Error(
+              "This account does not have staff access. Login with an existing staff account."
+            );
+          }
+
           setRole(effectiveRole);
           sessionStorage.setItem("roleSelection", effectiveRole);
           setProfile(resolvedProfile);
@@ -845,6 +863,11 @@ export function AuthProvider({ children }) {
             appliedAt: Date.now(),
           };
           credential.role = effectiveRole;
+        } else if (selectedRole === "staff") {
+          await logout();
+          throw new Error(
+            "Unable to find a staff profile for this account. Login with an existing staff account."
+          );
         } else {
           const fallback = applyFallbackProfile(currentUser);
           credential.role = fallback.role;
@@ -856,7 +879,11 @@ export function AuthProvider({ children }) {
           error?.message ===
             "This account does not have admin access. Login with an existing admin account." ||
           error?.message ===
-            "This account does not have food console access. Login with a canteen staff or admin account."
+            "This account does not have food console access. Login with a canteen staff or admin account." ||
+          error?.message ===
+            "This account does not have staff access. Login with an existing staff account." ||
+          error?.message ===
+            "Unable to find a staff profile for this account. Login with an existing staff account."
         ) {
           throw error;
         }
@@ -869,6 +896,10 @@ export function AuthProvider({ children }) {
         if (selectedRole === "admin") {
           await logout();
           throw new Error("Unable to verify admin access right now. Please try again.");
+        }
+        if (selectedRole === "staff") {
+          await logout();
+          throw new Error("Unable to verify staff access right now. Please try again.");
         }
         const fallback = applyFallbackProfile(currentUser);
         credential.role = fallback.role;

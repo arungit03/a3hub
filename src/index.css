@@ -2,19 +2,130 @@
 @import "tailwindcss";
 @config "../tailwind.config.js";
 
+/* ── Hide structural page-break markers from mammoth ── */
+.quiz-template-preview hr.page-break {
+  display: none;
+}
+
+/* ── Quiz template carousel — directional slide animations ── */
+@keyframes quizSlideFromRight {
+  from { opacity: 0; transform: translateX(40px); }
+  to   { opacity: 1; transform: translateX(0);     }
+}
+@keyframes quizSlideFromLeft {
+  from { opacity: 0; transform: translateX(-40px); }
+  to   { opacity: 1; transform: translateX(0);      }
+}
+.quiz-slide-from-right {
+  animation: quizSlideFromRight 0.2s ease-out both;
+}
+.quiz-slide-from-left {
+  animation: quizSlideFromLeft 0.2s ease-out both;
+}
+
+/* ── Quiz paper docx preview (mammoth.js output) ── */
+.quiz-template-preview {
+  font-family: Arial, sans-serif;
+  font-size: 10pt;
+  line-height: 1.45;
+  color: #111;
+}
+
+/* Restore Word table borders — mammoth strips them by default */
+.quiz-template-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4px 0;
+  table-layout: fixed;
+}
+.quiz-template-preview td,
+.quiz-template-preview th {
+  border: 1px solid #555;
+  padding: 3px 7px;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  font-size: 9.5pt;
+}
+.quiz-template-preview th {
+  font-weight: 700;
+  background-color: #f7f7f7;
+  text-align: left;
+}
+
+/* Header logo table — no cell borders, just layout */
+.quiz-template-preview table:first-of-type td,
+.quiz-template-preview table:first-of-type th {
+  border: none;
+  padding: 2px 6px;
+  vertical-align: middle;
+}
+
+/* Images in header */
+.quiz-template-preview img {
+  max-width: 100%;
+  height: auto;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+/* Paragraph spacing */
+.quiz-template-preview p {
+  margin: 1px 0 3px;
+  line-height: 1.45;
+}
+.quiz-template-preview b,
+.quiz-template-preview strong {
+  font-weight: 700;
+}
+.quiz-template-preview h1,
+.quiz-template-preview h2,
+.quiz-template-preview h3 {
+  font-weight: 700;
+  margin: 6px 0 2px;
+  line-height: 1.3;
+}
+.quiz-template-preview ul,
+.quiz-template-preview ol {
+  padding-left: 1.4em;
+  margin: 2px 0;
+}
+.quiz-template-preview li {
+  margin: 1px 0;
+}
+
+/* Horizontal rules inside the doc (not page-break ones) */
+.quiz-template-preview hr:not(.page-break) {
+  border: none;
+  border-top: 1.5px solid #333;
+  margin: 6px 0;
+}
+
+/* Question number cells — fixed narrow width */
+.quiz-template-preview td:first-child {
+  width: auto;
+  white-space: nowrap;
+}
+
+/* Center-align numeric/code cells */
+.quiz-template-preview td[align="center"],
+.quiz-template-preview th[align="center"] {
+  text-align: center;
+}
+
 :root {
   --ui-scale: 0.8;
-  /* Arctic Glass Light Palette */
-  --ink: 8 24 52;
-  --mist: 228 236 248;
-  --ocean: 24 118 255;
-  --aurora: 90 165 255;
-  --cocoa: 14 78 184;
-  --clay: 168 196 236;
-  --sand: 236 243 252;
-  --cream: 244 248 254;
-  --sunset: 36 132 255;
-  --rose: 142 188 255;
+  /* ── Amethyst + Violet — Light ── */
+  --ink: 16 0 43;         /* primary text — dark amethyst #10002b */
+  --mist: 244 238 251;    /* app background — pale lavender */
+  --ocean: 123 44 191;    /* primary brand — royal violet #7b2cbf */
+  --aurora: 199 125 255;  /* bright accent — mauve magic #c77dff */
+  --cocoa: 60 9 108;      /* deep accent — indigo ink #3c096c */
+  --clay: 214 199 232;    /* muted borders / neutrals */
+  --sand: 238 229 248;    /* secondary surface */
+  --cream: 250 247 253;   /* lightest surface */
+  --sunset: 90 24 154;    /* secondary accent — indigo velvet #5a189a */
+  --rose: 224 170 255;    /* soft accent — mauve #e0aaff */
 
   font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
   font-optical-sizing: auto;
@@ -25,16 +136,16 @@
 }
 
 .inner-theme {
-  --ink: 8 24 52;
-  --mist: 228 236 248;
-  --ocean: 24 118 255;
-  --aurora: 90 165 255;
-  --cocoa: 14 78 184;
-  --clay: 168 196 236;
-  --sand: 236 243 252;
-  --cream: 244 248 254;
-  --sunset: 36 132 255;
-  --rose: 142 188 255;
+  --ink: 16 0 43;
+  --mist: 244 238 251;
+  --ocean: 123 44 191;
+  --aurora: 199 125 255;
+  --cocoa: 60 9 108;
+  --clay: 214 199 232;
+  --sand: 238 229 248;
+  --cream: 250 247 253;
+  --sunset: 90 24 154;
+  --rose: 224 170 255;
   accent-color: rgb(var(--ocean));
 }
 
@@ -5811,4 +5922,73 @@ input[type="number"].no-number-spin::-webkit-inner-spin-button {
       bottom: 0.9rem;
     }
   }
+}
+
+/* DOCX Preview Styling */
+.docx-preview {
+  font-family: "Calibri", "Segoe UI", sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: rgb(var(--ink));
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.docx-preview * {
+  transition: none !important;
+}
+
+.docx-preview p {
+  margin: 0.5rem 0;
+  padding: 0;
+}
+
+.docx-preview h1,
+.docx-preview h2,
+.docx-preview h3,
+.docx-preview h4,
+.docx-preview h5,
+.docx-preview h6 {
+  margin: 1rem 0 0.5rem;
+  font-weight: 700;
+  color: rgb(var(--ink));
+}
+
+.docx-preview h1 {
+  font-size: 1.8rem;
+}
+
+.docx-preview h2 {
+  font-size: 1.5rem;
+}
+
+.docx-preview h3 {
+  font-size: 1.3rem;
+}
+
+.docx-preview table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0;
+}
+
+.docx-preview table td,
+.docx-preview table th {
+  border: 1px solid rgb(var(--clay) / 0.5);
+  padding: 0.5rem;
+}
+
+.docx-preview table th {
+  background: rgb(var(--clay) / 0.2);
+  font-weight: 600;
+}
+
+.docx-preview ul,
+.docx-preview ol {
+  margin: 0.5rem 0;
+  padding-left: 2rem;
+}
+
+.docx-preview li {
+  margin: 0.25rem 0;
 }

@@ -56,6 +56,24 @@ const resolveAuthErrorMessage = (err, fallback) => {
   if (err?.code === "auth/server-email-not-configured") {
     return "Verification email service is not configured. Set Firebase server config, RESEND_API_KEY, and EMAIL_FROM in Netlify.";
   }
+  if (err?.code === "auth/server-not-configured") {
+    return err?.message || "Profile authentication service is not configured. Set the server-only Supabase and Firebase variables in Netlify.";
+  }
+  if (err?.code === "auth/profile-write-unavailable") {
+    return err?.message || "Your Firebase account was created, but A3 Hub could not save your profile. Configure the firebase-profile function server variables and try again.";
+  }
+  if (err?.code === "auth/admin-registration-closed") {
+    return err?.message || "Admin registration is available only for the first admin account.";
+  }
+  if (err?.code === "auth/forbidden-role") {
+    return err?.message || "This role must be created by an admin.";
+  }
+  if (err?.code === "auth/forbidden") {
+    return err?.message || "This account is not allowed to perform that authentication action.";
+  }
+  if (err?.code === "auth/invalid-token") {
+    return "Your login session could not be verified. Sign out and login again.";
+  }
   if (err?.code === "auth/email-provider-failed") {
     return "Verification link was created, but the email provider could not send it. Check RESEND_API_KEY and EMAIL_FROM.";
   }
@@ -359,11 +377,8 @@ export default function AuthPage() {
   const isCanteenRole = selectedRole === "canteen";
   const isAdminRole = selectedRole === "admin";
   const isDirty = useMemo(() => {
-    const hasFieldContent = Object.values(form).some((value) =>
-      String(value || "").trim()
-    );
-    return hasFieldContent || mode !== "login" || selectedRole !== "student";
-  }, [form, mode, selectedRole]);
+    return Object.values(form).some((value) => String(value || "").trim());
+  }, [form]);
 
   useDirtyPrompt(
     isDirty && !loading && !awaitingVerification,

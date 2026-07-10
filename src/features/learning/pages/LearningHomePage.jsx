@@ -80,80 +80,91 @@ export default function LearningHomePage() {
       </section>
 
       <section className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <div className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             How it works
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-900">
+          <h2 className="mt-1 text-2xl font-bold text-ink">
             Learn topic by topic
           </h2>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">1. Read lesson</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Open a topic, study the explanation, syntax, code example, notes, and common mistakes.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">2. Practice and quiz</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Answer topic quizzes, use practice pages, and review examples carefully before moving ahead.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-sm font-semibold text-slate-900">3. Track progress</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Your lesson completion and quiz results update progress automatically.
-              </p>
-            </div>
+            {[
+              {
+                step: "1",
+                title: "Read lesson",
+                body: "Open a topic, study the explanation, syntax, code example, notes, and common mistakes.",
+              },
+              {
+                step: "2",
+                title: "Practice and quiz",
+                body: "Answer topic quizzes, use practice pages, and review examples carefully before moving ahead.",
+              },
+              {
+                step: "3",
+                title: "Track progress",
+                body: "Your lesson completion and quiz results update progress automatically.",
+              },
+            ].map((item) => (
+              <div key={item.step} className="rounded-2xl border border-clay/50 bg-white/70 p-4">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-linear-to-br from-cocoa to-ocean text-xs font-bold text-white">
+                  {item.step}
+                </span>
+                <p className="mt-2.5 text-sm font-semibold text-ink">{item.title}</p>
+                <p className="mt-1.5 text-sm text-ink/65">{item.body}</p>
+              </div>
+            ))}
           </div>
         </div>
 
-        <aside className="rounded-[1.6rem] border border-slate-200 bg-white p-5 shadow-sm">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+        <aside className="rounded-3xl border border-clay/50 bg-cream p-5 shadow-[0_18px_34px_-28px_rgb(var(--cocoa)/0.35)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/55">
             Code Tools
           </p>
-          <h2 className="mt-1 text-xl font-bold text-slate-900">
+          <h2 className="mt-1 text-xl font-bold text-ink">
             Open practice pages
           </h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-ink/65">
             The learning module stays inside the app, and the editor or compiler pages still open as separate pages whenever you want to run code.
           </p>
-          <div className="mt-4 grid gap-3">
+          <div className="mt-4 grid gap-2.5">
             {compilerEnabled ? (
               <>
                 <Link
                   to={`${basePath}/html-editor`}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="flex items-center justify-between rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/80 transition hover:border-ocean/40 hover:bg-white hover:text-ink"
                 >
                   HTML Editor
+                  <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
                   to={`${basePath}/code/python`}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="flex items-center justify-between rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/80 transition hover:border-ocean/40 hover:bg-white hover:text-ink"
                 >
                   Python Interpreter
+                  <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
                   to={`${basePath}/code/c`}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="flex items-center justify-between rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/80 transition hover:border-ocean/40 hover:bg-white hover:text-ink"
                 >
                   C Compiler
+                  <span aria-hidden="true">&rarr;</span>
                 </Link>
                 <Link
                   to={`${basePath}/code/cpp`}
-                  className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
+                  className="flex items-center justify-between rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm font-semibold text-ink/80 transition hover:border-ocean/40 hover:bg-white hover:text-ink"
                 >
                   C++ Compiler
+                  <span aria-hidden="true">&rarr;</span>
                 </Link>
               </>
             ) : (
-              <p className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+              <p className="rounded-2xl border border-clay/50 bg-white/70 px-4 py-3 text-sm text-ink/65">
                 Editor and compiler pages are disabled in this deploy profile, but the lessons, quizzes, and progress dashboard still work.
               </p>
             )}
           </div>
-          {loading ? <p className="mt-3 text-xs text-slate-500">Loading progress...</p> : null}
+          {loading ? <p className="mt-3 text-xs text-ink/50">Loading progress...</p> : null}
         </aside>
       </section>
     </LearningPageShell>

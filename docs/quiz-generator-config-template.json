@@ -1,0 +1,15 @@
+{
+  "selectedPaperIds": [
+    "paper_id_1",
+    "paper_id_2",
+    "paper_id_3"
+  ],
+  "totalMarks": 100,
+  "twoMarkCount": 10,
+  "sixteenMarkCount": 5,
+  "splitEnabled": false,
+  "splitType": "2parts",
+  "difficulty": "mixed",
+  "questionType": "mixed",
+  "shuffle": true
+}

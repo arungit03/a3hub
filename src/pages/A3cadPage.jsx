@@ -909,7 +909,7 @@ export default function A3cadPage() {
                       onMouseDown={(event) => handleComponentMouseDown(event, component.id)}
                       onClick={(event) => { event.stopPropagation(); setSelection({ kind: "component", id: component.id }); }}
                     >
-                      <div className={`relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-gradient-to-br ${d.cls} px-2 py-1.5 text-white shadow-lg`}>
+                      <div className={`relative flex h-full flex-col overflow-hidden rounded-2xl border border-white/20 bg-linear-to-br ${d.cls} px-2 py-1.5 text-white shadow-lg`}>
                         <div className="flex min-w-0 items-center gap-2 text-[9px] font-semibold uppercase tracking-[0.1em] text-white/90">
                           <span className="inline-flex min-w-0 items-center gap-1.5">
                             <ComponentGlyph type={component.type} compact />
@@ -998,7 +998,7 @@ export default function A3cadPage() {
             tabIndex={-1}
           />
           <div tabIndex={-1} className="ui-modal__panel w-full max-w-xl p-4 sm:p-5">
-            <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-white to-sky-50 p-4">
+            <div className="rounded-2xl border border-slate-200 bg-linear-to-r from-slate-50 via-white to-sky-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">A3cad</p>
@@ -1039,7 +1039,7 @@ export default function A3cadPage() {
             className="absolute inset-0"
             tabIndex={-1}
           />
-          <div className="relative z-10 max-h-[78vh] w-full overflow-hidden rounded-[26px] border border-slate-200 bg-gradient-to-b from-slate-50 to-white shadow-[0_-18px_60px_rgba(15,23,42,0.22)]">
+          <div className="relative z-10 max-h-[78vh] w-full overflow-hidden rounded-[26px] border border-slate-200 bg-linear-to-b from-slate-50 to-white shadow-[0_-18px_60px_rgba(15,23,42,0.22)]">
             <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-4 py-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">A3cad</p>
@@ -1089,7 +1089,7 @@ export default function A3cadPage() {
             tabIndex={-1}
           />
           <div tabIndex={-1} className="ui-modal__panel w-full max-w-4xl p-4 sm:p-5">
-            <div className="rounded-2xl border border-sky-100 bg-gradient-to-r from-sky-50 via-indigo-50 to-blue-50 p-4">
+            <div className="rounded-2xl border border-sky-100 bg-linear-to-r from-sky-50 via-indigo-50 to-blue-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-600">A3cad</p>

@@ -757,7 +757,7 @@ export default function AdminEventsPage() {
                         src={getEventImageUrl(item)}
                         alt={item.title || "Event"}
                         className="h-full w-full object-cover"
-                        fallbackClassName="flex h-full w-full items-center justify-center bg-gradient-to-br from-blue-100 via-white to-cyan-100 text-sm font-semibold text-slate-700"
+                        fallbackClassName="flex h-full w-full items-center justify-center bg-linear-to-br from-blue-100 via-white to-cyan-100 text-sm font-semibold text-slate-700"
                         fallbackLabel={item.title || "Event"}
                       />
                     </div>
@@ -797,7 +797,7 @@ export default function AdminEventsPage() {
                       src={getEventImageUrl(selectedEvent)}
                       alt={selectedEvent.title || "Event"}
                       className="h-full w-full object-cover"
-                      fallbackClassName="flex h-full min-h-[220px] w-full items-center justify-center bg-gradient-to-br from-blue-100 via-white to-cyan-100 text-3xl font-semibold text-slate-700"
+                      fallbackClassName="flex h-full min-h-[220px] w-full items-center justify-center bg-linear-to-br from-blue-100 via-white to-cyan-100 text-3xl font-semibold text-slate-700"
                       fallbackLabel={selectedEvent.title || "Event"}
                     />
                   </div>

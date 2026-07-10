@@ -860,9 +860,9 @@ export default function HomePage({ forcedRole }) {
 
   return (
     <section className="space-y-6">
-      <div className="relative overflow-hidden rounded-[1.8rem] border border-white/35 bg-gradient-to-br from-blue-600 via-indigo-600 to-indigo-700 p-5 text-white shadow-lg shadow-indigo-900/30 sm:p-6">
+      <div className="relative overflow-hidden rounded-[1.8rem] border border-white/35 bg-linear-to-br from-[#5a189a] via-[#7b2cbf] to-[#3c096c] p-5 text-white shadow-lg shadow-[#240046]/30 sm:p-6">
         <div className="pointer-events-none absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/20 blur-3xl" />
-        <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-cyan-300/20 blur-3xl" />
+        <div className="pointer-events-none absolute -left-12 bottom-0 h-32 w-32 rounded-full bg-[#c77dff]/20 blur-3xl" />
 
         <div className="relative rounded-2xl border border-white/20 bg-white/10 p-4 backdrop-blur-xl sm:p-5">
           <div
@@ -871,7 +871,7 @@ export default function HomePage({ forcedRole }) {
             }`}
           >
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-100/90">
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#e9d5ff]/90">
                 A3 Hub Dashboard
               </p>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
@@ -886,7 +886,7 @@ export default function HomePage({ forcedRole }) {
             {!isStaff ? (
               <div className="w-full max-w-[180px] rounded-2xl border border-white/25 bg-white/10 p-2">
                 <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-center">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-blue-100/80">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#e9d5ff]/80">
                     Attendance
                   </p>
                   <p className="mt-1 text-sm font-semibold text-white">{attendancePercent}%</p>
@@ -895,14 +895,14 @@ export default function HomePage({ forcedRole }) {
             ) : null}
           </div>
 
-          <p className="mt-4 text-sm text-blue-100/90">
+          <p className="mt-4 text-sm text-[#e9d5ff]/90">
             {roleLabel} workspace overview with recent academic and campus updates.
           </p>
         </div>
       </div>
 
       {isStaff ? (
-        <section className="rounded-[1.6rem] border border-ocean/25 bg-gradient-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
+        <section className="rounded-[1.6rem] border border-ocean/25 bg-linear-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="space-y-1">
               <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-600">
@@ -964,7 +964,7 @@ export default function HomePage({ forcedRole }) {
       ) : null}
 
       {isStaff ? (
-        <section className="rounded-[1.6rem] border border-ocean/25 bg-gradient-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
+        <section className="rounded-[1.6rem] border border-ocean/25 bg-linear-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
@@ -1034,7 +1034,7 @@ export default function HomePage({ forcedRole }) {
       ) : null}
 
       {isStaff ? (
-        <section className="rounded-[1.6rem] border border-ocean/25 bg-gradient-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
+        <section className="rounded-[1.6rem] border border-ocean/25 bg-linear-to-br from-white/90 via-slate-50/90 to-blue-100/75 p-5 shadow-[0_18px_34px_-28px_rgba(37,99,235,0.38)]">
           <div className="mb-4 flex items-center justify-between gap-3">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-600">
               Published Assignments
@@ -1249,7 +1249,7 @@ export default function HomePage({ forcedRole }) {
             <button
               type="button"
               onClick={openAttendanceModal}
-              className="w-full rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 via-white to-indigo-50/50 p-4 transition hover:border-indigo-300 hover:shadow-md"
+              className="w-full rounded-2xl border border-slate-200 bg-linear-to-br from-slate-50 via-white to-indigo-50/50 p-4 transition hover:border-indigo-300 hover:shadow-md"
             >
               <div className="flex justify-center">
                 <div className="relative h-36 w-36 shrink-0 rounded-full bg-white shadow-[0_20px_34px_-24px_rgba(59,130,246,0.75)]">
