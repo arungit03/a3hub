@@ -1,0 +1,6 @@
+email,password,role
+student1@example.com,password123,student
+student2@example.com,password123,student
+staff1@example.com,password123,staff
+parent1@example.com,password123,parent
+admin1@example.com,password123,admin

@@ -1,0 +1,50 @@
+name: A3Hub Load Testing CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-state: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Application
+        run: npm run build
+
+      - name: Setup k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run k6 Homepage Smoke Test
+        run: k6 run --vus 5 --duration 10s scripts/loadtest/homepage.js
+        env:
+          BASE_URL: "https://a3hubb.web.app" # Pointing to Firebase Hosting
+
+      - name: Run k6 DB Read Smoke Test
+        run: k6 run --vus 5 --duration 10s scripts/loadtest/firestore-read.js
+
+      - name: Run k6 Dashboard Smoke Test
+        run: k6 run --vus 5 --duration 10s scripts/loadtest/dashboard.js
+
+      - name: Upload Load Test Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: k6-loadtest-reports
+          path: reports/
+          retention-days: 14
